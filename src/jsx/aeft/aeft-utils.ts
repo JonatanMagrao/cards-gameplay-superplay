@@ -90,3 +90,5 @@ export const getAeMetadata = (propName: string) => {
   const metadata = new XMPMeta(app.project.xmpPacket);
   return metadata.getProperty(uri, newPropName);
 };
+
+

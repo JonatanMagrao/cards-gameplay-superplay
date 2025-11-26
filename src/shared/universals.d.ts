@@ -7,3 +7,4 @@ export type EventTS = {
     anotherValue: number;
   };
 };
+

@@ -14,7 +14,7 @@ export const App = () => {
   const [deck, setDeck] = useState("Club_Deck");
   const [cardNumber, setCardNumber] = useState(1);
 
-  const [numCopies, setNumCopies] = useState(5);
+  const [numCopies, setNumCopies] = useState("5");
   const [cardDistance, setCardDistance] = useState(["0", "0"]);
 
   const [cardSrc, setCardSrc] = useState<string | null>(null);
@@ -61,12 +61,13 @@ export const App = () => {
   const cardProject = `${assets}/disney_solitaire_cards.aepx`
 
   const applyJump = async (presetPath: string) => await evalTS("applyJump", presetPath);
-  const setTargetLayer = async () => await evalTS("setTargetLayer");
-  const handleAdjustZPos = async () => await evalTS("handleAdjustZPos");
+  const handleSetTargetLayer = async () => await evalTS("handleSetTargetLayer");
+  const handleSetStockLayer = async () => await evalTS("handleSetStockLayer");
+  const handleSetTableauLayer = async () => await evalTS("handleSetTableauLayer");
   const applyFlipCard = async () => await evalTS("applyFlipCard");
   const turnCards = async () => await evalTS("turnCards");
-  const importFiles = async () => await evalTS("importFiles", cardProject);
-  const duplicateCards = async (numCopies: number, cardDistance: string[]) => await evalTS("duplicateCards", numCopies, cardDistance);
+  const handleImportFilesAndComps = async () => await evalTS("handleImportFilesAndComps", cardProject);
+  const duplicateCards = async (numCopies: number, cardDistance: number[]) => await evalTS("duplicateCards", numCopies, cardDistance);
   const flipStockCards = async () => await evalTS("flipStockCards");
   const changeCard = async (deckName: string, card: number) => await evalTS("changeCard", deckName, card, cardTitle);
 
@@ -100,7 +101,7 @@ export const App = () => {
   const handleDuplicateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const copies = parseInt(numCopies, 10);
+    const copies = parseInt(numCopies,10);
     const x = Number(cardDistance[0].replace(",", "."));
     const y = Number(cardDistance[1].replace(",", "."));
 
@@ -183,10 +184,11 @@ export const App = () => {
             {/* <span className="section-label">Animação</span> */}
             <div className="button-row">
               <button onClick={() => applyJump(presetPath)}>Apply Jump</button>
-              <button onClick={setTargetLayer}>Set Target</button>
+              <button onClick={handleSetTargetLayer}>Set Target</button>
+              <button onClick={handleSetStockLayer}>Set Stock Layers</button>
+              <button onClick={handleSetTableauLayer}>Set Tableau Layers</button>
               <button onClick={applyFlipCard}>Flip Card</button>
               <button onClick={turnCards}>Turn Cards</button>
-              <button onClick={handleAdjustZPos}>Adjust Z Pos</button>
               <button onClick={flipStockCards}>Flip Stock Cards</button>
               <form onSubmit={handleDuplicateSubmit} className="dup-form">
                 <div className="dup-grid">
@@ -234,8 +236,7 @@ export const App = () => {
             </div>
           </section>
         </div>
-        <button onClick={importFiles}>Import</button>
-
+        <button onClick={handleImportFilesAndComps}>Import</button>
       </header >
     </div >
   );
