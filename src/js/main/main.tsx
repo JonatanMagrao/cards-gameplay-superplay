@@ -60,16 +60,18 @@ export const App = () => {
   const presetPath = `${assets}/presets/cards_gameplay_superplay.ffx`
   const cardProject = `${assets}/disney_solitaire_cards.aepx`
 
-  const applyJump = async (presetPath: string) => await evalTS("applyJump", presetPath);
+  const applyJump = async (presetPath: string) => await evalTS("handleApplyJump", presetPath);
+  const flipStockCards = async () => await evalTS("handleFlipStockCards");
+  const applyFlipCard = async () => await evalTS("handleFlipCards");
+  const turnCards = async () => await evalTS("handleTurnCards");
+
   const handleSetTargetLayer = async () => await evalTS("handleSetTargetLayer");
   const handleSetStockLayer = async () => await evalTS("handleSetStockLayer");
   const handleSetTableauLayer = async () => await evalTS("handleSetTableauLayer");
-  const applyFlipCard = async () => await evalTS("applyFlipCard");
-  const turnCards = async () => await evalTS("turnCards");
+
+  const changeCard = async (deckName: string, card: number) => await evalTS("handleChangeCard", deckName, card, cardTitle);
   const handleImportFilesAndComps = async () => await evalTS("handleImportFilesAndComps", cardProject);
-  const duplicateCards = async (numCopies: number, cardDistance: number[]) => await evalTS("duplicateCards", numCopies, cardDistance);
-  const flipStockCards = async () => await evalTS("flipStockCards");
-  const changeCard = async (deckName: string, card: number) => await evalTS("changeCard", deckName, card, cardTitle);
+  const duplicateCards = async (numCopies: number, cardDistance: number[]) => await evalTS("handleDuplicateCards", numCopies, cardDistance);
 
   useEffect(() => {
     if (window.cep) {
@@ -101,7 +103,7 @@ export const App = () => {
   const handleDuplicateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const copies = parseInt(numCopies,10);
+    const copies = parseInt(numCopies, 10);
     const x = Number(cardDistance[0].replace(",", "."));
     const y = Number(cardDistance[1].replace(",", "."));
 
@@ -184,12 +186,14 @@ export const App = () => {
             {/* <span className="section-label">Animação</span> */}
             <div className="button-row">
               <button onClick={() => applyJump(presetPath)}>Apply Jump</button>
+              <button onClick={flipStockCards}>Flip Stock Cards</button>
+              <button onClick={applyFlipCard}>Flip Card</button>
+              <button onClick={turnCards}>Turn Cards</button>
+
               <button onClick={handleSetTargetLayer}>Set Target Layer</button>
               <button onClick={handleSetStockLayer}>Set Stock Layers</button>
               <button onClick={handleSetTableauLayer}>Set Tableau Layers</button>
-              <button onClick={applyFlipCard}>Flip Card</button>
-              <button onClick={turnCards}>Turn Cards</button>
-              <button onClick={flipStockCards}>Flip Stock Cards</button>
+              
               <form onSubmit={handleDuplicateSubmit} className="dup-form">
                 <div className="dup-grid">
                   <label>
