@@ -184,7 +184,7 @@ export const App = () => {
             {/* <span className="section-label">Animação</span> */}
             <div className="button-row">
               <button onClick={() => applyJump(presetPath)}>Apply Jump</button>
-              <button onClick={handleSetTargetLayer}>Set Target</button>
+              <button onClick={handleSetTargetLayer}>Set Target Layer</button>
               <button onClick={handleSetStockLayer}>Set Stock Layers</button>
               <button onClick={handleSetTableauLayer}>Set Tableau Layers</button>
               <button onClick={applyFlipCard}>Flip Card</button>

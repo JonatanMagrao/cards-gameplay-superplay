@@ -39,3 +39,25 @@ export const getLayerProp = (camada: any, properties: string[]) => {
   }
   return myLayerProps
 }
+
+interface MarkerProps {
+  title?: string,
+  label?: number,
+  duration?: number 
+}
+
+export const addMarkerToLayer = (myLayer: Layer, markerTime: number, markerProps: MarkerProps) => {
+
+  const { markerName, markerLabel, markerDuration } = {
+    markerName: markerProps.title || "",
+    markerLabel: markerProps.label || 0,
+    markerDuration: markerProps.duration || 0
+  }
+
+  const myMarker = new MarkerValue(markerName)
+  myMarker.label = markerLabel
+  myMarker.duration = markerDuration
+  const markerProp = myLayer.property("ADBE Marker") as Property
+  markerProp.setValueAtTime(markerTime, myMarker)
+
+}

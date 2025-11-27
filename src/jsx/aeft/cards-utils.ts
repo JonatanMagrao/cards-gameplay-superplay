@@ -1,5 +1,5 @@
 import { getActiveComp, forEachLayer } from "./aeft-utils";
-import { getLayerProp } from "./jonatan-utils";
+import { getLayerProp, getKeyIndexAtTime } from "./aeft-utils-jonatan";
 
 export const setTargetLayer = () => {
 
@@ -28,8 +28,6 @@ export const setTargetLayer = () => {
 
   targetLayer.threeDLayer = true
   targetLayer.label = 1
-  const posPropPath = ["ADBE Transform Group", "ADBE Position"]
-  const targetPos = getLayerProp(targetLayer, posPropPath).value
 
   if (stockRegExp.test(targetLayer.name)) {
     targetLayer.name = targetLayer.name.replace(stockRegExp, "[TARGET]")
@@ -37,7 +35,6 @@ export const setTargetLayer = () => {
   }
 
   targetLayer.name = `${targetLayer.name} [TARGET]`
-  updateZPosOnTarget(targetPos[2])
 
   app.endUndoGroup()
 }
@@ -64,9 +61,9 @@ export const setCardType = (cardTypeName: string, layerLabel: number) => {
 
       if (targetRegExp.test(camada.name)) {
         camada.name = `${camada.name.replace(targetRegExp, "")} [${cardTypeName.toUpperCase()}]`
-      } else if(stockRegExp.test(camada.name)){
+      } else if (stockRegExp.test(camada.name)) {
         camada.name = `${camada.name.replace(stockRegExp, "")} [${cardTypeName.toUpperCase()}]`
-      } else if(tableauRegExp.test(camada.name)){
+      } else if (tableauRegExp.test(camada.name)) {
         camada.name = `${camada.name.replace(tableauRegExp, "")} [${cardTypeName.toUpperCase()}]`
       }
 
@@ -113,40 +110,6 @@ export const cardsEffectExist = (camada: Layer) => {
   return false
 }
 
-export const updateZPosOnTarget = (zPos: number) => {
-
-  const targetLayer = getTargetLayer()
-  const propPath = ["ADBE Transform Group", "ADBE Position"]
-  const posProp = getLayerProp(targetLayer, propPath).value[2]
-
-  //@ts-ignore
-  if (!targetLayer.comment) {
-    //@ts-ignore
-    targetLayer.comment = `zPos:${posProp}`
-    return
-  }
-
-  //@ts-ignore
-  targetLayer.comment = `zPos:${zPos}`
-
-}
-
-export const getZPosFromLayer = (camada: Layer) => {
-  const propPath = ["ADBE Transform Group", "ADBE Position"]
-  const posProp = getLayerProp(camada, propPath)
-  const zPos = posProp.value[2]
-  return zPos
-}
-
-export const getLastZPosFromTarget = () => {
-  const targetLayer = getTargetLayer()
-
-  //@ts-ignore
-  if (!targetLayer.comment) return
-
-  const zPos = targetLayer?.comment.split(":")[1]
-  return zPos
-}
 
 const getGameCardsLayers = () => {
   const thisComp = getActiveComp()
@@ -190,3 +153,54 @@ export const getDeepestZ = () => {
 
   return Math.round(zValue * 1000) / 1000
 }
+
+interface EaseValues {
+  ease?: boolean,
+  speedIn?: number,
+  speedOut?: number,
+  easeIn?: number
+  easeOut?: number
+}
+
+export const setKeyframeToLayer = (
+  layerProp: Property,
+  tempo: number,
+  valor: number | number[],
+  label: number = 0,
+  easing: EaseValues = {}
+) => {
+
+  const {
+    ease = false,
+    speedIn = 0,
+    speedOut = 0,
+    easeIn = 33.3333,
+    easeOut = 33.3333
+  } = easing
+
+  layerProp.setValueAtTime(tempo, valor)
+  const keyIndex = getKeyIndexAtTime(layerProp, tempo) as number
+
+  if (ease) {
+    const keyframeEaseIn = new KeyframeEase(speedIn, easeIn)
+    const keyframeEaseOut = new KeyframeEase(speedOut, easeOut)
+    //todo quando for fazer pra mim, adaptar com os PropertyValueTypes
+    if (layerProp.matchName === "ADBE Scale") {
+      layerProp.setTemporalEaseAtKey(
+        keyIndex,
+        [keyframeEaseIn, keyframeEaseIn, keyframeEaseIn],
+        [keyframeEaseOut, keyframeEaseOut, keyframeEaseOut]
+      )
+    } else {
+      layerProp.setTemporalEaseAtKey(
+        keyIndex,
+        [keyframeEaseIn],
+        [keyframeEaseOut]
+      )
+    }
+  }
+
+  //@ts-ignore
+  layerProp.setLabelAtKey(keyIndex, label)
+}
+

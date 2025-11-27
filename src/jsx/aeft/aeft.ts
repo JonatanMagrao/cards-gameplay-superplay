@@ -6,54 +6,66 @@ import {
   cardsEffectExist,
   getTargetLayer,
   setCardType,
-  getDeepestZ
+  getDeepestZ,
+  setKeyframeToLayer
 } from "./cards-utils"
 import {
   deselectAllSelectedLayers,
   selectAllSelectedLayers,
   getKeyIndexAtTime,
   frameDuration,
-  getLayerProp
-} from "./jonatan-utils";
+  getLayerProp,
+  addMarkerToLayer
+} from "./aeft-utils-jonatan";
+
+const keyLabel = {
+  red: 1,
+  yellow: 2,
+  acqua: 3,
+  pink: 4,
+  lavander: 5,
+  peach: 6,
+  seaFoam: 7,
+  blue: 8,
+  green: 9,
+  purple: 10,
+  orange: 11,
+  brown: 12,
+  fuschia: 13,
+  cyan: 14,
+  sandstone: 15,
+  darkGreen: 16
+} as const
 
 const cardsFolderName = "Disney Solitaire Cards"
-const actionLabelColor = 9
-const anticipationLabelColor = 2
+const actionLabelColor = keyLabel.green
+const anticipationLabelColor = keyLabel.yellow
+const zAdjust = .005
 
-export const handleSetTargetLayer = () => { setTargetLayer() }
-export const handleSetStockLayer = () => { setCardType("stock", 2) }
-export const handleSetTableauLayer = () => { setCardType("tableau", 9) }
+const transformGroupMatchName = "ADBE Transform Group"
+const essentialPropertiesMatchName = "ADBE Layer Overrides"
 
-const getKeyProps = (layerProp: any, labelColor: number) => {
+const posPropPath = [transformGroupMatchName, "ADBE Position"] as const
+const zRotPropPath = [transformGroupMatchName, "ADBE Rotate Z"] as const
+const scalePropPath = [transformGroupMatchName, "ADBE Scale"] as const
+const flipCardEPPath = [essentialPropertiesMatchName, "Flip Card"] as const
+const cardOptionEPPath = [essentialPropertiesMatchName, "Card Option"] as const
 
-  const keysProps = []
+export const handleSetTargetLayer = () => setTargetLayer()
+export const handleSetStockLayer = () => setCardType("stock", 2)
+export const handleSetTableauLayer = () => setCardType("tableau", 9)
 
-  for (let i = 1; i <= layerProp.numKeys; i++) {
-    const posKeyLabel = layerProp.keyLabel(i);
-    if (posKeyLabel == labelColor) {
-      keysProps.push({
-        keyIndex: i,
-        keyLabel: posKeyLabel,
-        keyValue: layerProp.keyValue(i)
-      })
-    }
-  }
-
-  return keysProps
-}
 const applyExpPos = (thisComp: CompItem, camada: Layer, targetLayer: Layer) => {
 
-  camada.threeDLayer = true
-  const posPropPath = ["ADBE Transform Group", "ADBE Position"]
+  const myLayer = camada as unknown as AVLayer
+  myLayer.threeDLayer = true
 
-  const posProp = getLayerProp(camada, posPropPath)
+  const posProp = getLayerProp(myLayer, posPropPath)
   const targetPosProp = getLayerProp(targetLayer, posPropPath)
   const startPos = posProp.value
   const targetEndPos = targetPosProp.valueAtTime(targetLayer.outPoint, false)
-
-
   const lastZPos = getDeepestZ()
-  const zAdjust = .005
+
   targetEndPos[2] = lastZPos - zAdjust
 
   const keyframeTiming = [
@@ -78,7 +90,8 @@ const applyExpPos = (thisComp: CompItem, camada: Layer, targetLayer: Layer) => {
 }
 
 const applyJumpEffect = (thisComp: CompItem, camada: Layer) => {
-  const scaleProp = getLayerProp(camada, ["ADBE Transform Group", "ADBE Scale"])
+
+  const scaleProp = getLayerProp(camada, scalePropPath)
   const layerScale = scaleProp.value
   const pressScaleEffect = []
 
@@ -86,60 +99,36 @@ const applyJumpEffect = (thisComp: CompItem, camada: Layer) => {
     pressScaleEffect.push(i * .8)
   }
 
-  const keyframeTiming = [
-    thisComp.time,
-    thisComp.time + frameDuration(4),
-    thisComp.time + frameDuration(8)
-  ]
+  const firstKeyTime = thisComp.time
+  const secondKeyTime = firstKeyTime + frameDuration(4)
+  const thirdKeyTime = secondKeyTime + frameDuration(4)
 
-  scaleProp.setValueAtTime(keyframeTiming[0], layerScale);
-  scaleProp.setValueAtTime(keyframeTiming[1], pressScaleEffect)
-  scaleProp.setValueAtTime(keyframeTiming[2], layerScale)
+  setKeyframeToLayer(scaleProp, firstKeyTime, layerScale, actionLabelColor, { ease: true, easeIn: 16, easeOut: 100 })
+  setKeyframeToLayer(scaleProp, secondKeyTime, pressScaleEffect, actionLabelColor, { ease: true, easeIn: 33.3333, easeOut: 33.3333 })
+  setKeyframeToLayer(scaleProp, thirdKeyTime, layerScale, actionLabelColor, { ease: true, easeIn: 100, easeOut: 16 })
 
-  for (let time of keyframeTiming) {
-    const keyIdx = getKeyIndexAtTime(scaleProp, time)
-    scaleProp.setLabelAtKey(keyIdx!, actionLabelColor)
-  }
-
-  let easeIn = new KeyframeEase(0, 16);
-  let easeOut = new KeyframeEase(0, 100);
-
-  scaleProp.setTemporalEaseAtKey(1, [easeIn, easeIn, easeIn], [easeOut, easeOut, easeOut])
-
-  easeIn = new KeyframeEase(0, 33);
-  easeOut = new KeyframeEase(0, 33);
-
-  scaleProp.setTemporalEaseAtKey(2, [easeIn, easeIn, easeIn], [easeOut, easeOut, easeOut])
-
-  easeIn = new KeyframeEase(0, 100);
-  easeOut = new KeyframeEase(0, 16);
-
-  scaleProp.setTemporalEaseAtKey(3, [easeIn, easeIn, easeIn], [easeOut, easeOut, easeOut])
 }
 
 const applyRotation = (thisComp: CompItem, camada: Layer) => {
-  const rotationProp = camada.property("Rotation")
+
+  const rotationProp = getLayerProp(camada, zRotPropPath)
   const layerRotation = rotationProp.value
 
-  const keyframeTiming = [
-    thisComp.time + frameDuration(4),
-    thisComp.time + frameDuration(24)
-  ]
+  const firstKeyTime = thisComp.time + frameDuration(4)
+  const secondkeyTime = thisComp.time + frameDuration(24)
 
-  rotationProp.setValueAtTime(keyframeTiming[0], layerRotation)
-  rotationProp.setValueAtTime(keyframeTiming[1], 0)
+  setKeyframeToLayer(rotationProp, firstKeyTime, layerRotation, actionLabelColor)
+  setKeyframeToLayer(rotationProp, secondkeyTime, 0, actionLabelColor)
+
   rotationProp.expression = expRot
-
-  for (let time of keyframeTiming) {
-    const keyIdx = getKeyIndexAtTime(rotationProp, time)
-    rotationProp.setLabelAtKey(keyIdx!, actionLabelColor)
-  }
 
 }
 
 export const applyJump = (presetPath: string) => {
 
   const targetLayer = getTargetLayer() as Layer
+  const thisComp = getActiveComp();
+  const thisTime = thisComp.time
 
   if (!targetLayer) {
     alert("Please, set a target layer before applying the jump animation.")
@@ -148,7 +137,6 @@ export const applyJump = (presetPath: string) => {
 
   app.beginUndoGroup("Apply Jump Animation")
 
-  const thisComp = getActiveComp();
 
   try {
     forEachLayer(thisComp, (camada) => {
@@ -157,11 +145,12 @@ export const applyJump = (presetPath: string) => {
         applyExpPos(thisComp, camada, targetLayer)
         applyJumpEffect(thisComp, camada)
         applyRotation(thisComp, camada)
-        camada.marker.setValueAtTime(thisComp.time, new MarkerValue("Jump"));
+        addMarkerToLayer(camada, thisTime, { title: "Jump", label: 9 })
       }
     })
   } catch (e) {
-    alert(`Error at line ${e.line}\nMessage: ${e.message}\nOn file: aeft.ts`)
+    const error = e as any
+    alert(`Error at line ${error.line}\nMessage: ${error.message}\nOn file: aeft.ts`)
   }
   app.endUndoGroup()
 }
@@ -175,20 +164,16 @@ export const applyFlipCard = () => {
 
   forEachLayer(thisComp, camada => {
     if (camada.selected) {
-      const essentialProperties = camada
-        .property("ADBE Layer Overrides")
-        .property("Flip Card")
 
-      essentialProperties.setValueAtTime(thisComp.time, 0)
-      essentialProperties.setValueAtTime(thisComp.time + frameDuration(15), 100)
+      const essentialProperties = getLayerProp(camada, flipCardEPPath) as any
+      const firstKeyTime = thisComp.time
+      const secondKeyTime = firstKeyTime + frameDuration(15)
 
-      const keyTime1 = getKeyIndexAtTime(essentialProperties, thisComp.time)
-      const keyTime2 = getKeyIndexAtTime(essentialProperties, thisComp.time + frameDuration(15))
+      setKeyframeToLayer(essentialProperties, firstKeyTime, 0, anticipationLabelColor)
+      setKeyframeToLayer(essentialProperties, secondKeyTime, 100, anticipationLabelColor)
 
-      essentialProperties.setLabelAtKey(keyTime1, anticipationLabelColor)
-      essentialProperties.setLabelAtKey(keyTime2, anticipationLabelColor)
+      addMarkerToLayer(camada, thisComp.time, { title: "Flip", label: 2 })
 
-      camada.marker.setValueAtTime(thisComp.time, new MarkerValue("Flip"));
     }
   })
 
@@ -199,10 +184,7 @@ export const turnCards = () => {
   const thisComp = getActiveComp()
   forEachLayer(thisComp, camada => {
     if (camada.selected) {
-      const essentialProperties = camada
-        .property("ADBE Layer Overrides")
-        .property("Flip Card")
-
+      const essentialProperties = getLayerProp(camada, flipCardEPPath)
       const currentValue = essentialProperties.value
       essentialProperties.setValue(currentValue === 0 ? 100 : 0)
     }
@@ -212,21 +194,22 @@ export const turnCards = () => {
 
 export const changeCard = (deckName: string, card: number, cardName: string) => {
   const thisComp = getActiveComp();
-  const thisProject = app.project;
-  const cardsSet = getItemByName(thisProject, cardsFolderName)
+  const thisProject = app.project as any;
+  const cardsSet = getItemByName(thisProject, cardsFolderName) as any
   const camadas = thisComp.selectedLayers
 
   // deseleciona as camadas selecionadas para utilizar o replaceSource em cada uma delas
   deselectAllSelectedLayers(camadas)
 
   for (let k = 0; k < camadas.length; k++) {
-    const camada = camadas[k]
+    const camada = camadas[k] as any
 
-    for (let i = 1; i <= cardsSet.numItems; i++) {
-      const cardItem = cardsSet.items[i]
+    for (let i = 1; i <= cardsSet?.numItems; i++) {
+      const cardItem = cardsSet?.items[i]
       if (cardItem.name === deckName) {
         camada.replaceSource(cardItem, false)
-        camada.property("Essential Properties").property("Card Option").setValue(card)
+        const cardOption = getLayerProp(camada, cardOptionEPPath)
+        cardOption.setValue(card)
         const targetRegExp = new RegExp("\\[TARGET\\]", "g")
         const stockRegExp = new RegExp("\\[STOCK\\]", "g")
         const tableauRegExp = new RegExp("\\[TABLEAU\\]", "g")
@@ -248,103 +231,97 @@ export const changeCard = (deckName: string, card: number, cardName: string) => 
 
 }
 
+const moveNextCards = (keyTimePos1: number, ignoreLayerIndex: number, distanceXPosLayers: number) => {
+
+  const thisComp = getActiveComp()
+  let incrementKeyframeDistance = 3
+
+  forEachLayer(thisComp, camada => {
+
+    if (camada.selected && camada.index !== ignoreLayerIndex) {
+
+      const startKeyTime = keyTimePos1 + frameDuration(1) * incrementKeyframeDistance
+      const endKeyTime = startKeyTime + frameDuration(11)
+
+      const layerPos = getLayerProp(camada, posPropPath)
+      const layerPosValue = layerPos.value
+
+      setKeyframeToLayer(layerPos, startKeyTime, layerPosValue, anticipationLabelColor, { ease: true, easeIn: 75, easeOut: 75 })
+
+      layerPosValue[0] += distanceXPosLayers
+      setKeyframeToLayer(layerPos, endKeyTime, layerPosValue, anticipationLabelColor, { ease: true, easeIn: 75, easeOut: 75 })
+
+      incrementKeyframeDistance += 1
+
+    }
+
+  })
+}
+
 
 export const flipStockCards = () => {
 
   app.beginUndoGroup("Fliping cards")
 
+  // main consts
   const thisComp = getActiveComp();
   const targetLayer = getTargetLayer()
 
+  if(thisComp.selectedLayers.length < 2) {
+    alert("Please, select at least two layers")
+    return
+  }
+
   const firstSelectedLayer = thisComp.selectedLayers[0];
+  const secondSelectedLayer = thisComp.selectedLayers[1]
 
-  const layerPos = firstSelectedLayer.property("Position")
-  const numKeys = layerPos.numKeys;
-  let currentKey = numKeys < 1 ? 0 : numKeys
-  const layerFlip = firstSelectedLayer.property("Essential Properties").property("Flip Card")
-  const currentPos = layerPos.value;
+  // property consts
+  const flipCardPos = getLayerProp(firstSelectedLayer, posPropPath)
+  const layerFlip = getLayerProp(firstSelectedLayer, flipCardEPPath)
+  const currentPos = flipCardPos.value;
   const lastZPos = getDeepestZ()
-  const zAdjust = .005
 
-  const keyTime1 = thisComp.time;
-  const keyTime2 = keyTime1 + frameDuration(6)
-  const keyTime3 = keyTime2 + frameDuration(5)
+  // key timing consts
+  const keyTimePos1 = thisComp.time;
+  const keyTimePos2 = keyTimePos1 + frameDuration(6)
+  const keyTimePos3 = keyTimePos2 + frameDuration(5)
+  const keyFlip1 = keyTimePos1 + frameDuration(2)
+  const keyFlip2 = keyTimePos1 + frameDuration(17)
 
-  const keytimingPos = [keyTime1, keyTime2, keyTime3]
-  firstSelectedLayer.marker.setValueAtTime(keyTime1, new MarkerValue("Flip"));
+  //actions
 
-  layerPos.setValueAtTime(keytimingPos[0], currentPos)
+  addMarkerToLayer(firstSelectedLayer, keyTimePos1, { title: "Flip Stock", label: 2 })
 
-  currentPos[0] += 117.3
-  currentPos[1] -= 29
-  currentPos[2] = lastZPos - zAdjust
-  layerPos.setValueAtTime(keytimingPos[1], currentPos)
+  // FIRST POSITION KEYFRAME
+  setKeyframeToLayer(flipCardPos, keyTimePos1, currentPos, actionLabelColor, { ease: true, easeIn: 75, easeOut: 75 })
 
-  currentPos[0] = targetLayer.property("Position").value[0]
-  currentPos[1] += 29
-  layerPos.setValueAtTime(keytimingPos[2], currentPos)
+  // SECOND POSITION KEYFRAME
+  const posSecondKey = [...currentPos]
+  posSecondKey[0] += 117.3
+  posSecondKey[1] -= 29
+  posSecondKey[2] = lastZPos - zAdjust
+  setKeyframeToLayer(flipCardPos, keyTimePos2, posSecondKey, actionLabelColor, { ease: true, speedIn: 2640, speedOut: 2640, easeIn: 1.16, easeOut: 16 })
 
-  let easeIn = new KeyframeEase(0, 75);
-  let easeOut = new KeyframeEase(0, 75);
-  currentKey += 1
-  layerPos.setTemporalEaseAtKey(currentKey, [easeIn], [easeOut])
+  // THIRD POSITION KEYFRAME
+  const posThirdkey = [...posSecondKey]
+  posThirdkey[0] = getLayerProp(targetLayer, posPropPath).value[0]
+  posThirdkey[1] += 29
+  setKeyframeToLayer(flipCardPos, keyTimePos3, posThirdkey, actionLabelColor, { ease: true, easeIn: 75, easeOut: 75 })
 
-  easeIn = new KeyframeEase(2640, 1.16);
-  easeOut = new KeyframeEase(2640, 16);
-  currentKey += 1
-  layerPos.setTemporalEaseAtKey(currentKey, [easeIn], [easeOut])
-
-  easeIn = new KeyframeEase(0, 75);
-  easeOut = new KeyframeEase(0, 75);
-  currentKey += 1
-  layerPos.setTemporalEaseAtKey(currentKey, [easeIn], [easeOut])
-
-  const keytimingFlip = [keyTime1 + frameDuration(2), keyTime1 + frameDuration(17)]
-
-  layerFlip.setValueAtTime(keytimingFlip[0], 0)
-  layerFlip.setValueAtTime(keytimingFlip[1], 100)
-
-  for (let time of keytimingPos) {
-    const keyIdx = getKeyIndexAtTime(layerPos, time)
-    layerPos.setLabelAtKey(keyIdx!, actionLabelColor)
+  // ESSENTIAL PROPERTIES FLIP KEYFRAMES
+  // if it is turned to front, only ignore and follow as is
+  if(layerFlip.value !== 100){
+    setKeyframeToLayer(layerFlip, keyFlip1, 0, actionLabelColor)
+    setKeyframeToLayer(layerFlip, keyFlip2, 100, actionLabelColor)
   }
 
-  for (let time of keytimingFlip) {
-    const keyIdx = getKeyIndexAtTime(layerFlip, time)
-    layerFlip.setLabelAtKey(keyIdx!, actionLabelColor)
-  }
+  const firstLayerXPosValue = getLayerProp(firstSelectedLayer, posPropPath).value[0]
+  const secondLayerXPosValue = getLayerProp(secondSelectedLayer, posPropPath).value[0]
 
-  let incrementLayer = 3
+  const distanceXPosLayers = firstLayerXPosValue - secondLayerXPosValue
+  const ignoreLayerIndex = firstSelectedLayer.index
 
-  forEachLayer(thisComp, camada => {
-
-    if (camada.selected && camada.index !== firstSelectedLayer.index) {
-      const thisKeyTime = keyTime1 + frameDuration(1) * incrementLayer
-      const layerPos = camada.property("Position")
-      const layerPosValue = layerPos.value
-
-      layerPos.setValueAtTime(thisKeyTime, layerPosValue)
-
-      layerPosValue[0] += 21.6
-      layerPos.setValueAtTime(thisKeyTime + frameDuration(11), layerPosValue)
-
-      const easeIn = new KeyframeEase(0, 75);
-      const easeOut = new KeyframeEase(0, 75);
-
-      const keyIndex1 = getKeyIndexAtTime(layerPos, thisKeyTime)
-      const keyIndex2 = getKeyIndexAtTime(layerPos, thisKeyTime + frameDuration(11))
-
-      layerPos.setTemporalEaseAtKey(keyIndex1, [easeIn], [easeOut])
-      layerPos.setTemporalEaseAtKey(keyIndex2, [easeIn], [easeOut])
-
-      layerPos.setLabelAtKey(keyIndex1, anticipationLabelColor)
-      layerPos.setLabelAtKey(keyIndex2, anticipationLabelColor)
-
-      incrementLayer += 1
-
-    }
-
-  })
+  moveNextCards(keyTimePos1, ignoreLayerIndex, distanceXPosLayers)
 
   app.endUndoGroup()
 
@@ -354,11 +331,7 @@ export const duplicateCards = (numCopies: number, adjustPos: number[]) => {
 
   const thisComp = getActiveComp();
   const camada = thisComp.selectedLayers[0]
-
-  const mainPos = camada
-    .property("ADBE Transform Group")
-    .property("ADBE Position")
-    .value;
+  const mainPos = getLayerProp(camada, posPropPath).value
 
   let lastDuplicated = camada
 
@@ -368,10 +341,8 @@ export const duplicateCards = (numCopies: number, adjustPos: number[]) => {
     const duplicated = camada.duplicate()
     mainPos[0] += adjustPos[0]
     mainPos[1] += adjustPos[1]
-    duplicated
-      .property("ADBE Transform Group")
-      .property("ADBE Position")
-      .setValue(mainPos)
+
+    getLayerProp(duplicated, posPropPath).setValue(mainPos)
 
     duplicated.moveAfter(lastDuplicated)
     lastDuplicated = duplicated
@@ -383,4 +354,3 @@ export const duplicateCards = (numCopies: number, adjustPos: number[]) => {
 export const handleImportFilesAndComps = (filePath: string) => {
   importFilesAndCompsForCards(filePath, cardsFolderName)
 }
-
