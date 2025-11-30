@@ -1,7 +1,15 @@
-import { getActiveComp, forEachLayer, getItemByName } from "./aeft-utils"
-import { frameDuration, getLayerProp, addMarkerToLayer, selectAllSelectedLayers, deselectAllSelectedLayers } from "./aeft-utils-jonatan"
+import { raise, alertError } from "./errors"
 import { expPos, expRot } from "../utils/expressions"
-import { getDeepestZ, setKeyframeToLayer, getTargetLayer, cardsEffectExist } from "./cards-utils"
+import { getActiveComp, forEachLayer, getItemByName } from "./aeft-utils"
+import { getDeepestZ, setKeyframeToLayer, getTargetLayer, cardsEffectExist, targetExist } from "./cards-utils"
+import {
+  frameDuration,
+  getLayerProp,
+  addMarkerToLayer,
+  selectAllSelectedLayers,
+  deselectAllSelectedLayers,
+  forEachSelectedLayer
+} from "./aeft-utils-jonatan"
 
 
 const keyLabel = {
@@ -112,22 +120,20 @@ export const applyJump = (presetPath: string) => {
   app.beginUndoGroup("Apply Jump Animation")
 
   try {
-    forEachLayer(thisComp, (camada) => {
-      if (camada.selected) {
-        if (!cardsEffectExist(camada)) camada.applyPreset(new File(presetPath))
-        applyJumpPos(thisComp, camada, targetLayer)
-        applyJumpScale(thisComp, camada)
-        applyJumpRotation(thisComp, camada)
-        addMarkerToLayer(camada, thisTime, { title: "Jump", label: 9 })
-      }
+
+    forEachSelectedLayer(thisComp, camada => {
+      if (!cardsEffectExist(camada)) camada.applyPreset(new File(presetPath))
+      applyJumpPos(thisComp, camada, targetLayer)
+      applyJumpScale(thisComp, camada)
+      applyJumpRotation(thisComp, camada)
+      addMarkerToLayer(camada, thisTime, { title: "Jump", label: 9 })
     })
+
   } catch (e) {
-    const error = e as any
-    const errorMsg = `Error at line ${error.line}\nMessage: ${error.message}\nOn file: aeft.ts`
-    alert(errorMsg)
-    return { error: errorMsg }
+    alertError(e)
+  } finally {
+    app.endUndoGroup()
   }
-  app.endUndoGroup()
 }
 
 
@@ -168,6 +174,7 @@ export const flipStockCards = () => {
   const thisComp = getActiveComp();
   const targetLayer = getTargetLayer()
   const numSelectedLayers = thisComp.selectedLayers.length
+  const jumpHeight = 29
 
   if (numSelectedLayers < 1) {
     alert("Please, select at least one STOCK Card Layer")
@@ -179,6 +186,7 @@ export const flipStockCards = () => {
 
   // property consts
   const flipCardPos = getLayerProp(firstSelectedLayer, posPropPath)
+  const targetLayerPos = getLayerProp(targetLayer, posPropPath).value
   const layerFlip = getLayerProp(firstSelectedLayer, flipCardEPPath)
   const currentPos = flipCardPos.value;
   const lastZPos = getDeepestZ()
@@ -203,10 +211,14 @@ export const flipStockCards = () => {
     { ease: true, easeIn: 75, easeOut: 75 }
   )
 
+  const diffXPos = targetLayerPos[0] > currentPos[0]
+    ? targetLayerPos[0] - currentPos[0]
+    : currentPos[0] - targetLayerPos[0]
+
   // SECOND POSITION KEYFRAME
   const posSecondKey = [...currentPos]
-  posSecondKey[0] += 117.3
-  posSecondKey[1] -= 29
+  posSecondKey[0] += diffXPos / 2
+  posSecondKey[1] -= jumpHeight
   posSecondKey[2] = lastZPos - zAdjust
   setKeyframeToLayer(
     flipCardPos,
@@ -219,7 +231,7 @@ export const flipStockCards = () => {
   // THIRD POSITION KEYFRAME
   const posThirdkey = [...posSecondKey]
   posThirdkey[0] = getLayerProp(targetLayer, posPropPath).value[0]
-  posThirdkey[1] += 29
+  posThirdkey[1] = currentPos[1]
   setKeyframeToLayer(
     flipCardPos,
     keyTimePos3,
@@ -253,43 +265,39 @@ export const flipStockCards = () => {
 
 // ============================== CARDS MODIFIERS
 
-
 export const setTargetLayer = () => {
 
   const thisComp = getActiveComp();
   const targetLayer = thisComp.selectedLayers[0] as unknown as AVLayer
 
-  if (!targetLayer) alert("Please, select one layer to be the target.");
-
-  const targetRegExp = new RegExp(`\\[TARGET\\]`, "g")
-  const stockRegExp = new RegExp(`\\[STOCK\\]`, "g")
-
-  if (targetRegExp.test(targetLayer.name)) {
-    alert("It's already a target layer.")
+  if (!targetLayer) {
+    alert("Please, select one layer to be the target.")
     return
-  }
+  };
 
-  for (let i = 1; i <= thisComp.numLayers; i++) {
-    const layer = thisComp.layer(i)
-    if (targetRegExp.test(layer.name)) {
-      alert("There is already a target layer in this composition.")
-      return
-    }
+  if (targetExist()) {
+    alert("There is already a target layer in this composition.")
+    return
   }
 
   app.beginUndoGroup("Set Target Layer")
 
-  targetLayer.threeDLayer = true
-  targetLayer.label = 1
+  try {
+    targetLayer.threeDLayer = true
+    targetLayer.label = 1
 
-  if (stockRegExp.test(targetLayer.name)) {
-    targetLayer.name = targetLayer.name.replace(stockRegExp, "[TARGET]")
-    return
+    const tagsList = ["TARGET", "STOCK", "TABLEAU"]
+    const pattern = tagsList.join("|")
+    const removeOldPattern = new RegExp(`\\s*\\[(${pattern})\\].*`, "g")
+
+    targetLayer.name = targetLayer.name.replace(removeOldPattern, "")
+    targetLayer.name = `${targetLayer.name} [TARGET]`
+  } catch (e) {
+    alertError(e)
+  } finally {
+    app.endUndoGroup()
   }
 
-  targetLayer.name = `${targetLayer.name} [TARGET]`
-
-  app.endUndoGroup()
 }
 
 export const setCardType = (cardTypeName: string, layerLabel: number) => {
@@ -297,37 +305,27 @@ export const setCardType = (cardTypeName: string, layerLabel: number) => {
   app.beginUndoGroup(`Set ${cardTypeName} Layers`)
 
   const thisComp = getActiveComp();
+  const tagsList = ["TARGET", "STOCK", "TABLEAU"]
+  const pattern = tagsList.join("|")
+  const removeOldPattern = new RegExp(`\\s*\\[(${pattern})\\].*`, "g")
 
-  forEachLayer(thisComp, camada => {
-    if (camada.selected) {
+  try {
+    forEachSelectedLayer(thisComp, camada => {
 
-      const targetRegExp = new RegExp(`\\[TARGET\\]`, "g")
-      const stockRegExp = new RegExp(`\\[STOCK\\]`, "g")
-      const tableauRegExp = new RegExp(`\\[TABLEAU\\]`, "g")
-      const cardType = new RegExp(`\\[${cardTypeName.toUpperCase()}\\]`, "g")
+      const layer = camada as unknown as AVLayer
+      layer.threeDLayer = true
+      layer.label = layerLabel
 
-      if (!camada) alert("Please, select the layers to be the ${cardTypeName} Cards");
+      layer.name = layer.name.replace(removeOldPattern, "")
+      layer.name = `${layer.name} [${cardTypeName.toUpperCase()}]`
 
-      //@ts-ignore
-      camada.threeDLayer = true
-      camada.label = layerLabel
+    })
+  } catch (e) {
+    alertError(e)
+  } finally {
+    app.endUndoGroup()
+  }
 
-      if (targetRegExp.test(camada.name)) {
-        camada.name = `${camada.name.replace(targetRegExp, "")} [${cardTypeName.toUpperCase()}]`
-      } else if (stockRegExp.test(camada.name)) {
-        camada.name = `${camada.name.replace(stockRegExp, "")} [${cardTypeName.toUpperCase()}]`
-      } else if (tableauRegExp.test(camada.name)) {
-        camada.name = `${camada.name.replace(tableauRegExp, "")} [${cardTypeName.toUpperCase()}]`
-      }
-
-      if (!cardType.test(camada.name)) {
-        camada.name = `${camada.name} [${cardTypeName.toUpperCase()}]`
-      }
-
-    }
-  })
-
-  app.endUndoGroup()
 }
 
 export const flipCard = () => {
@@ -407,18 +405,16 @@ export const changeCard = (deckName: string, card: number, cardName: string) => 
         camada.replaceSource(cardItem, false)
         const cardOption = getLayerProp(camada, cardOptionEPPath)
         cardOption.setValue(card)
-        const targetRegExp = new RegExp("\\[TARGET\\]", "g")
-        const stockRegExp = new RegExp("\\[STOCK\\]", "g")
-        const tableauRegExp = new RegExp("\\[TABLEAU\\]", "g")
-        if (targetRegExp.test(camada.name)) {
-          camada.name = `${cardName} [TARGET]`
-        } else if (stockRegExp.test(camada.name)) {
-          camada.name = `${cardName} [STOCK]`
-        } else if (tableauRegExp.test(camada.name)) {
-          camada.name = `${cardName} [TABLEAU]`
-        } else {
-          camada.name = cardName
-        }
+
+        const tagsList = ["TARGET", "STOCK", "TABLEAU"]
+        const pattern = tagsList.join("|")
+        const tagPattern = new RegExp(`\\[(${pattern})\\]`, "g")
+
+        const zoneMatch = tagPattern.exec(camada.name);
+        const existingZoneTag = zoneMatch ? zoneMatch[1] : null;
+
+        camada.name = existingZoneTag ? `${cardName} [${existingZoneTag}]` : cardName;
+
       }
     }
   }

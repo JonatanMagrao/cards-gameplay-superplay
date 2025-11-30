@@ -8,7 +8,27 @@ export const importFilesAndCompsForCards = (filePath: string, cardsFolderName: s
   folder.name = cardsFolderName
 }
 
+export const targetExist = () => {
+  const thisComp = getActiveComp()
+  const targetTag = new RegExp("\\s*\\[TARGET\\]", "g")
+
+  for (let i = 1; i <= thisComp.numLayers; i++) {
+    const camada = thisComp.layer(i)
+    if (targetTag.test(camada.name)) {
+      return true
+    }
+  }
+
+  return false
+}
+
 export const getTargetLayer = () => {
+
+  if (!targetExist()) {
+    alert("Target Layer don't exist!")
+    return
+  }
+
   const thisComp = getActiveComp();
   for (let i = 1; i <= thisComp.numLayers; i++) {
     const layer = thisComp.layer(i);
@@ -17,7 +37,7 @@ export const getTargetLayer = () => {
       return layer
     }
   }
-  return null
+
 }
 
 export const cardsEffectExist = (camada: Layer) => {
@@ -136,9 +156,9 @@ export const setKeyframeToLayer = (
         [keyframeEaseOut]
       )
     }
-    
+
   } else {
-    
+
     layerProp.setInterpolationTypeAtKey(
       keyIndex,
       KeyframeInterpolationType[intIn],
@@ -146,7 +166,7 @@ export const setKeyframeToLayer = (
     )
 
   }
-  
+
   //@ts-ignore
   layerProp.setLabelAtKey(keyIndex, label)
 }

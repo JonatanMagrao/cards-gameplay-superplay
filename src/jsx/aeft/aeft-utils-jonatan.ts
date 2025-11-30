@@ -1,5 +1,52 @@
 import { getActiveComp } from "./aeft-utils";
 
+export const forEachSelectedLayer = (
+  comp: CompItem,
+  callback: (layer: Layer, layerIndexInComp: number) => void
+) => {
+  for (let i = 1; i <= comp.numLayers; i++) {
+    const layer = comp.layer(i);
+    if (layer.selected) callback(layer, i);
+  }
+};
+
+export const mapSelectedLayers = <T>(
+  comp: CompItem,
+  callback: (layer: Layer, layerIndexInComp: number, selectedIndex: number) => T
+): T[] => {
+  const out: T[] = [];
+  let s = 0;
+
+  for (let i = 1; i <= comp.numLayers; i++) {
+    const layer = comp.layer(i);
+    if (!layer.selected) continue;
+
+    out.push(callback(layer, i, s));
+    s++;
+  }
+
+  return out;
+};
+
+export const filterSelectedLayers = (
+  comp: CompItem,
+  predicate: (layer: Layer, layerIndexInComp: number, selectedIndex: number) => boolean
+): Layer[] => {
+  const out: Layer[] = [];
+  let s = 0;
+
+  for (let i = 1; i <= comp.numLayers; i++) {
+    const layer = comp.layer(i);
+    if (!layer.selected) continue;
+
+    if (predicate(layer, i, s)) out.push(layer);
+    s++;
+  }
+
+  return out;
+};
+
+
 export const deselectAllSelectedLayers = (selectedLayers: Layer[]) => {
   for (let i = 0; i < selectedLayers.length; i++) {
     selectedLayers[i].selected = false

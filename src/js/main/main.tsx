@@ -189,11 +189,12 @@ export const App = () => {
               <button onClick={flipStockCards}>Flip Stock Cards</button>
               <button onClick={applyFlipCard}>Flip Card</button>
               <button onClick={turnCards}>Turn Cards</button>
+              {/* <button onClick={teste}>teste</button> */}
 
               <button onClick={handleSetTargetLayer}>Set Target Layer</button>
               <button onClick={handleSetStockLayer}>Set Stock Layers</button>
               <button onClick={handleSetTableauLayer}>Set Tableau Layers</button>
-              
+
               <form onSubmit={handleDuplicateSubmit} className="dup-form">
                 <div className="dup-grid">
                   <label>

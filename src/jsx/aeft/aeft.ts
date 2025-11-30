@@ -1,4 +1,4 @@
-import {  importFilesAndCompsForCards,} from "./cards-utils"
+import { importFilesAndCompsForCards, } from "./cards-utils"
 import {
   applyJump,
   setTargetLayer,
@@ -10,14 +10,13 @@ import {
   flipStockCards
 } from "./actions";
 
-
 const cardsFolderName = "Disney Solitaire Cards"
 
 export const handleSetTargetLayer = () => setTargetLayer()
 
 export const handleSetStockLayer = () => setCardType("stock", 2)
 
-export const handleSetTableauLayer = () => setCardType("tableau", 9)
+export const handleSetTableauLayer = () => setCardType("TABLEAU", 9)
 
 export const handleApplyJump = (presetPath: string) => applyJump(presetPath)
 
@@ -36,6 +35,4 @@ export const handleImportFilesAndComps = (filePath: string) => {
 export const handleChangeCard = (deckName: string, card: number, cardName: string) => {
   changeCard(deckName, card, cardName)
 }
-
-
 
