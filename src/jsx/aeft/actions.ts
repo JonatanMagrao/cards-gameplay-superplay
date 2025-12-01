@@ -12,7 +12,7 @@ import {
 } from "./aeft-utils-jonatan"
 
 
-const keyLabel = {
+export const keyLabel = {
   red: 1,
   yellow: 2,
   acqua: 3,
@@ -39,16 +39,17 @@ const zAdjust = .005
 const transformGroupMatchName = "ADBE Transform Group"
 const essentialPropertiesMatchName = "ADBE Layer Overrides"
 
-const posPropPath = [transformGroupMatchName, "ADBE Position"] as const
-const zRotPropPath = [transformGroupMatchName, "ADBE Rotate Z"] as const
-const scalePropPath = [transformGroupMatchName, "ADBE Scale"] as const
-const flipCardEPPath = [essentialPropertiesMatchName, "Flip Card"] as const
-const cardOptionEPPath = [essentialPropertiesMatchName, "Card Option"] as const
+export const markerPropPath = "ADBE Marker"
+export const posPropPath = [transformGroupMatchName, "ADBE Position"] as const
+export const zRotPropPath = [transformGroupMatchName, "ADBE Rotate Z"] as const
+export const scalePropPath = [transformGroupMatchName, "ADBE Scale"] as const
+export const flipCardEssPropPath = [essentialPropertiesMatchName, "Flip Card"] as const
+export const cardOptionEPPath = [essentialPropertiesMatchName, "Card Option"] as const
 
 
 //================================= TABLEAU JUMP ACTIONS
 
-const applyJumpPos = (thisComp: CompItem, camada: Layer, targetLayer: Layer) => {
+export const jumpPos = (time: number, camada: Layer, targetLayer: Layer) => {
 
   const myLayer = camada as unknown as AVLayer
   myLayer.threeDLayer = true
@@ -61,8 +62,8 @@ const applyJumpPos = (thisComp: CompItem, camada: Layer, targetLayer: Layer) => 
 
   targetEndPos[2] = lastZPos - zAdjust
 
-  const keyTime1 = thisComp.time + frameDuration(4)
-  const keyTime2 = thisComp.time + frameDuration(24)
+  const keyTime1 = time + frameDuration(4)
+  const keyTime2 = time + frameDuration(24)
 
   setKeyframeToLayer(posProp, keyTime1, startPos, actionLabelColor)
   setKeyframeToLayer(posProp, keyTime2, targetEndPos, actionLabelColor)
@@ -71,7 +72,7 @@ const applyJumpPos = (thisComp: CompItem, camada: Layer, targetLayer: Layer) => 
 
 }
 
-const applyJumpScale = (thisComp: CompItem, camada: Layer) => {
+export const jumpScale = (time: number, camada: Layer) => {
 
   const scaleProp = getLayerProp(camada, scalePropPath)
   const layerScale = scaleProp.value
@@ -81,7 +82,7 @@ const applyJumpScale = (thisComp: CompItem, camada: Layer) => {
     pressScaleEffect.push(i * .8)
   }
 
-  const firstKeyTime = thisComp.time
+  const firstKeyTime = time
   const secondKeyTime = firstKeyTime + frameDuration(4)
   const thirdKeyTime = secondKeyTime + frameDuration(4)
 
@@ -91,13 +92,13 @@ const applyJumpScale = (thisComp: CompItem, camada: Layer) => {
 
 }
 
-const applyJumpRotation = (thisComp: CompItem, camada: Layer) => {
+export const jumpRotation = (time: number, camada: Layer) => {
 
   const rotationProp = getLayerProp(camada, zRotPropPath)
   const layerRotation = rotationProp.value
 
-  const firstKeyTime = thisComp.time + frameDuration(4)
-  const secondkeyTime = thisComp.time + frameDuration(24)
+  const firstKeyTime = time + frameDuration(4)
+  const secondkeyTime = time + frameDuration(24)
 
   setKeyframeToLayer(rotationProp, firstKeyTime, layerRotation, actionLabelColor)
   setKeyframeToLayer(rotationProp, secondkeyTime, 0, actionLabelColor)
@@ -106,7 +107,7 @@ const applyJumpRotation = (thisComp: CompItem, camada: Layer) => {
 
 }
 
-export const applyJump = (presetPath: string) => {
+export const applyJumpOnSelectedlayers = (presetPath: string) => {
 
   const targetLayer = getTargetLayer() as Layer
   const thisComp = getActiveComp();
@@ -123,9 +124,9 @@ export const applyJump = (presetPath: string) => {
 
     forEachSelectedLayer(thisComp, camada => {
       if (!cardsEffectExist(camada)) camada.applyPreset(new File(presetPath))
-      applyJumpPos(thisComp, camada, targetLayer)
-      applyJumpScale(thisComp, camada)
-      applyJumpRotation(thisComp, camada)
+      jumpPos(thisTime, camada, targetLayer)
+      jumpScale(thisTime, camada)
+      jumpRotation(thisTime, camada)
       addMarkerToLayer(camada, thisTime, { title: "Jump", label: 9 })
     })
 
@@ -187,7 +188,7 @@ export const flipStockCards = () => {
   // property consts
   const flipCardPos = getLayerProp(firstSelectedLayer, posPropPath)
   const targetLayerPos = getLayerProp(targetLayer, posPropPath).value
-  const layerFlip = getLayerProp(firstSelectedLayer, flipCardEPPath)
+  const layerFlip = getLayerProp(firstSelectedLayer, flipCardEssPropPath)
   const currentPos = flipCardPos.value;
   const lastZPos = getDeepestZ()
 
@@ -328,7 +329,7 @@ export const setCardType = (cardTypeName: string, layerLabel: number) => {
 
 }
 
-export const flipCard = () => {
+export const applyFlipCardOnSelectedlayers = () => {
 
   app.beginUndoGroup("Apply Flip Card Animation")
 
@@ -337,13 +338,7 @@ export const flipCard = () => {
   forEachLayer(thisComp, camada => {
     if (camada.selected) {
 
-      const essentialProperties = getLayerProp(camada, flipCardEPPath) as any
-      const firstKeyTime = thisComp.time
-      const secondKeyTime = firstKeyTime + frameDuration(15)
-
-      setKeyframeToLayer(essentialProperties, firstKeyTime, 0, anticipationLabelColor)
-      setKeyframeToLayer(essentialProperties, secondKeyTime, 100, anticipationLabelColor)
-
+      flipCard(thisComp.time, camada)
       addMarkerToLayer(camada, thisComp.time, { title: "Flip", label: 2 })
 
     }
@@ -352,11 +347,20 @@ export const flipCard = () => {
   app.endUndoGroup()
 }
 
+export const flipCard = (time: number, layer: Layer) => {
+  const essentialProperties = getLayerProp(layer, flipCardEssPropPath) as any
+  const firstKeyTime = time
+  const secondKeyTime = firstKeyTime + frameDuration(15)
+
+  setKeyframeToLayer(essentialProperties, firstKeyTime, 0, anticipationLabelColor)
+  setKeyframeToLayer(essentialProperties, secondKeyTime, 100, anticipationLabelColor)
+}
+
 export const turnCards = () => {
   const thisComp = getActiveComp()
   forEachLayer(thisComp, camada => {
     if (camada.selected) {
-      const essentialProperties = getLayerProp(camada, flipCardEPPath)
+      const essentialProperties = getLayerProp(camada, flipCardEssPropPath)
       const currentValue = essentialProperties.value
       essentialProperties.setValue(currentValue === 0 ? 100 : 0)
     }

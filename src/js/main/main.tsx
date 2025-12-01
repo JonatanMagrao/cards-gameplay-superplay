@@ -69,6 +69,9 @@ export const App = () => {
   const handleSetStockLayer = async () => await evalTS("handleSetStockLayer");
   const handleSetTableauLayer = async () => await evalTS("handleSetTableauLayer");
 
+  const resetCardsAnimation = async () => await evalTS("resetCardsAnimation");
+  const restoreCardsAnimation = async () => await evalTS("restoreCardsAnimation");
+
   const changeCard = async (deckName: string, card: number) => await evalTS("handleChangeCard", deckName, card, cardTitle);
   const handleImportFilesAndComps = async () => await evalTS("handleImportFilesAndComps", cardProject);
   const duplicateCards = async (numCopies: number, cardDistance: number[]) => await evalTS("handleDuplicateCards", numCopies, cardDistance);
@@ -194,6 +197,9 @@ export const App = () => {
               <button onClick={handleSetTargetLayer}>Set Target Layer</button>
               <button onClick={handleSetStockLayer}>Set Stock Layers</button>
               <button onClick={handleSetTableauLayer}>Set Tableau Layers</button>
+              
+              <button onClick={resetCardsAnimation}>Reset</button>
+              <button onClick={restoreCardsAnimation}>Restore</button>
 
               <form onSubmit={handleDuplicateSubmit} className="dup-form">
                 <div className="dup-grid">
