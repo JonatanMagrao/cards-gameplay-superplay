@@ -32,7 +32,7 @@ export const handleSetTableauLayer = () => setCardType("TABLEAU", 9)
 
 export const handleApplyJump = (presetPath: string) => applyJumpOnSelectedlayers(presetPath)
 
-export const handleFlipStockCards = () => flipStockCards(false)
+export const handleFlipStockCards = () => flipStockCards()
 
 export const handleFlipCards = () => applyFlipCardOnSelectedlayers()
 
@@ -157,6 +157,9 @@ export const restoreCardsAnimation = () => {
       jumpRotation(card.markerTime, card.layer)
     } else if (card.comment === "Flip") {
       flipCard(card.markerTime, card.layer)
+    } else if (card.comment === "Flip Stock"){
+      thisComp.time = card.markerTime
+      flipStockCards(card.layer)
     }
   }
   app.endUndoGroup()

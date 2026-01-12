@@ -209,7 +209,7 @@ const getNextStockCard = (comp: CompItem, baseLayer: Layer, labelColor: Number):
   return nextLayer;
 }
 
-export const flipStockCards = (automatic: boolean = false) => {
+export const flipStockCards = (stockLayerToFlip?: Layer ) => {
 
   app.beginUndoGroup("Fliping cards")
 
@@ -221,8 +221,8 @@ export const flipStockCards = (automatic: boolean = false) => {
 
   let firstSelectedLayer = null
 
-  if (automatic) {
-    firstSelectedLayer = stockLayers[0]
+  if (stockLayerToFlip) {
+    firstSelectedLayer = stockLayerToFlip
   } else {
     if (!thisComp || !thisComp.selectedLayers || thisComp.selectedLayers.length === 0) {
       alert("Please, select the Stock Card");

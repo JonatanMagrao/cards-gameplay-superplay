@@ -188,8 +188,8 @@ export const App = () => {
           <section className="panel-section">
             {/* <span className="section-label">Animação</span> */}
             <div className="button-row">
-              <button onClick={() => applyJump(presetPath)}>Apply Jump</button>
-              <button onClick={flipStockCards}>Flip Stock Cards</button>
+              <button onClick={() => applyJump(presetPath)} style={{border:"1px solid #4AA44C"}}>Apply Jump</button>
+              <button onClick={flipStockCards} style={{border:"1px solid #E4D84C"}}>Flip Stock Cards</button>
               <button onClick={applyFlipCard}>Flip Card</button>
               <button onClick={turnCards}>Turn Cards</button>
               {/* <button onClick={teste}>teste</button> */}
@@ -203,7 +203,7 @@ export const App = () => {
 
               <button onClick={handleImportFilesAndComps}>Import</button>
 
-              <form onSubmit={handleDuplicateSubmit} className="dup-form">
+              {/* <form onSubmit={handleDuplicateSubmit} className="dup-form">
                 <div className="dup-grid">
                   <label>
                     Copies
@@ -244,7 +244,7 @@ export const App = () => {
                 </div>
 
                 <button type="submit">Apply</button>
-              </form>
+              </form> */}
 
             </div>
           </section>
