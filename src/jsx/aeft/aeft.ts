@@ -32,7 +32,7 @@ export const handleSetTableauLayer = () => setCardType("TABLEAU", 9)
 
 export const handleApplyJump = (presetPath: string) => applyJumpOnSelectedlayers(presetPath)
 
-export const handleFlipStockCards = () => flipStockCards()
+export const handleFlipStockCards = () => flipStockCards(false)
 
 export const handleFlipCards = () => applyFlipCardOnSelectedlayers()
 

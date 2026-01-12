@@ -194,12 +194,14 @@ export const App = () => {
               <button onClick={turnCards}>Turn Cards</button>
               {/* <button onClick={teste}>teste</button> */}
 
-              <button onClick={handleSetTargetLayer}>Set Target Layer</button>
-              <button onClick={handleSetStockLayer}>Set Stock Layers</button>
-              <button onClick={handleSetTableauLayer}>Set Tableau Layers</button>
-              
+              <button onClick={handleSetTargetLayer} style={{backgroundColor:"#B53838"}}>Set Target Layer</button>
+              <button onClick={handleSetStockLayer} style={{backgroundColor: "#E4D84C", color: 'black'}}>Set Stock Layers</button>
+              <button onClick={handleSetTableauLayer} style={{backgroundColor: "#4AA44C"}}>Set Tableau Layers</button>
+
               <button onClick={resetCardsAnimation}>Reset</button>
               <button onClick={restoreCardsAnimation}>Restore</button>
+
+              <button onClick={handleImportFilesAndComps}>Import</button>
 
               <form onSubmit={handleDuplicateSubmit} className="dup-form">
                 <div className="dup-grid">
@@ -247,7 +249,6 @@ export const App = () => {
             </div>
           </section>
         </div>
-        <button onClick={handleImportFilesAndComps}>Import</button>
       </header >
     </div >
   );

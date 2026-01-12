@@ -140,50 +140,97 @@ export const applyJumpOnSelectedlayers = (presetPath: string) => {
 
 // ============================== STOCK CARD ACTIONS
 
-const moveNextCards = (keyTimePos1: number, ignoreLayerIndex: number, distanceXPosLayers: number) => {
+const moveNextCards = (keyTimePos1: number, nextLayers: Layer[], distanceXPosLayers: number) => {
 
-  const thisComp = getActiveComp()
   let incrementKeyframeDistance = 3
 
-  forEachLayer(thisComp, camada => {
+  for (let nextLayer of nextLayers) {
+    const startKeyTime = keyTimePos1 + frameDuration(1) * incrementKeyframeDistance
+    const endKeyTime = startKeyTime + frameDuration(11)
 
-    if (camada.selected && camada.index !== ignoreLayerIndex) {
+    const layerPos = getLayerProp(nextLayer, posPropPath)
+    const layerPosValue = layerPos.value
 
-      const startKeyTime = keyTimePos1 + frameDuration(1) * incrementKeyframeDistance
-      const endKeyTime = startKeyTime + frameDuration(11)
+    setKeyframeToLayer(layerPos, startKeyTime, layerPosValue, anticipationLabelColor, { ease: true, easeIn: 75, easeOut: 75 })
 
-      const layerPos = getLayerProp(camada, posPropPath)
-      const layerPosValue = layerPos.value
+    layerPosValue[0] += distanceXPosLayers
+    setKeyframeToLayer(layerPos, endKeyTime, layerPosValue, anticipationLabelColor, { ease: true, easeIn: 75, easeOut: 75 })
 
-      setKeyframeToLayer(layerPos, startKeyTime, layerPosValue, anticipationLabelColor, { ease: true, easeIn: 75, easeOut: 75 })
+    incrementKeyframeDistance += 1
+  }
 
-      layerPosValue[0] += distanceXPosLayers
-      setKeyframeToLayer(layerPos, endKeyTime, layerPosValue, anticipationLabelColor, { ease: true, easeIn: 75, easeOut: 75 })
-
-      incrementKeyframeDistance += 1
-
-    }
-
-  })
 }
 
-export const flipStockCards = () => {
+const getAllStockLayers = (comp: CompItem) => {
+  const matches: Layer[] = [];
+  if (!comp || !(comp instanceof CompItem)) return matches;
+
+  for (let i = 1; i <= comp.numLayers; i++) {
+    const layer = comp.layer(i);
+    if (!layer) continue;
+
+    if (layer.name && layer.name.indexOf("[STOCK]") !== -1 && layer.label === anticipationLabelColor) {
+      matches.push(layer);
+    }
+  }
+
+  return matches;
+}
+
+const getAllStockLayersBelow = (comp: CompItem, layerRef: Layer) => {
+  const matches: Layer[] = [];
+  if (!comp || !(comp instanceof CompItem)) return matches;
+
+  for (let i = 1; i <= comp.numLayers; i++) {
+    const layer = comp.layer(i);
+    if (!layer) continue;
+
+    if (layer.name && layer.name.indexOf("[STOCK]") !== -1 && layer.label === anticipationLabelColor && layer.index > layerRef.index) {
+      matches.push(layer);
+    }
+  }
+
+  return matches;
+}
+
+const getNextStockCard = (comp: CompItem, baseLayer: Layer, labelColor: Number): Layer | null => {
+  if (!comp || !(comp instanceof CompItem)) return null;
+  if (!baseLayer || typeof baseLayer.index !== "number") return null;
+
+  var nextIndex = baseLayer.index + 1;
+  if (nextIndex < 1 || nextIndex > comp.numLayers) return null;
+
+  var nextLayer = comp.layer(nextIndex);
+  if (!nextLayer) return null;
+
+  if (!nextLayer.name || nextLayer.name.indexOf("[STOCK]") === -1) return null;
+  if (typeof labelColor === "number" && nextLayer.label !== labelColor) return null;
+
+  return nextLayer;
+}
+
+export const flipStockCards = (automatic: boolean = false) => {
 
   app.beginUndoGroup("Fliping cards")
 
   // main consts
   const thisComp = getActiveComp();
   const targetLayer = getTargetLayer()
-  const numSelectedLayers = thisComp.selectedLayers.length
   const jumpHeight = 29
+  const stockLayers = getAllStockLayers(thisComp)
 
-  if (numSelectedLayers < 1) {
-    alert("Please, select at least one STOCK Card Layer")
-    return
+  let firstSelectedLayer = null
+
+  if (automatic) {
+    firstSelectedLayer = stockLayers[0]
+  } else {
+    if (!thisComp || !thisComp.selectedLayers || thisComp.selectedLayers.length === 0) {
+      alert("Please, select the Stock Card");
+      firstSelectedLayer = null;
+    } else {
+      firstSelectedLayer = thisComp.selectedLayers[0];
+    }
   }
-
-  const firstSelectedLayer = thisComp.selectedLayers[0];
-  const secondSelectedLayer = thisComp.selectedLayers[1]
 
   // property consts
   const flipCardPos = getLayerProp(firstSelectedLayer, posPropPath)
@@ -248,15 +295,15 @@ export const flipStockCards = () => {
     setKeyframeToLayer(layerFlip, keyFlip2, 100, actionLabelColor)
   }
 
+  const nextLayer = getNextStockCard(thisComp, firstSelectedLayer, anticipationLabelColor)
 
-  if (numSelectedLayers > 1) {
+  if (nextLayer) {
+    const stockLayersBelow = getAllStockLayersBelow(thisComp, firstSelectedLayer)
     const firstLayerXPosValue = getLayerProp(firstSelectedLayer, posPropPath).value[0]
-    const secondLayerXPosValue = getLayerProp(secondSelectedLayer, posPropPath).value[0]
-
+    const secondLayerXPosValue = getLayerProp(nextLayer, posPropPath).value[0]
     const distanceXPosLayers = firstLayerXPosValue - secondLayerXPosValue
-    const ignoreLayerIndex = firstSelectedLayer.index
 
-    moveNextCards(keyTimePos1, ignoreLayerIndex, distanceXPosLayers)
+    moveNextCards(keyTimePos1, stockLayersBelow, distanceXPosLayers)
   }
 
   app.endUndoGroup()
