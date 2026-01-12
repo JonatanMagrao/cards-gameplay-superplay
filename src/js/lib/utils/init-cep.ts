@@ -4,6 +4,7 @@ import { keyRegisterOverride, dropDisable } from "./cep";
 
 const buildFlyoutMenu = () => {
   const menu = `<Menu>
+  <MenuItem Id="website" Label="Website"/>
   <MenuItem Id="info" Label="${displayName} ${version}" Enabled="false" Checked="false"/>
   <MenuItem Id="website" Label="by ${company}" Enabled="false" Checked="false"/>
   <MenuItem Label="---" />
@@ -32,7 +33,7 @@ const buildFlyoutMenu = () => {
       menuId = event.data.menuId;
     }
     if (menuId === "website") {
-      // openLinkInBrowser(homePage);
+      openLinkInBrowser("https://www.superplay.co/");
     } else if (menuId === "info") {
       // openLinkInBrowser(productPage);
     } else if (menuId === "refresh") {

@@ -39,9 +39,9 @@ const config: CEP_Config = {
     sourceMap: true,
   },
   zxp: {
-    country: "US",
+    country: "IR",
     province: "CA",
-    org: "Company",
+    org: "Superplay",
     password: "password",
     tsa: [
       "http://timestamp.digicert.com/", // Windows Only
