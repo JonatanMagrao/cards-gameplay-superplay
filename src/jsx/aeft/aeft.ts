@@ -23,7 +23,7 @@ import { getActiveComp, forEachLayer } from "./aeft-utils";
 import { getLayerProp } from "./aeft-utils-jonatan";
 import { applyCardsLayoutFromJson, exportCardsLayoutToJson } from "./game-levels-utils";
 
-const cardsFolderName = "Precomp Decks"
+const cardsFolderName = "Disney Solitaire Cards"
 
 export const handleApplyCardsLayout = (baseDir: string, levelName: string) => applyCardsLayoutFromJson(baseDir, levelName)
 

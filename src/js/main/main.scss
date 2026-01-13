@@ -1,2 +1,150 @@
 @use "../variables.scss" as *;
 
+/* ===== Layouts Panel (Apply / Save) ===== */
+
+.layouts-section {
+  gap: 0.6rem; // combina com teu panel-section
+}
+
+.layouts-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Settings box (collapsible) */
+.layouts-settings {
+  padding: 0.6rem;
+  border: 1px solid #3a3f4b; // igual field-input
+  border-radius: 6px;
+  background: #20232a; // igual panel, mas dentro do panel
+  display: grid;
+  gap: 0.45rem;
+}
+
+/* Two cards side-by-side */
+.layouts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+}
+
+/* Card container style consistent with preview/input */
+.layouts-card {
+  background: #181a1f;       // igual preview card
+  border: 1px solid #3a3f4b; // igual field-input border
+  border-radius: 6px;        // igual card-preview
+  padding: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.layouts-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.layouts-card-title {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #ffffff;
+  opacity: 0.9;
+}
+
+/* Apply row: search + select + button */
+.layouts-apply-row {
+  display: grid;
+  grid-template-columns: 0.9fr 1.2fr auto;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+/* Buttons inside layouts */
+.layouts-actions {
+  margin-top: 0.1rem;
+  justify-content: flex-start;
+}
+
+/* Ghost button (⚙ / Refresh) */
+.layouts-btn-ghost {
+  background: transparent;
+  border: 1px solid #3a3f4b;
+  padding: 0.18rem 0.45rem;
+  border-radius: 6px;
+  font-size: 0.7rem;
+}
+
+.layouts-btn-ghost:hover {
+  background-color: $active; // respeita teu hover global
+}
+
+/* Primary button behavior (optional class) */
+.layouts-btn-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Hint text */
+.layouts-hint {
+  font-size: 0.65rem;
+  color: #9a9a9a; // igual card-hint
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.layouts-mono {
+  font-family: "SF Mono", "Menlo", "Monaco", "Consolas", "Courier New", monospace;
+  color: #e3e3e3;
+}
+
+/* Small responsive fallback (CEP panels can be narrow) */
+@media (max-width: 420px) {
+  .layouts-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .layouts-apply-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ===== Tabs (Panel) ===== */
+
+.panel-tabs-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.panel-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+}
+
+.panel-tab {
+  font-size: 0.75rem;
+  background-color: #181a1f;         // igual field-input bg
+  border: 1px solid #3a3f4b;         // igual field-input border
+  padding: 0.3rem 0.6rem;
+  border-radius: 6px;
+  color: #ffffff;
+  font-weight: 800;
+  cursor: pointer;
+  user-select: none;
+}
+
+.panel-tab:hover {
+  border-color: #61dafb;
+}
+
+.panel-tab.is-active {
+  background-color: #20232a;         // igual panel
+  border-color: #61dafb;
+}
+
+.panel{
+  width:200px
+}

@@ -378,7 +378,7 @@ export const writeLayoutJsonFile = (
 
     const overwrite = confirm(
       `A layout file already exists for this resolution:\n\n` +
-        `Folder: ${levelFolderName}\nResolution: ${fileNameNoExt}\n\n` +
+        `Game Level: ${levelFolderName.replace("level_","")}\nResolution: ${fileNameNoExt}\n\n` +
         `Do you want to overwrite it?`
     );
 
@@ -407,6 +407,11 @@ export const writeLayoutJsonFile = (
 
   return outputFile;
 };
+
+export type SaveLayoutResult =
+  | { ok: true; code: "OK"; filePath: string }
+  | { ok: false; code: "CANCEL_OVERWRITE" }
+  | { ok: false; code: "ERROR"; message: string };
 
 
 /**
