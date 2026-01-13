@@ -226,7 +226,7 @@ export const flipStockCards = (stockLayerToFlip?: Layer ) => {
   } else {
     if (!thisComp || !thisComp.selectedLayers || thisComp.selectedLayers.length === 0) {
       alert("Please, select the Stock Card");
-      firstSelectedLayer = null;
+      return
     } else {
       firstSelectedLayer = thisComp.selectedLayers[0];
     }
