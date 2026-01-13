@@ -72,6 +72,9 @@ export const App = () => {
   const resetCardsAnimation = async () => await evalTS("resetCardsAnimation");
   const restoreCardsAnimation = async () => await evalTS("restoreCardsAnimation");
 
+  const handleApplyCardslayout = async () => await evalTS("handleApplyCardsLayout", "D:/Downloads/cardsLevels", "003-Abracadabra")
+  const handleSaveCardsLayout = async () => await evalTS("handleSaveCardsLayout", "D:/Downloads/cardsLevels", "003-Abracadabra")
+
   const changeCard = async (deckName: string, card: number) => await evalTS("handleChangeCard", deckName, card, cardTitle);
   const handleImportFilesAndComps = async () => await evalTS("handleImportFilesAndComps", cardProject);
   const duplicateCards = async (numCopies: number, cardDistance: number[]) => await evalTS("handleDuplicateCards", numCopies, cardDistance);
@@ -188,20 +191,23 @@ export const App = () => {
           <section className="panel-section">
             {/* <span className="section-label">Animação</span> */}
             <div className="button-row">
-              <button onClick={() => applyJump(presetPath)} style={{border:"1px solid #4AA44C"}}>Apply Jump</button>
-              <button onClick={flipStockCards} style={{border:"1px solid #E4D84C"}}>Flip Stock Cards</button>
+              <button onClick={() => applyJump(presetPath)} style={{ border: "1px solid #4AA44C" }}>Apply Jump</button>
+              <button onClick={flipStockCards} style={{ border: "1px solid #E4D84C" }}>Flip Stock Cards</button>
               <button onClick={applyFlipCard}>Flip Card</button>
               <button onClick={turnCards}>Turn Cards</button>
               {/* <button onClick={teste}>teste</button> */}
 
-              <button onClick={handleSetTargetLayer} style={{backgroundColor:"#B53838"}}>Set Target Layer</button>
-              <button onClick={handleSetStockLayer} style={{backgroundColor: "#E4D84C", color: 'black'}}>Set Stock Layers</button>
-              <button onClick={handleSetTableauLayer} style={{backgroundColor: "#4AA44C"}}>Set Tableau Layers</button>
+              <button onClick={handleSetTargetLayer} style={{ backgroundColor: "#B53838" }}>Set Target Layer</button>
+              <button onClick={handleSetStockLayer} style={{ backgroundColor: "#E4D84C", color: 'black' }}>Set Stock Layers</button>
+              <button onClick={handleSetTableauLayer} style={{ backgroundColor: "#4AA44C" }}>Set Tableau Layers</button>
 
               <button onClick={resetCardsAnimation}>Reset</button>
               <button onClick={restoreCardsAnimation}>Restore</button>
 
               <button onClick={handleImportFilesAndComps}>Import</button>
+
+              <button onClick={handleApplyCardslayout}>Apply Layout</button>
+              <button onClick={handleSaveCardsLayout}>Save Layout</button>
 
               {/* <form onSubmit={handleDuplicateSubmit} className="dup-form">
                 <div className="dup-grid">

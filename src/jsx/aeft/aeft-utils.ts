@@ -64,6 +64,16 @@ export const getItemByName = (parent: FolderItem, name: string) => {
   }
 };
 
+export const findProjectItemByName = (itemName: string) : Item | null => {
+  var project = app.project;
+  for (var i = 1; i <= project.numItems; i++) {
+    var projectItem = project.item(i);
+    if (projectItem && projectItem.name === itemName) return projectItem;
+  }
+  alert(`Project Item "${itemName}" not found`);
+  return null;
+}
+
 // Metadata helpers
 
 export const setAeMetadata = (propName: string, propValue: any) => {

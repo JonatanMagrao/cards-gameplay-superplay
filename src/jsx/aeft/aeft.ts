@@ -21,8 +21,19 @@ import {
 } from "./actions";
 import { getActiveComp, forEachLayer } from "./aeft-utils";
 import { getLayerProp } from "./aeft-utils-jonatan";
+import { applyCardsLayoutFromJson, exportCardsLayoutToJson } from "./game-levels-utils";
 
-const cardsFolderName = "Disney Solitaire Cards"
+const cardsFolderName = "Precomp Decks"
+
+export const handleApplyCardsLayout = (baseDir: string, levelName: string) => applyCardsLayoutFromJson(baseDir, levelName)
+
+export const handleSaveCardsLayout = (baseDir: string, levelName: string) => {
+  try{
+    exportCardsLayoutToJson(baseDir, levelName)
+  }catch(e){
+    alert(e)
+  }
+}
 
 export const handleSetTargetLayer = () => setTargetLayer()
 
@@ -159,7 +170,7 @@ export const restoreCardsAnimation = () => {
       jumpRotation(card.markerTime, card.layer)
     } else if (card.comment === "Flip") {
       flipCard(card.markerTime, card.layer)
-    } else if (card.comment === "Flip Stock"){
+    } else if (card.comment === "Flip Stock") {
       thisComp.time = card.markerTime
       flipStockCards(card.layer)
     }

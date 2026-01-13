@@ -108,3 +108,26 @@ export const addMarkerToLayer = (myLayer: Layer, markerTime: number, markerProps
   markerProp.setValueAtTime(markerTime, myMarker)
 
 }
+
+export const readJsonFile = (jsonPath:string) => {
+    const fileRef = new File(jsonPath);
+
+    if (!fileRef.exists) {
+        alert("JSON file not found:\n" + jsonPath);
+        return null;
+    }
+    if (!fileRef.open("r")) {
+        alert("Could not open JSON file:\n" + fileRef.error);
+        return null;
+    }
+
+    const fileContent = fileRef.read();
+    fileRef.close();
+
+    try {
+        return JSON.parse(fileContent);
+    } catch (e) {
+        alert("Invalid JSON:\n" + jsonPath + "\n\n" + e.toString());
+        return null;
+    }
+}
