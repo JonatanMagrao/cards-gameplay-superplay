@@ -2,7 +2,7 @@ import React from "react";
 import { csi, evalTS } from "../../../lib/utils/bolt";
 
 type Props = {
-  presetRelPath?: string;  // relative to extension assets
+  presetRelPath?: string; // relative to extension assets
   projectRelPath?: string; // relative to extension assets
 };
 
@@ -22,45 +22,116 @@ export const ActionsPanel: React.FC<Props> = ({
 
   const handleSetTargetLayer = async () => await evalTS("handleSetTargetLayer");
   const handleSetStockLayer = async () => await evalTS("handleSetStockLayer");
-  const handleSetTableauLayer = async () => await evalTS("handleSetTableauLayer");
+  const handleSetTableauLayer = async () =>
+    await evalTS("handleSetTableauLayer");
 
   const resetCardsAnimation = async () => await evalTS("resetCardsAnimation");
-  const restoreCardsAnimation = async () => await evalTS("restoreCardsAnimation");
+  const restoreCardsAnimation = async () =>
+    await evalTS("restoreCardsAnimation");
 
-  const handleImportFilesAndComps = async () => await evalTS("handleImportFilesAndComps", cardProject);
+  const handleImportFilesAndComps = async () =>
+    await evalTS("handleImportFilesAndComps", cardProject);
 
   return (
     <section className="panel-section">
       <span className="section-label">Actions</span>
 
+      {/* Row 1: most used actions */}
       <div className="button-row">
-        <button onClick={applyJump} style={{ border: "1px solid #4AA44C" }}>
-          Apply Jump
+        <button onClick={applyJump}
+          style={{ border: "1px solid #4AA44C" }}
+          title={"Apply Jump"}
+        >
+          {/* Apply Jump */}
+          Jump
         </button>
 
-        <button onClick={flipStockCards} style={{ border: "1px solid #E4D84C" }}>
-          Flip Stock Cards
+        <button
+          onClick={flipStockCards}
+          style={{ border: "1px solid #E4D84C" }}
+          title={"Flip Stock Cards"}
+        >
+          {/* Flip Stock Cards */}
+          Flip Stock
         </button>
 
-        <button onClick={applyFlipCard}>Flip Card</button>
-        <button onClick={turnCards}>Turn Cards</button>
-
-        <button onClick={handleSetTargetLayer} style={{ backgroundColor: "#B53838" }}>
-          Set Target Layer
+        <button
+          onClick={applyFlipCard}
+          style={{border:"1px solid #E8920D"}}
+          title={"Flip Card"}
+        >
+          {/* Flip Card */}
+          Flip
         </button>
 
-        <button onClick={handleSetStockLayer} style={{ backgroundColor: "#E4D84C", color: "black" }}>
-          Set Stock Layers
+        <button
+          onClick={turnCards}
+          style={{border:"1px solid #E8920D"}}
+          title="Turn Cards"
+        >
+          {/* Turn Cards */}
+          Turn
+        </button>
+      </div>
+
+      {/* Row 2: set layers */}
+      <div className="button-row">
+        <button
+          onClick={handleSetTargetLayer}
+          style={{ backgroundColor: "#B53838" }}
+          title={"Set Target Layer"}
+        >
+          {/* Set Target Layer */}
+          Set Target
         </button>
 
-        <button onClick={handleSetTableauLayer} style={{ backgroundColor: "#4AA44C" }}>
-          Set Tableau Layers
+        <button
+          onClick={handleSetStockLayer}
+          style={{ backgroundColor: "#E4D84C", color: "black" }}
+          title={"Set Stock Layers"}
+        >
+          {/* Set Stock Layers */}
+          Set Stock
         </button>
 
-        <button onClick={resetCardsAnimation}>Reset</button>
-        <button onClick={restoreCardsAnimation}>Restore</button>
+        <button
+          onClick={handleSetTableauLayer}
+          style={{ backgroundColor: "#4AA44C" }}
+          title={"Set Tableau Layers"}
+        >
+          {/* Set Tableau Layers */}
+          Set Tableau
+        </button>
+      </div>
 
-        <button onClick={handleImportFilesAndComps}>Import</button>
+      {/* Row 3: setup */}
+      <div className="button-row">
+        <button
+          onClick={resetCardsAnimation}
+          style={{ border: "1px solid #677DE0" }}
+          title={"Reset Keyframes and Expressions"}
+        >
+          {/* Reset */}
+          Reset
+        </button>
+
+        <button
+          onClick={restoreCardsAnimation}
+          style={{ border: "1px solid #677DE0" }}
+          title={"Restore Keyframes and Expressions"}
+        >
+          {/* Restore */}
+          Restore
+        </button>
+
+        <button
+          onClick={handleImportFilesAndComps}
+          style={{ border: "1px solid #677DE0" }}
+          title={"Import Decks"}
+        >
+          {/* Import */}
+          Import
+        </button>
       </div>
     </section>
   );
