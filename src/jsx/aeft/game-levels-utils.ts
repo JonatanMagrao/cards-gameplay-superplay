@@ -7,12 +7,12 @@
 // 2) EXPORT: scans tagged card layers in the active comp and saves a layout JSON.
 //
 // Folder convention:
-//   {baseDir}/level_{NNN-Name}/{WIDTH}x{HEIGHT}.json
+//   {baseDir}/lvl_{NNN-Name}/{WIDTH}x{HEIGHT}.json
 //
 // Where:
 // - NNN is always 3 digits (1 => 001, 10 => 010, 100 => 100)
 // - Name is whatever the user provides (no PascalCase enforcement here)
-// - We keep "level_" prefix with underscore, as requested
+// - We keep "lvl_" prefix with underscore, as requested
 //
 // Notes:
 // - This targets ExtendScript (After Effects) via Bolt-CEP.
@@ -88,13 +88,13 @@ export const padLevelNumber3 = (value: number | string): string => {
 
 /**
  * Normalizes a levelId to the folder format:
- *   level_{NNN-Name}
+ *   lvl_{NNN-Name}
  *
  * Accepted inputs:
- * - "1_SomethingSpecial" -> "level_001-SomethingSpecial"
- * - "1-SomethingSpecial" -> "level_001-SomethingSpecial"
- * - "001-SomethingSpecial" -> "level_001-SomethingSpecial"
- * - "10" -> "level_010"
+ * - "1_SomethingSpecial" -> "lvl_001-SomethingSpecial"
+ * - "1-SomethingSpecial" -> "lvl_001-SomethingSpecial"
+ * - "001-SomethingSpecial" -> "lvl_001-SomethingSpecial"
+ * - "10" -> "lvl_010"
  *
  * Notes:
  * - We only replace the FIRST separator between number and name.
@@ -111,19 +111,19 @@ export const normalizeLevelFolderName = (levelId: string): string => {
   //   001-Something
   const m = raw.match(/^(\d+)(?:[_-](.+))?$/);
   if (!m) {
-    // Fallback: keep as-is, but still prefix "level_"
+    // Fallback: keep as-is, but still prefix "lvl_"
     // (If user passes something unexpected, don't break everything.)
-    return `level_${raw.replace(/_/g, "-")}`;
+    return `lvl_${raw.replace(/_/g, "-")}`;
   }
 
   const numPart = padLevelNumber3(m[1]);
   const namePart = safeTrim(m[2] ?? "");
 
-  // If there is no name part, return "level_XXX"
-  if (!namePart) return `level_${numPart}`;
+  // If there is no name part, return "lvl_XXX"
+  if (!namePart) return `lvl_${numPart}`;
 
   // Enforce hyphen separator between number and name
-  return `level_${numPart}-${namePart}`;
+  return `lvl_${numPart}-${namePart}`;
 };
 
 export const roundToDecimals = (value: number | NumArray, decimals: number = 3): number | NumArray => {
@@ -148,7 +148,7 @@ export const buildResolutionFileName = (comp: CompItem): string => {
  * Builds the full JSON path for a given baseDir/levelId and comp resolution:
  *   {baseDir}/{levelFolder}/{WIDTH}x{HEIGHT}.json
  *
- * levelFolder is always normalized to: level_{NNN-Name}
+ * levelFolder is always normalized to: lvl_{NNN-Name}
  */
 export const buildLayoutJsonPath = (baseDir: string, levelId: string, comp: CompItem): string => {
   const levelFolder = normalizeLevelFolderName(levelId);
@@ -218,7 +218,7 @@ export const createCardLayersFromLayout = (cardsLayout: CardLayout[], comp: Comp
 /**
  * Loads and applies a layout JSON for the active composition resolution.
  * It will look for:
- *   {baseDir}/level_{NNN-Name}/{WIDTH}x{HEIGHT}.json
+ *   {baseDir}/lvl_{NNN-Name}/{WIDTH}x{HEIGHT}.json
  */
 export const applyCardsLayoutFromJson = (baseDir: string, levelId: string): void => {
   const comp = getActiveComp?.() as CompItem | null;
@@ -344,7 +344,7 @@ export const extractCardsLayoutFromLayers = (layers: AVLayer[], decimals: number
 
 /**
  * Ensures that the output folder exists:
- *   {baseDir}/level_{NNN-Name}
+ *   {baseDir}/lvl_{NNN-Name}
  */
 export const ensureLevelOutputFolder = (baseDir: string, levelId: string): Folder | null => {
   const levelFolderName = normalizeLevelFolderName(levelId);
@@ -378,7 +378,7 @@ export const writeLayoutJsonFile = (
 
     const overwrite = confirm(
       `A layout file already exists for this resolution:\n\n` +
-        `Game Level: ${levelFolderName.replace("level_","")}\nResolution: ${fileNameNoExt}\n\n` +
+        `Game Level: ${levelFolderName.replace("lvl_","")}\nResolution: ${fileNameNoExt}\n\n` +
         `Do you want to overwrite it?`
     );
 
@@ -417,7 +417,7 @@ export type SaveLayoutResult =
 /**
  * Exports the active comp layout to JSON.
  * It will save into:
- *   {baseDir}/level_{NNN-Name}/{WIDTH}x{HEIGHT}.json
+ *   {baseDir}/lvl_{NNN-Name}/{WIDTH}x{HEIGHT}.json
  */
 export const exportCardsLayoutToJson = (baseDir: string, levelId: string, decimals: number = 3): File | null => {
   const comp = getActiveComp?.() as CompItem | null;

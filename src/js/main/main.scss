@@ -25,7 +25,7 @@
 /* Two cards side-by-side */
 .layouts-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 0.6rem;
 }
 
@@ -38,6 +38,16 @@
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
+}
+
+/* Save Layout full width */
+.layouts-card:last-child .button-row button {
+  width: 100%;
+}
+
+/* Space between tabs header and the panel content (Layouts / Cards) */
+.panel-tabs-header + .panel-section {
+  margin-top: 0.8rem;
 }
 
 .layouts-card-header {
@@ -56,9 +66,9 @@
 /* Apply row: search + select + button */
 .layouts-apply-row {
   display: grid;
-  grid-template-columns: 0.9fr 1.2fr auto;
+  grid-template-columns: 1fr;
   gap: 0.4rem;
-  align-items: center;
+  align-items: stretch;
 }
 
 /* Buttons inside layouts */
@@ -145,6 +155,3 @@
   border-color: #61dafb;
 }
 
-.panel{
-  width:200px
-}

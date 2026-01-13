@@ -6,6 +6,12 @@ import { CardPickerPanel } from "./components/CardPickerPanel/CardPickerPanel";
 import { ActionsPanel } from "./components/ActionsPanel/ActionsPanel";
 import { LayoutsPanel } from "./components/LayoutsPanel/LayoutsPanel";
 
+import { os, path } from "../lib/cep/node";
+
+export const getDefaultCardsLevelsDir = () => {
+  return path.join(os.homedir(), "Documents", "cards-level-layouts");
+};
+
 type TabKey = "cards" | "layouts";
 
 export const App = () => {
@@ -25,7 +31,7 @@ export const App = () => {
   }, [tab]);
 
   return (
-    <div className="app" style={{ backgroundColor: bgColor }}>
+    <div className="app" style={{ backgroundColor: bgColor }} spellCheck={false}>
       <header className="app-header">
         <div className="panel">
           {/* Header + Tabs */}
@@ -68,7 +74,7 @@ export const App = () => {
               <ActionsPanel />
             </>
           ) : (
-            <LayoutsPanel baseDirDefault="D:/Downloads/cardsLevels" />
+            <LayoutsPanel baseDirDefault={getDefaultCardsLevelsDir()} />
           )}
         </div>
       </header>

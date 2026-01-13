@@ -15,15 +15,15 @@ const normalizeLevelFolderNameUI = (levelId: string): string => {
   const raw = safeTrim(levelId);
   const m = raw.match(/^(\d+)(?:[_-](.+))?$/);
 
-  if (!m) return `level_${raw.replace(/_/g, "-")}`;
+  if (!m) return `lvl_${raw.replace(/_/g, "-")}`;
 
   const num = pad3(m[1]);
   const name = safeTrim(m[2] || "");
-  if (!name) return `level_${num}`;
-  return `level_${num}-${name}`;
+  if (!name) return `lvl_${num}`;
+  return `lvl_${num}-${name}`;
 };
 
-const stripLevelPrefix = (folder: string) => folder.replace(/^level_/, "");
+const stripLevelPrefix = (folder: string) => folder.replace(/^lvl_/, "");
 
 type Props = {
   baseDirDefault?: string;
@@ -40,7 +40,7 @@ export const LayoutsPanel: React.FC<Props> = ({
   const [query, setQuery] = useState("");
   const [selectedFolder, setSelectedFolder] = useState("");
 
-  const [saveLevelId, setSaveLevelId] = useState("001-SomethingSpecial");
+  const [saveLevelId, setSaveLevelId] = useState("");
 
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -64,7 +64,7 @@ export const LayoutsPanel: React.FC<Props> = ({
       const folders = entries.filter((name) => {
         const full = path.join(baseDir, name);
         try {
-          return fs.statSync(full).isDirectory() && /^level_/.test(name);
+          return fs.statSync(full).isDirectory() && /^lvl_/.test(name);
         } catch {
           return false;
         }
@@ -134,7 +134,7 @@ export const LayoutsPanel: React.FC<Props> = ({
     await evalTS("handleSaveCardsLayout", baseDir, lvl);
 
     // ✅ Success feedback AFTER writing
-    alert(`Layout saved.\n\nGame Level: ${saveFolderPreview.replace("level_","")}`);
+    // alert(`Layout saved.\n\nGame Level: ${saveFolderPreview.replace("lvl_","")}`);
 
     refreshLevels();
   }, [baseDir, saveLevelId, saveFolderPreview, refreshLevels]);
@@ -182,7 +182,7 @@ export const LayoutsPanel: React.FC<Props> = ({
 
   return (
     <section className="panel-section layouts-section">
-      <div className="layouts-section-header">
+      {/* <div className="layouts-section-header">
         <span className="section-label">{title}</span>
 
         <button
@@ -197,7 +197,7 @@ export const LayoutsPanel: React.FC<Props> = ({
         >
           ⚙
         </button>
-      </div>
+      </div> */}
 
       {/* Settings (collapsed by default) */}
       {settingsOpen && (
@@ -214,7 +214,7 @@ export const LayoutsPanel: React.FC<Props> = ({
 
           <div className="layouts-hint">
             Looking for folders starting with{" "}
-            <span className="layouts-mono">level_</span> inside{" "}
+            <span className="layouts-mono">lvl_</span> inside{" "}
             <span className="layouts-mono">{baseDir}</span>
           </div>
         </div>
@@ -225,14 +225,14 @@ export const LayoutsPanel: React.FC<Props> = ({
         <div className="layouts-card">
           <div className="layouts-card-header">
             <span className="layouts-card-title">Apply</span>
-            <button
+            {/* <button
               onClick={refreshLevels}
               className="layouts-btn-ghost"
               type="button"
               title="Refresh folder list"
             >
               Refresh
-            </button>
+            </button> */}
           </div>
 
           <div className="layouts-apply-row">
@@ -252,7 +252,7 @@ export const LayoutsPanel: React.FC<Props> = ({
               {filtered.length ? (
                 filtered.map((lvl) => (
                   <option key={lvl} value={lvl}>
-                    {lvl.replace("level_", "")}
+                    {lvl.replace("lvl_", "")}
                   </option>
                 ))
               ) : (
@@ -271,11 +271,11 @@ export const LayoutsPanel: React.FC<Props> = ({
             </button>
           </div>
 
-          {selectedFolder && (
+          {/* {selectedFolder && (
             <div className="layouts-hint">
               Selected: <span className="layouts-mono">{selectedFolder}</span>
             </div>
-          )}
+          )} */}
         </div>
 
         {/* SAVE */}
@@ -288,12 +288,12 @@ export const LayoutsPanel: React.FC<Props> = ({
             className="field-input"
             value={saveLevelId}
             onChange={(e) => setSaveLevelId(e.target.value)}
-            placeholder="Example: 001-SomethingSpecial or 003-Abracadabra"
+            placeholder="Ex: 001-SomethingSpecial"
           />
 
-          <div className="layouts-hint">
+          {/* <div className="layouts-hint">
             Will save to: <span className="layouts-mono">{saveFolderPreview}</span>
-          </div>
+          </div> */}
 
           <div className="button-row layouts-actions">
             <button
