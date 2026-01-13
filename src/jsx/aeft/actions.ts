@@ -31,7 +31,7 @@ export const keyLabel = {
   darkGreen: 16
 } as const
 
-const cardsFolderName = "Disney Solitaire Cards"
+const cardsFolderName = "Precomp Decks"
 const actionLabelColor = keyLabel.green
 const anticipationLabelColor = keyLabel.yellow
 const zAdjust = .005

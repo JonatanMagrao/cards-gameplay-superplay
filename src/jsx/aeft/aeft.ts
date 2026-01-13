@@ -45,7 +45,9 @@ export const handleImportFilesAndComps = (filePath: string) => {
 }
 
 export const handleChangeCard = (deckName: string, card: number, cardName: string) => {
+  app.beginUndoGroup("Update Cards")
   changeCard(deckName, card, cardName)
+  app.endUndoGroup()
 }
 
 const findCardLayers = () => {
