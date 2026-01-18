@@ -75,18 +75,16 @@ export const DuplicatePanel = () => {
     const x = Number(cardDistance[0].replace(",", ".") || "0");
     const y = Number(cardDistance[1].replace(",", ".") || "0");
     if (Number.isFinite(x) && Number.isFinite(y)) {
+      // Aqui ele pega o estado ATUAL de isReversed
       await aeService.distribute(x, y, isReversed);
     }
   };
 
-  const toggleReverse = async () => {
-    const newState = !isReversed;
-    setIsReversed(newState);
-    const x = Number(cardDistance[0].replace(",", ".") || "0");
-    const y = Number(cardDistance[1].replace(",", ".") || "0");
-    if (Number.isFinite(x) && Number.isFinite(y)) {
-      await aeService.distribute(x, y, newState);
-    }
+  // --- ALTERAÇÃO FEITA AQUI ---
+  const toggleReverse = () => {
+    // Apenas muda o estado visual/lógico.
+    // Não chama mais o aeService.distribute()
+    setIsReversed(!isReversed);
   }
 
   const handleDuplicateSubmit = async (e: React.MouseEvent) => {
@@ -112,7 +110,6 @@ export const DuplicatePanel = () => {
       <form className="dup-form" onSubmit={(e) => e.preventDefault()}>
         
         <div className="top-row">
-          {/* Input Copies: Mantém TabIndex natural */}
           <div className="field-group copies-group">
             <label>Copies</label>
             <input
@@ -122,17 +119,16 @@ export const DuplicatePanel = () => {
               onChange={handleCopiesChange}
               placeholder="5"
               autoComplete="off"
-              tabIndex={-1}
+              tabIndex={-1} 
             />
           </div>
 
-          {/* Botão Reverse: Ignorado no Tab */}
           <button
             type="button"
             className={`btn-icon ${isReversed ? "is-active" : ""}`}
             onClick={toggleReverse}
             title={isReversed ? "Order: Bottom to Top" : "Order: Top to Bottom"}
-            tabIndex={-1} // <--- AQUI
+            tabIndex={-1} 
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                {isReversed ? (
@@ -151,18 +147,16 @@ export const DuplicatePanel = () => {
             </svg>
           </button>
           
-          {/* Botão Duplicate: Ignorado no Tab (O usuário pode usar Enter nos inputs se quiser) */}
           <button 
             type="button" 
             className="btn-duplicate" 
             onClick={handleDuplicateSubmit}
-            tabIndex={-1} // <--- AQUI
+            tabIndex={-1} 
           >
             Duplicate
           </button>
         </div>
 
-        {/* Linha X */}
         <div className="slider-row">
           <label className="row-label">X</label>
           <input
@@ -172,7 +166,6 @@ export const DuplicatePanel = () => {
             onChange={(e) => handleCoordTextChange(e.target.value, 0)}
             onBlur={handleInputCommit}
             onKeyDown={handleInputCommit}
-            // TabIndex natural, ele será o próximo após Copies
           />
           <input
             className="range-slider"
@@ -182,11 +175,10 @@ export const DuplicatePanel = () => {
             value={Number(cardDistance[0].replace(",", ".") || 0)}
             onChange={(e) => handleCoordSliderChange(e, 0)}
             onMouseUp={sendDistributeCommand}
-            tabIndex={-1} // <--- AQUI (Pula o slider)
+            tabIndex={-1} 
           />
         </div>
 
-        {/* Linha Y */}
         <div className="slider-row">
           <label className="row-label">Y</label>
           <input
@@ -196,7 +188,6 @@ export const DuplicatePanel = () => {
             onChange={(e) => handleCoordTextChange(e.target.value, 1)}
             onBlur={handleInputCommit}
             onKeyDown={handleInputCommit}
-             // TabIndex natural, será o próximo após X
           />
           <input
             className="range-slider"
@@ -206,7 +197,7 @@ export const DuplicatePanel = () => {
             value={Number(cardDistance[1].replace(",", ".") || 0)}
             onChange={(e) => handleCoordSliderChange(e, 1)}
             onMouseUp={sendDistributeCommand}
-            tabIndex={-1} // <--- AQUI (Pula o slider)
+            tabIndex={-1} 
           />
         </div>
 
