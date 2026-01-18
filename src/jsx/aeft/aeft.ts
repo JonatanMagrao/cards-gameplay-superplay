@@ -177,8 +177,7 @@ export const handleChangeCard = (deckName: string, card: number, cardName: strin
 }
 
 export const handleAddCard = (deckName: string, card: number, cardName: string) => {
-  const cardLayer = addCardToPrecomp(deckName, card, cardName)
-
+  addCardToPrecomp(deckName, card, cardName)
 }
 
 const findCardLayers = () => {
@@ -195,8 +194,6 @@ const findCardLayers = () => {
   })
 
   return cardsList
-
-  // todo função para escalonar os keyframes das camadas abaixo da camada de stock flip (todas abaixo)
 
 }
 
