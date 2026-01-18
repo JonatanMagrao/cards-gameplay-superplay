@@ -24,10 +24,10 @@ export const targetExist = () => {
 
 export const getTargetLayer = () => {
 
-  if (!targetExist()) {
-    alert("Target Layer don't exist!")
-    return
-  }
+  // if (!targetExist()) {
+  //   alert("Target Layer don't exist!")
+  //   return
+  // }
 
   const thisComp = getActiveComp();
   for (let i = 1; i <= thisComp.numLayers; i++) {

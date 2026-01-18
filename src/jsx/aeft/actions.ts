@@ -114,11 +114,9 @@ export const applyJumpOnSelectedlayers = (presetPath: string) => {
   const thisTime = thisComp.time
 
   if (!targetLayer) {
-    alert("Please, set a target layer before applying the jump animation.")
+    alert('Please, set a target layer before applying the "Jump" action.')
     return
   }
-
-  app.beginUndoGroup("Apply Jump Animation")
 
   try {
 
@@ -132,8 +130,6 @@ export const applyJumpOnSelectedlayers = (presetPath: string) => {
 
   } catch (e) {
     alertError(e)
-  } finally {
-    app.endUndoGroup()
   }
 }
 
@@ -209,13 +205,17 @@ const getNextStockCard = (comp: CompItem, baseLayer: Layer, labelColor: Number):
   return nextLayer;
 }
 
-export const flipStockCards = (stockLayerToFlip?: Layer ) => {
-
-  app.beginUndoGroup("Fliping cards")
+export const flipStockCards = (stockLayerToFlip?: Layer) => {
 
   // main consts
   const thisComp = getActiveComp();
   const targetLayer = getTargetLayer()
+
+  if (!targetLayer) {
+    alert('Please, set a target layer before applying the "Flip Stock" action.')
+    return
+  }
+
   const jumpHeight = 29
   const stockLayers = getAllStockLayers(thisComp)
 
@@ -306,7 +306,6 @@ export const flipStockCards = (stockLayerToFlip?: Layer ) => {
     moveNextCards(keyTimePos1, stockLayersBelow, distanceXPosLayers)
   }
 
-  app.endUndoGroup()
 
 }
 
@@ -328,8 +327,6 @@ export const setTargetLayer = () => {
     return
   }
 
-  app.beginUndoGroup("Set Target Layer")
-
   try {
     targetLayer.threeDLayer = true
     targetLayer.label = 1
@@ -342,15 +339,11 @@ export const setTargetLayer = () => {
     targetLayer.name = `${targetLayer.name} [TARGET]`
   } catch (e) {
     alertError(e)
-  } finally {
-    app.endUndoGroup()
   }
 
 }
 
 export const setCardType = (cardTypeName: string, layerLabel: number) => {
-
-  app.beginUndoGroup(`Set ${cardTypeName} Layers`)
 
   const thisComp = getActiveComp();
   const tagsList = ["TARGET", "STOCK", "TABLEAU"]
@@ -370,15 +363,11 @@ export const setCardType = (cardTypeName: string, layerLabel: number) => {
     })
   } catch (e) {
     alertError(e)
-  } finally {
-    app.endUndoGroup()
   }
 
 }
 
 export const applyFlipCardOnSelectedlayers = () => {
-
-  app.beginUndoGroup("Apply Flip Card Animation")
 
   const thisComp = getActiveComp();
 
@@ -391,7 +380,6 @@ export const applyFlipCardOnSelectedlayers = () => {
     }
   })
 
-  app.endUndoGroup()
 }
 
 export const flipCard = (time: number, layer: Layer) => {
@@ -422,8 +410,6 @@ export const duplicateCards = (numCopies: number, adjustPos: number[]) => {
 
   let lastDuplicated = camada
 
-  app.beginUndoGroup("Duplicate Cards")
-
   for (var i = 0; i < numCopies; i++) {
     const duplicated = camada.duplicate()
     mainPos[0] += adjustPos[0]
@@ -436,7 +422,6 @@ export const duplicateCards = (numCopies: number, adjustPos: number[]) => {
     lastDuplicated.selected = true
   }
 
-  app.endUndoGroup()
 }
 
 export const changeCard = (deckName: string, card: number, cardName: string) => {

@@ -138,8 +138,6 @@ export const distributeLayers = (xStep: number, yStep: number, reverse: boolean)
   // Validação básica
   if (!thisComp || !(thisComp instanceof CompItem) || thisComp.selectedLayers.length < 2) return;
 
-  app.beginUndoGroup("Distribute Cards");
-
   // 1. Converter selectedLayers para Array padrão
   const selectedLayers: Layer[] = [];
   
@@ -171,5 +169,4 @@ export const distributeLayers = (xStep: number, yStep: number, reverse: boolean)
     layer.transform.position.setValue([newX, newY, currentZ]);
   }
 
-  app.endUndoGroup();
 };

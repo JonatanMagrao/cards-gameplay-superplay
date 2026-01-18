@@ -166,7 +166,6 @@ export const buildLayoutJsonPath = (baseDir: string, levelId: string, comp: Comp
  * - Applies Position/Scale/Rotation, name/label, and your custom override "Card Option".
  */
 export const createCardLayersFromLayout = (cardsLayout: CardLayout[], comp: CompItem): void => {
-  app.beginUndoGroup("Cards Layout Apply");
 
   let previousLayer: AVLayer | null = null;
 
@@ -212,7 +211,6 @@ export const createCardLayersFromLayout = (cardsLayout: CardLayout[], comp: Comp
     previousLayer = cardLayer;
   }
 
-  app.endUndoGroup();
 };
 
 /**

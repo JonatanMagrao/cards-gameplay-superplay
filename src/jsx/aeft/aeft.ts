@@ -25,7 +25,13 @@ import { applyCardsLayoutFromJson, exportCardsLayoutToJson } from "./game-levels
 
 const cardsFolderName = "Disney Solitaire Cards"
 
-export const handleApplyCardsLayout = (baseDir: string, levelName: string) => applyCardsLayoutFromJson(baseDir, levelName)
+export const handleApplyCardsLayout = (baseDir: string, levelName: string) => {
+  try {
+    applyCardsLayoutFromJson(baseDir, levelName)
+  } catch (e) {
+    alert(e)
+  }
+}
 
 export const handleSaveCardsLayout = (baseDir: string, levelName: string) => {
   try {
@@ -35,23 +41,104 @@ export const handleSaveCardsLayout = (baseDir: string, levelName: string) => {
   }
 }
 
-export const handleSetTargetLayer = () => setTargetLayer()
+export const handleSetTargetLayer = () => {
+  app.beginUndoGroup("Set Target Layer")
+  try {
+    setTargetLayer()
+  } catch (e) {
+    alert(e)
+  } finally {
+    app.endUndoGroup()
+  }
+}
 
-export const handleSetStockLayer = () => setCardType("stock", 2)
+export const handleSetStockLayer = () => {
+  app.beginUndoGroup("Set Stock Layer")
+  try {
+    setCardType("stock", 2)
+  } catch (e) {
+    alert(e)
+  } finally {
+    app.endUndoGroup()
+  }
+}
 
-export const handleSetTableauLayer = () => setCardType("TABLEAU", 9)
+export const handleSetTableauLayer = () => {
+  app.beginUndoGroup("Set Tableau Layer")
+  try {
+    setCardType("TABLEAU", 9)
+  } catch (e) {
+    alert(e)
+  } finally {
+    app.endUndoGroup()
+  }
+}
 
-export const handleApplyJump = (presetPath: string) => applyJumpOnSelectedlayers(presetPath)
+export const handleApplyJump = (presetPath: string) => {
+  app.beginUndoGroup("Apply Jump")
+  try {
+    applyJumpOnSelectedlayers(presetPath)
+  } catch (e) {
+    alert(e)
+  } finally {
+    app.endUndoGroup()
+  }
+}
 
-export const handleFlipStockCards = () => flipStockCards()
+export const handleFlipStockCards = () => {
+  app.beginUndoGroup("Flip Stock Cards")
+  try {
+    flipStockCards()
+  } catch (e) {
+    alert(e)
+  } finally {
+    app.endUndoGroup()
+  }
+}
 
-export const handleFlipCards = () => applyFlipCardOnSelectedlayers()
+export const handleFlipCards = () => {
+  app.beginUndoGroup("Flip Cards")
+  try {
+    applyFlipCardOnSelectedlayers()
+  } catch (e) {
+    alert(e)
+  } finally {
+    app.endUndoGroup()
+  }
+}
 
-export const handleTurnCards = () => turnCards()
+export const handleTurnCards = () => {
+  app.beginUndoGroup("Turn Cards")
+  try {
+    turnCards()
+  } catch (e) {
+    alert(e)
+  } finally {
+    app.endUndoGroup()
+  }
+}
 
-export const handleDuplicateCards = (numCopies: number, adjustPos: number[]) => duplicateCards(numCopies, adjustPos)
+export const handleDuplicateCards = (numCopies: number, adjustPos: number[]) => {
+  app.beginUndoGroup("Duplicate Cards")
+  try {
+    duplicateCards(numCopies, adjustPos)
+  } catch (e) {
+    alert(e)
+  } finally {
+    app.endUndoGroup()
+  }
+}
 
-export const handleDistributeLayers = (xStep: number, yStep: number, reverse: boolean ) => distributeLayers(xStep, yStep, reverse)
+export const handleDistributeLayers = (xStep: number, yStep: number, reverse: boolean) => {
+  app.beginUndoGroup("Distribute Layers")
+  try {
+    distributeLayers(xStep, yStep, reverse)
+  } catch (e) {
+    alert(e)
+  } finally {
+    app.endUndoGroup()
+  }
+}
 
 export const getCompSize = () => {
   const { width, height } = getActiveComp();
@@ -158,7 +245,6 @@ export const restoreCardsAnimation = () => {
 
   }
   // retorna todos os dados de marcadores
-
 
   const greenJumpMarkers = filterLayerMarkersByLabelAndComment(markers, keyLabel.green, "Jump")
   const yellowFlipMarkers = filterLayerMarkersByLabelAndComment(markers, keyLabel.yellow, "Flip")
