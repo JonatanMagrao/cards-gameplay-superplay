@@ -24,12 +24,26 @@ import { getLayerProp, distributeLayers } from "./aeft-utils-jonatan";
 import { applyCardsLayoutFromJson, exportCardsLayoutToJson } from "./game-levels-utils";
 
 const cardsFolderName = "Disney Solitaire Cards"
+const precompRenderer = "ADBE Calder"
 
 export const handleApplyCardsLayout = (baseDir: string, levelName: string) => {
+
+  try{
+    const thisComp = getActiveComp()
+    if (thisComp.renderer !== precompRenderer) {
+      thisComp.renderer = precompRenderer
+    }
+  }catch(e){
+    alert(e)
+  }
+
+  app.beginUndoGroup("Apply Cards Layout")
   try {
     applyCardsLayoutFromJson(baseDir, levelName)
   } catch (e) {
     alert(e)
+  } finally {
+    app.endUndoGroup()
   }
 }
 
@@ -75,6 +89,11 @@ export const handleSetTableauLayer = () => {
 }
 
 export const handleApplyJump = (presetPath: string) => {
+  const thisComp = getActiveComp()
+  if(thisComp.renderer !== precompRenderer){
+    thisComp.renderer = precompRenderer
+  }
+
   app.beginUndoGroup("Apply Jump")
   try {
     applyJumpOnSelectedlayers(presetPath)
