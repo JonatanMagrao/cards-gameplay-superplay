@@ -14,6 +14,7 @@ export const CardPickerPanel: React.FC<Props> = ({ deck, setDeck, cardNumber, se
   const [cardSrc, setCardSrc] = useState<string | null>(null);
 
   const deckPrefix = useMemo(() => deck.split("_")[0], [deck]);
+  const turnCards = async () => await evalTS("handleTurnCards");
 
   const cardsMap = useMemo(() => {
     return {
@@ -110,6 +111,13 @@ export const CardPickerPanel: React.FC<Props> = ({ deck, setDeck, cardNumber, se
             <option value="13">A</option>
             <option value="14">Wild</option>
           </select>
+          <button
+            onClick={turnCards}
+            // style={{ border: "1px solid #E8920D" }}
+            title="Turn Cards"
+          >
+            Turn
+          </button>
         </div>
       </div>
 

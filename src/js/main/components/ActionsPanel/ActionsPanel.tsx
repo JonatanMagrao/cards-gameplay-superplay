@@ -18,7 +18,6 @@ export const ActionsPanel: React.FC<Props> = ({
   const applyJump = async () => await evalTS("handleApplyJump", presetPath);
   const flipStockCards = async () => await evalTS("handleFlipStockCards");
   const applyFlipCard = async () => await evalTS("handleFlipCards");
-  const turnCards = async () => await evalTS("handleTurnCards");
 
   const handleSetTargetLayer = async () => await evalTS("handleSetTargetLayer");
   const handleSetStockLayer = async () => await evalTS("handleSetStockLayer");
@@ -42,7 +41,6 @@ export const ActionsPanel: React.FC<Props> = ({
           style={{ border: "1px solid #4AA44C" }}
           title={"Apply Jump"}
         >
-          {/* Apply Jump */}
           Jump
         </button>
 
@@ -51,7 +49,6 @@ export const ActionsPanel: React.FC<Props> = ({
           style={{ border: "1px solid #E4D84C" }}
           title={"Flip Stock Cards"}
         >
-          {/* Flip Stock Cards */}
           Flip Stock
         </button>
 
@@ -60,18 +57,10 @@ export const ActionsPanel: React.FC<Props> = ({
           style={{border:"1px solid #E8920D"}}
           title={"Flip Card"}
         >
-          {/* Flip Card */}
           Flip
         </button>
 
-        <button
-          onClick={turnCards}
-          style={{border:"1px solid #E8920D"}}
-          title="Turn Cards"
-        >
-          {/* Turn Cards */}
-          Turn
-        </button>
+
       </div>
 
       {/* Row 2: set layers */}
@@ -81,7 +70,6 @@ export const ActionsPanel: React.FC<Props> = ({
           style={{ backgroundColor: "#B53838" }}
           title={"Set Target Layer"}
         >
-          {/* Set Target Layer */}
           Set Target
         </button>
 
@@ -90,7 +78,6 @@ export const ActionsPanel: React.FC<Props> = ({
           style={{ backgroundColor: "#E4D84C", color: "black" }}
           title={"Set Stock Layers"}
         >
-          {/* Set Stock Layers */}
           Set Stock
         </button>
 
@@ -99,7 +86,6 @@ export const ActionsPanel: React.FC<Props> = ({
           style={{ backgroundColor: "#4AA44C" }}
           title={"Set Tableau Layers"}
         >
-          {/* Set Tableau Layers */}
           Set Tableau
         </button>
       </div>
@@ -111,7 +97,6 @@ export const ActionsPanel: React.FC<Props> = ({
           style={{ border: "1px solid #677DE0" }}
           title={"Reset Keyframes and Expressions"}
         >
-          {/* Reset */}
           Reset
         </button>
 
@@ -120,7 +105,6 @@ export const ActionsPanel: React.FC<Props> = ({
           style={{ border: "1px solid #677DE0" }}
           title={"Restore Keyframes and Expressions"}
         >
-          {/* Restore */}
           Restore
         </button>
 
@@ -129,7 +113,6 @@ export const ActionsPanel: React.FC<Props> = ({
           style={{ border: "1px solid #677DE0" }}
           title={"Import Decks"}
         >
-          {/* Import */}
           Import
         </button>
       </div>
