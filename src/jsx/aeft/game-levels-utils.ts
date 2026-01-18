@@ -24,6 +24,7 @@
 
 import { readJsonFile } from "./aeft-utils-jonatan";
 import { findProjectItemByName, getActiveComp } from "./aeft-utils";
+import { posPropPath, scalePropPath } from "./actions";
 
 // ===========================
 // Types
@@ -39,6 +40,7 @@ export type CardLayout = {
   scale: Scale2 | Scale3; // AE Scale usually 2D, but can be 3D
   rotation: number; // Z rotation in degrees
   name: string;
+  isTurned: boolean,
   label: number; // AE label index
   card: number; // value for your "Card Option" override
 };
@@ -181,7 +183,7 @@ export const createCardLayersFromLayout = (cardsLayout: CardLayout[], comp: Comp
     if (!deckItem) {
       alert(
         `Deck item was not found in the Project panel:\n${cardLayout.deckName}\n\n` +
-          `Import/rename the deck item or fix 'deckName' in the JSON.`
+        `Import/rename the deck item or fix 'deckName' in the JSON.`
       );
       break;
     }
@@ -201,7 +203,9 @@ export const createCardLayersFromLayout = (cardsLayout: CardLayout[], comp: Comp
     // Cast to any because AE typings vary between toolchains.
     const overrides = cardLayer.property("ADBE Layer Overrides") as unknown as PropertyGroup;
     const cardOption = (overrides as any).property("Card Option") as Property;
+    const cardTurned = (overrides as any).property("Flip Card") as Property;
     cardOption.setValue(cardLayout.card);
+    cardTurned.setValue(cardLayout.isTurned ? 0 : 100)
 
     // 3D
     cardLayer.threeDLayer = true;
@@ -242,7 +246,7 @@ export const applyCardsLayoutFromJson = (baseDir: string, levelId: string): void
     if (w !== comp.width || h !== comp.height) {
       alert(
         `Warning: JSON resolution (${w}x${h}) does not match the active comp (${comp.width}x${comp.height}).\n\n` +
-          `The layout will still be applied, but values may not align as expected.`
+        `The layout will still be applied, but values may not align as expected.`
       );
     }
   }
@@ -306,6 +310,10 @@ export const extractCardsLayoutFromLayers = (layers: AVLayer[], decimals: number
       decimals
     ) as number;
 
+    const flipCardProp = layer.property("ADBE Layer Overrides") as unknown as PropertyGroup
+    const flipCard = (flipCardProp as any).property("Flip Card") as Property;
+    const isTurned = flipCard.value === 0
+
     const layerName = layer.name;
     const layerLabel = layer.label;
 
@@ -329,6 +337,7 @@ export const extractCardsLayoutFromLayers = (layers: AVLayer[], decimals: number
       label: layerLabel,
       deckName,
       card: cardFaceIndex,
+      isTurned: isTurned,
       position: position as any,
       scale: scale as any,
       rotation,
@@ -376,14 +385,14 @@ export const writeLayoutJsonFile = (
 
     const overwrite = confirm(
       `A layout file already exists for this resolution:\n\n` +
-        `Game Level: ${levelFolderName.replace("lvl_","")}\nResolution: ${fileNameNoExt}\n\n` +
-        `Do you want to overwrite it?`
+      `Game Level: ${levelFolderName.replace("lvl_", "")}\nResolution: ${fileNameNoExt}\n\n` +
+      `Do you want to overwrite it?`
     );
 
     if (!overwrite) {
       try {
         ($ as any).debug?.(`Save canceled by user: ${levelFolderName} / ${fileNameNoExt}`);
-      } catch (_) {}
+      } catch (_) { }
       return null;
     }
   }
@@ -401,7 +410,7 @@ export const writeLayoutJsonFile = (
 
   try {
     ($ as any).debug?.(`Layout saved:\n${levelId}`);
-  } catch (_) {}
+  } catch (_) { }
 
   return outputFile;
 };
@@ -430,8 +439,8 @@ export const exportCardsLayoutToJson = (baseDir: string, levelId: string, decima
   if (cardLayers.length < 1) {
     alert(
       "No card layers were found in the active comp.\n\n" +
-        "Expected layer names containing one of these tags:\n" +
-        "[TABLEAU], [TARGET], or [STOCK]"
+      "Expected layer names containing one of these tags:\n" +
+      "[TABLEAU], [TARGET], or [STOCK]"
     );
     return null;
   }
