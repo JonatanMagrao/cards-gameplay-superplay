@@ -17,11 +17,13 @@ import {
   jumpPos,
   jumpScale,
   jumpRotation,
-  flipCard
+  flipCard,
+  addCardToPrecomp
 } from "./actions";
 import { getActiveComp, forEachLayer } from "./aeft-utils";
 import { getLayerProp, distributeLayers } from "./aeft-utils-jonatan";
 import { applyCardsLayoutFromJson, exportCardsLayoutToJson } from "./game-levels-utils";
+import { alertError } from "./errors";
 
 const cardsFolderName = "Disney Solitaire Cards"
 const precompRenderer = "ADBE Calder"
@@ -34,14 +36,14 @@ export const handleApplyCardsLayout = (baseDir: string, levelName: string) => {
       thisComp.renderer = precompRenderer
     }
   }catch(e){
-    alert(e)
+    alertError(e)
   }
 
   app.beginUndoGroup("Apply Cards Layout")
   try {
     applyCardsLayoutFromJson(baseDir, levelName)
   } catch (e) {
-    alert(e)
+    alertError(e)
   } finally {
     app.endUndoGroup()
   }
@@ -51,7 +53,7 @@ export const handleSaveCardsLayout = (baseDir: string, levelName: string) => {
   try {
     exportCardsLayoutToJson(baseDir, levelName)
   } catch (e) {
-    alert(e)
+    alertError(e)
   }
 }
 
@@ -60,7 +62,7 @@ export const handleSetTargetLayer = () => {
   try {
     setTargetLayer()
   } catch (e) {
-    alert(e)
+    alertError(e)
   } finally {
     app.endUndoGroup()
   }
@@ -71,7 +73,7 @@ export const handleSetStockLayer = () => {
   try {
     setCardType("stock", 2)
   } catch (e) {
-    alert(e)
+    alertError(e)
   } finally {
     app.endUndoGroup()
   }
@@ -82,7 +84,7 @@ export const handleSetTableauLayer = () => {
   try {
     setCardType("TABLEAU", 9)
   } catch (e) {
-    alert(e)
+    alertError(e)
   } finally {
     app.endUndoGroup()
   }
@@ -98,7 +100,7 @@ export const handleApplyJump = (presetPath: string) => {
   try {
     applyJumpOnSelectedlayers(presetPath)
   } catch (e) {
-    alert(e)
+    alertError(e)
   } finally {
     app.endUndoGroup()
   }
@@ -109,7 +111,7 @@ export const handleFlipStockCards = () => {
   try {
     flipStockCards()
   } catch (e) {
-    alert(e)
+    alertError(e)
   } finally {
     app.endUndoGroup()
   }
@@ -120,7 +122,7 @@ export const handleFlipCards = () => {
   try {
     applyFlipCardOnSelectedlayers()
   } catch (e) {
-    alert(e)
+    alertError(e)
   } finally {
     app.endUndoGroup()
   }
@@ -131,7 +133,7 @@ export const handleTurnCards = () => {
   try {
     turnCards()
   } catch (e) {
-    alert(e)
+    alertError(e)
   } finally {
     app.endUndoGroup()
   }
@@ -142,7 +144,7 @@ export const handleDuplicateCards = (numCopies: number, adjustPos: number[]) => 
   try {
     duplicateCards(numCopies, adjustPos)
   } catch (e) {
-    alert(e)
+    alertError(e)
   } finally {
     app.endUndoGroup()
   }
@@ -153,7 +155,7 @@ export const handleDistributeLayers = (xStep: number, yStep: number, reverse: bo
   try {
     distributeLayers(xStep, yStep, reverse)
   } catch (e) {
-    alert(e)
+    alertError(e)
   } finally {
     app.endUndoGroup()
   }
@@ -172,6 +174,11 @@ export const handleChangeCard = (deckName: string, card: number, cardName: strin
   app.beginUndoGroup("Update Cards")
   changeCard(deckName, card, cardName)
   app.endUndoGroup()
+}
+
+export const handleAddCard = (deckName: string, card: number, cardName: string) => {
+  const cardLayer = addCardToPrecomp(deckName, card, cardName)
+
 }
 
 const findCardLayers = () => {

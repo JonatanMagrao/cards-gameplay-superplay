@@ -1,4 +1,5 @@
 import { getActiveComp } from "./aeft-utils";
+import { alertError } from "./errors";
 
 export const forEachSelectedLayer = (
   comp: CompItem,
@@ -127,7 +128,7 @@ export const readJsonFile = (jsonPath:string) => {
     try {
         return JSON.parse(fileContent);
     } catch (e) {
-        alert("Invalid JSON:\n" + jsonPath + "\n\n" + e.toString());
+        alertError("Invalid JSON:\n" + jsonPath + "\n\n" + e.toString());
         return null;
     }
 }

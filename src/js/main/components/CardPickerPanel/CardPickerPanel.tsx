@@ -58,6 +58,20 @@ export const CardPickerPanel: React.FC<Props> = ({ deck, setDeck, cardNumber, se
   const changeCard = async () =>
     await evalTS("handleChangeCard", deck, cardNumber, cardTitle);
 
+  const handleAddCard = async () => {
+    await evalTS("handleAddCard", deck, cardNumber, cardTitle)
+  }
+
+  // --- NEW HANDLER FOR CLICKS ---
+  const handlePreviewClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    // Checks for Control Key (Win) or Command Key (Mac)
+    if (e.ctrlKey || e.metaKey) {
+      handleAddCard();
+    } else {
+      changeCard();
+    }
+  };
+
   useEffect(() => {
     if (!safeCard.fileImg || !fs.existsSync(cardImage)) {
       setCardSrc(null);
@@ -123,9 +137,17 @@ export const CardPickerPanel: React.FC<Props> = ({ deck, setDeck, cardNumber, se
 
       <section className="panel-section panel-preview">
         {cardSrc && (
-          <div className="card-preview" onClick={changeCard}>
-            <img className="card-image" src={cardSrc} alt={cardTitle} title={cardTitle} />
-            <span className="card-hint">Click here to change card</span>
+          <div 
+            className="card-preview" 
+            onClick={handlePreviewClick} 
+            style={{ cursor: "pointer" }}
+            title="Click to Change | Ctrl + Click to Add"
+          >
+            <img className="card-image" src={cardSrc} alt={cardTitle} />
+            <span className="card-hint">
+               {/* Updated hint text for UX */}
+               Click to change / Ctrl+Click to add
+            </span>
           </div>
         )}
       </section>

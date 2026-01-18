@@ -54,14 +54,17 @@ export const getActiveComp = () => {
 };
 
 // Project Item Helpers
+export const getItemByName = (name: string): CompItem | null => {
+  // Percorre todos os itens na raiz do projeto
+  for (var i = 1; i <= app.project.numItems; i++) {
+    const item = app.project.item(i);
 
-export const getItemByName = (parent: FolderItem, name: string) => {
-  for (var i = 0; i < parent.numItems; i++) {
-    const item = parent.items[i + 1];
-    if (item.name === name) {
+    // Verifica se o nome bate E se é uma Composição
+    if (item.name === name && item instanceof CompItem) {
       return item;
     }
   }
+  return null;
 };
 
 export const findProjectItemByName = (itemName: string) : Item | null => {

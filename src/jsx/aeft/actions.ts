@@ -426,8 +426,7 @@ export const duplicateCards = (numCopies: number, adjustPos: number[]) => {
 
 export const changeCard = (deckName: string, card: number, cardName: string) => {
   const thisComp = getActiveComp();
-  const thisProject = app.project as any;
-  const cardsSet = getItemByName(thisProject, cardsFolderName) as any
+  const cardsSet = getItemByName(deckName) as any
   const camadas = thisComp.selectedLayers
 
   // deseleciona as camadas selecionadas para utilizar o replaceSource em cada uma delas
@@ -436,27 +435,46 @@ export const changeCard = (deckName: string, card: number, cardName: string) => 
   for (let k = 0; k < camadas.length; k++) {
     const camada = camadas[k] as any
 
-    for (let i = 1; i <= cardsSet?.numItems; i++) {
-      const cardItem = cardsSet?.items[i]
-      if (cardItem.name === deckName) {
-        camada.replaceSource(cardItem, false)
-        const cardOption = getLayerProp(camada, cardOptionEPPath)
-        cardOption.setValue(card)
+    camada.replaceSource(cardsSet, false)
+    const cardOption = getLayerProp(camada, cardOptionEPPath)
+    cardOption.setValue(card)
 
-        const tagsList = ["TARGET", "STOCK", "TABLEAU"]
-        const pattern = tagsList.join("|")
-        const tagPattern = new RegExp(`\\[(${pattern})\\]`, "g")
+    const tagsList = ["TARGET", "STOCK", "TABLEAU"]
+    const pattern = tagsList.join("|")
+    const tagPattern = new RegExp(`\\[(${pattern})\\]`, "g")
 
-        const zoneMatch = tagPattern.exec(camada.name);
-        const existingZoneTag = zoneMatch ? zoneMatch[1] : null;
+    const zoneMatch = tagPattern.exec(camada.name);
+    const existingZoneTag = zoneMatch ? zoneMatch[1] : null;
 
-        camada.name = existingZoneTag ? `${cardName} [${existingZoneTag}]` : cardName;
+    camada.name = existingZoneTag ? `${cardName} [${existingZoneTag}]` : cardName;
 
-      }
-    }
   }
 
   // reseleciona as camadas selecionadas para utilizar o replaceSource em cada uma delas
   selectAllSelectedLayers(camadas)
 
+}
+
+export const addCardToPrecomp = (deckName: string, card: number, cardName: string) => {
+
+  app.beginUndoGroup("Add new card to precomp")
+
+  try {
+    const thisComp = getActiveComp()
+    const deck = getItemByName(deckName)
+
+    if (!deck) {
+      alert(`Item "${deck}" not found on project!`)
+      return
+    }
+
+    const cardLayer = thisComp.layers.add(deck)
+    cardLayer.name = cardName
+    const cardOption = getLayerProp(cardLayer, cardOptionEPPath)
+    cardOption.setValue(card)
+  } catch (e) {
+    alertError(e)
+  } finally {
+    app.endUndoGroup()
+  }
 }
