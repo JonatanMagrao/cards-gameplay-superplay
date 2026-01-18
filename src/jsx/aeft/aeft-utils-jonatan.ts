@@ -131,3 +131,45 @@ export const readJsonFile = (jsonPath:string) => {
         return null;
     }
 }
+
+export const distributeLayers = (xStep: number, yStep: number, reverse: boolean) => {
+  const thisComp = getActiveComp();
+
+  // Validação básica
+  if (!thisComp || !(thisComp instanceof CompItem) || thisComp.selectedLayers.length < 2) return;
+
+  app.beginUndoGroup("Distribute Cards");
+
+  // 1. Converter selectedLayers para Array padrão
+  const selectedLayers: Layer[] = [];
+  
+  // CORREÇÃO AQUI: O índice deve ser 'i', não 'i + 1'
+  for (let i = 0; i < thisComp.selectedLayers.length; i++) {
+    selectedLayers.push(thisComp.selectedLayers[i]);
+  }
+
+  // 2. Ordenar por índice baseado no flag 'reverse'
+  selectedLayers.sort((a, b) => {
+    return reverse ? b.index - a.index : a.index - b.index;
+  });
+
+  // 3. A âncora é a primeira camada da lista ordenada (ela não se move)
+  const anchorLayer = selectedLayers[0];
+  const anchorPos = anchorLayer.transform.position.value as [number, number, number];
+
+  // 4. Loop a partir da segunda camada
+  for (let i = 1; i < selectedLayers.length; i++) {
+    const layer = selectedLayers[i];
+
+    // Posição = Âncora + (Passo * Índice Relativo)
+    const newX = anchorPos[0] + (xStep * i);
+    const newY = anchorPos[1] + (yStep * i);
+    
+    // Mantém Z original
+    const currentZ = (layer.transform.position.value as number[])[2];
+
+    layer.transform.position.setValue([newX, newY, currentZ]);
+  }
+
+  app.endUndoGroup();
+};

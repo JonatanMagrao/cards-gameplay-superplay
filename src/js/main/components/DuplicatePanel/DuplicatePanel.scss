@@ -1,0 +1,174 @@
+@use "../../../variables.scss" as *;
+
+.duplicate-panel {
+  
+  .dup-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem; // Espaçamento vertical menor entre as linhas
+  }
+
+  // --- Linha Superior (Copies + Ícone + Botão) ---
+  .top-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.5rem;
+
+    // Grupo do Input de Cópias
+    .copies-group {
+      flex: 0 0 60px; // Largura fixa pequena
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+
+      label {
+        font-size: 0.65rem;
+        text-transform: uppercase;
+        font-weight: 600;
+        color: #aaaaaa;
+      }
+
+      input {
+        width: 100%;
+        background: #181a1f;
+        border: 1px solid #3a3f4b;
+        color: #fff;
+        border-radius: 4px;
+        padding: 0.3rem 0.4rem;
+        font-size: 0.8rem;
+        text-align: center;
+        box-sizing: border-box; /* Garante que padding não estoure */
+        
+        &:focus {
+            outline: none;
+            border-color: #61dafb;
+        }
+      }
+    }
+
+    // Botão de Ícone (Reverse Toggle)
+    .btn-icon {
+      flex: 0 0 30px; // Largura fixa para ser quadrado
+      height: 29px;   // Altura alinhada com os inputs vizinhos
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      
+      background: #2b2e36;
+      border: 1px solid #3a3f4b;
+      border-radius: 4px;
+      color: #aaaaaa;
+      
+      padding: 0;
+      margin-bottom: 1px; // Ajuste fino de alinhamento visual com a baseline
+      cursor: pointer;
+      transition: all 0.2s ease;
+
+      &:hover {
+        background: #3a3f4b;
+        color: #ffffff;
+      }
+
+      // Estado Ativo (Reverso Ligado)
+      &.is-active {
+        background: rgba(97, 218, 251, 0.1); // Fundo azul bem sutil
+        color: #61dafb; // Ícone azul ciano
+        border-color: #61dafb;
+      }
+
+      svg {
+        pointer-events: none; // Evita problemas de clique no path do SVG
+        width: 16px;
+        height: 16px;
+      }
+    }
+
+    // Botão Principal (Duplicate)
+    .btn-duplicate {
+      flex: 1; // Ocupa o resto da linha
+      padding: 0.35rem; 
+      background-color: #3a3f4b;
+      border: 1px solid transparent;
+      height: 29px; // Altura forçada igual ao btn-icon
+      margin-bottom: 1px; 
+      border-radius: 4px;
+      font-weight: 600;
+      
+      &:hover {
+        background-color: #61dafb;
+        color: #181a1f;
+      }
+      
+      &:active { transform: translateY(1px); }
+    }
+  }
+
+  // --- Linhas de Slider (X e Y) ---
+  .slider-row {
+    display: grid;
+    // Layout: Label (auto) | Input (50px) | Slider (resto)
+    grid-template-columns: 15px 50px 1fr; 
+    gap: 0.5rem;
+    align-items: center;
+
+    .row-label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: #aaaaaa;
+      text-align: right;
+    }
+
+    .compact-input {
+      background: #181a1f;
+      border: 1px solid #3a3f4b;
+      color: #fff;
+      border-radius: 4px;
+      padding: 0.15rem 0.25rem;
+      font-size: 0.75rem;
+      text-align: center;
+      width: 100%;
+      box-sizing: border-box;
+
+      &:focus {
+        outline: none;
+        border-color: #61dafb;
+      }
+    }
+
+    // Estilização customizada do Range Slider
+    .range-slider {
+      -webkit-appearance: none; 
+      width: 100%;
+      background: transparent;
+      cursor: pointer;
+      margin: 0;
+
+      &:focus { outline: none; }
+
+      // Trilha (o caminho do slider)
+      &::-webkit-slider-runnable-track {
+        width: 100%;
+        height: 4px;
+        background: #3a3f4b;
+        border-radius: 2px;
+      }
+
+      // Thumb (a bolinha)
+      &::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        height: 12px;
+        width: 12px;
+        border-radius: 50%;
+        background: #61dafb; // Azul destaque
+        margin-top: -4px; // Centraliza verticalmente na trilha
+        box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+        transition: transform 0.1s;
+      }
+
+      &:active::-webkit-slider-thumb {
+        transform: scale(1.2);
+        background: #fff;
+      }
+    }
+  }
+}

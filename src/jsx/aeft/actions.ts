@@ -433,6 +433,7 @@ export const duplicateCards = (numCopies: number, adjustPos: number[]) => {
 
     duplicated.moveAfter(lastDuplicated)
     lastDuplicated = duplicated
+    lastDuplicated.selected = true
   }
 
   app.endUndoGroup()

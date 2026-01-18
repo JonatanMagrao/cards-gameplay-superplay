@@ -20,7 +20,7 @@ import {
   flipCard
 } from "./actions";
 import { getActiveComp, forEachLayer } from "./aeft-utils";
-import { getLayerProp } from "./aeft-utils-jonatan";
+import { getLayerProp, distributeLayers } from "./aeft-utils-jonatan";
 import { applyCardsLayoutFromJson, exportCardsLayoutToJson } from "./game-levels-utils";
 
 const cardsFolderName = "Disney Solitaire Cards"
@@ -28,9 +28,9 @@ const cardsFolderName = "Disney Solitaire Cards"
 export const handleApplyCardsLayout = (baseDir: string, levelName: string) => applyCardsLayoutFromJson(baseDir, levelName)
 
 export const handleSaveCardsLayout = (baseDir: string, levelName: string) => {
-  try{
+  try {
     exportCardsLayoutToJson(baseDir, levelName)
-  }catch(e){
+  } catch (e) {
     alert(e)
   }
 }
@@ -50,6 +50,13 @@ export const handleFlipCards = () => applyFlipCardOnSelectedlayers()
 export const handleTurnCards = () => turnCards()
 
 export const handleDuplicateCards = (numCopies: number, adjustPos: number[]) => duplicateCards(numCopies, adjustPos)
+
+export const handleDistributeLayers = (xStep: number, yStep: number, reverse: boolean ) => distributeLayers(xStep, yStep, reverse)
+
+export const getCompSize = () => {
+  const { width, height } = getActiveComp();
+  return [width, height]
+}
 
 export const handleImportFilesAndComps = (filePath: string) => {
   importFilesAndCompsForCards(filePath, cardsFolderName)

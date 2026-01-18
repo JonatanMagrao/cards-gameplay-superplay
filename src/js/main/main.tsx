@@ -2,9 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { subscribeBackgroundColor } from "../lib/utils/bolt";
 import "./main.scss";
 
+// Import components
 import { CardPickerPanel } from "./components/CardPickerPanel/CardPickerPanel";
 import { ActionsPanel } from "./components/ActionsPanel/ActionsPanel";
 import { LayoutsPanel } from "./components/LayoutsPanel/LayoutsPanel";
+import { DuplicatePanel } from "./components/DuplicatePanel/DuplicatePanel"; // <--- NOVO IMPORT
 
 import { os, path } from "../lib/cep/node";
 
@@ -72,6 +74,9 @@ export const App = () => {
               />
 
               <ActionsPanel />
+
+              {/* Adicionado aqui logo após o painel de ações */}
+              <DuplicatePanel />
             </>
           ) : (
             <LayoutsPanel baseDirDefault={getDefaultCardsLevelsDir()} />
