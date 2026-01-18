@@ -33,7 +33,7 @@ export const keyLabel = {
 
 const actionLabelColor = keyLabel.green
 const anticipationLabelColor = keyLabel.yellow
-const zAdjust = .01
+const zAdjust = .1
 
 const transformGroupMatchName = "ADBE Transform Group"
 const essentialPropertiesMatchName = "ADBE Layer Overrides"

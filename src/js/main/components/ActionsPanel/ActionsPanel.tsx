@@ -37,6 +37,14 @@ export const ActionsPanel: React.FC<Props> = ({
 
       {/* Row 1: most used actions */}
       <div className="button-row">
+        <button
+          onClick={applyFlipCard}
+          style={{border:"1px solid #E8920D"}}
+          title={"Flip Card"}
+        >
+          Flip
+        </button>
+
         <button onClick={applyJump}
           style={{ border: "1px solid #4AA44C" }}
           title={"Apply Jump"}
@@ -51,16 +59,6 @@ export const ActionsPanel: React.FC<Props> = ({
         >
           Flip Stock
         </button>
-
-        <button
-          onClick={applyFlipCard}
-          style={{border:"1px solid #E8920D"}}
-          title={"Flip Card"}
-        >
-          Flip
-        </button>
-
-
       </div>
 
       {/* Row 2: set layers */}
