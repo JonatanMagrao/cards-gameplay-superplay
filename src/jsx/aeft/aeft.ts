@@ -22,40 +22,36 @@ import {
 } from "./actions";
 import { getActiveComp, forEachLayer } from "./aeft-utils";
 import { getLayerProp, distributeLayers } from "./aeft-utils-jonatan";
-import { applyCardsLayoutFromJson, exportCardsLayoutToJson } from "./game-levels-utils";
+import { applyCardsLayoutFromObject, getActiveCompLayoutData, CardsLayoutJson, getActiveCompResolution, } from "./game-levels-utils";
 import { alertError } from "./errors";
 
 const cardsFolderName = "Disney Solitaire Cards"
 const precompRenderer = "ADBE Calder"
 
-export const handleApplyCardsLayout = (baseDir: string, levelName: string) => {
+export const getCompResolution = () => {
+  return getActiveCompResolution();
+}
 
+export const handleApplyCardsLayout = (layoutData: CardsLayoutJson) => {
+  app.beginUndoGroup("Apply Cards Layout");
   try {
-    const thisComp = getActiveComp()
-    if (thisComp.renderer !== precompRenderer) {
-      thisComp.renderer = precompRenderer
-    }
+    return applyCardsLayoutFromObject(layoutData);
   } catch (e) {
-    alertError(e, 39, "handleApplyCardsLayout", "aeft.ts")
-  }
-
-  app.beginUndoGroup("Apply Cards Layout")
-  try {
-    applyCardsLayoutFromJson(baseDir, levelName)
-  } catch (e) {
-    alertError(e, 46, "handleApplyCardsLayout", "aeft.ts")
+    alert("Error in AE: " + e.toString());
+    return "ERROR";
   } finally {
-    app.endUndoGroup()
+    app.endUndoGroup();
   }
-}
+};
 
-export const handleSaveCardsLayout = (baseDir: string, levelName: string) => {
+export const handleSaveCardsLayout = (levelId: string) => {
   try {
-    exportCardsLayoutToJson(baseDir, levelName)
+    // Apenas retorna os dados. O React salva.
+    return getActiveCompLayoutData(levelId);
   } catch (e) {
-    alertError(e, 56, "handleSaveCardsLayout", "aeft.ts")
+    return JSON.stringify({ error: e.toString() });
   }
-}
+};
 
 export const handleSetTargetLayer = () => {
   app.beginUndoGroup("Set Target Layer")
@@ -177,7 +173,14 @@ export const handleChangeCard = (deckName: string, card: number, cardName: strin
 }
 
 export const handleAddCard = (deckName: string, card: number, cardName: string) => {
-  addCardToPrecomp(deckName, card, cardName)
+  app.beginUndoGroup("Add Card to precomp")
+  try {
+    addCardToPrecomp(deckName, card, cardName)
+  } catch (e) {
+    alert(e)
+  } finally {
+    app.endUndoGroup()
+  }
 }
 
 const findCardLayers = () => {

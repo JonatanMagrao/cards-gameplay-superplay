@@ -31,10 +31,9 @@ export const keyLabel = {
   darkGreen: 16
 } as const
 
-const cardsFolderName = "Precomp Decks"
 const actionLabelColor = keyLabel.green
 const anticipationLabelColor = keyLabel.yellow
-const zAdjust = .005
+const zAdjust = .01
 
 const transformGroupMatchName = "ADBE Transform Group"
 const essentialPropertiesMatchName = "ADBE Layer Overrides"
@@ -457,8 +456,6 @@ export const changeCard = (deckName: string, card: number, cardName: string) => 
 
 export const addCardToPrecomp = (deckName: string, card: number, cardName: string) => {
 
-  app.beginUndoGroup("Add new card to precomp")
-
   try {
     const thisComp = getActiveComp()
     const deck = getItemByName(deckName)
@@ -475,7 +472,5 @@ export const addCardToPrecomp = (deckName: string, card: number, cardName: strin
 
   } catch (e) {
     alertError(e, 479, "AddCardToPrecomp", "actions.ts")
-  } finally {
-    app.endUndoGroup()
-  }
+  } 
 }

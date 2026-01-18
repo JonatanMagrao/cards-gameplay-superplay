@@ -1,10 +1,32 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { fs, path } from "../../../lib/cep/node";
+import { fs, path, os } from "../../../lib/cep/node";
 import { evalTS } from "../../../lib/utils/bolt";
+import "./LayoutsPanel.scss";
+
+// --- CONFIGURAÇÃO DE PERSISTÊNCIA ---
+const HOME_DIR = os.homedir();
+const CONFIG_FILE_NAME = ".cards-layout-config.json";
+const CONFIG_PATH = path.join(HOME_DIR, CONFIG_FILE_NAME);
+
+// Helpers
+const loadConfig = () => {
+  try {
+    if (fs.existsSync(CONFIG_PATH)) {
+      return JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8"));
+    }
+  } catch (e) { console.error(e); }
+  return {};
+};
+
+const saveConfig = (data: any) => {
+  try {
+    const current = loadConfig();
+    fs.writeFileSync(CONFIG_PATH, JSON.stringify({ ...current, ...data }, null, 2));
+  } catch (e) { console.error(e); }
+};
 
 const safeTrim = (s: any) => String(s).replace(/^\s+|\s+$/g, "");
-
-const pad3 = (v: any): string => {
+const pad3 = (v: any) => {
   const n = parseInt(String(v), 10);
   if (isNaN(n) || n < 0) return "000";
   const s = String(n);
@@ -14,16 +36,11 @@ const pad3 = (v: any): string => {
 const normalizeLevelFolderNameUI = (levelId: string): string => {
   const raw = safeTrim(levelId);
   const m = raw.match(/^(\d+)(?:[_-](.+))?$/);
-
   if (!m) return `lvl_${raw.replace(/_/g, "-")}`;
-
   const num = pad3(m[1]);
   const name = safeTrim(m[2] || "");
-  if (!name) return `lvl_${num}`;
-  return `lvl_${num}-${name}`;
+  return name ? `lvl_${num}-${name}` : `lvl_${num}`;
 };
-
-const stripLevelPrefix = (folder: string) => folder.replace(/^lvl_/, "");
 
 type Props = {
   baseDirDefault?: string;
@@ -35,23 +52,23 @@ export const LayoutsPanel: React.FC<Props> = ({
   title = "Layouts",
 }) => {
   const [baseDir, setBaseDir] = useState(baseDirDefault);
-
+  const [persistentSavePath, setPersistentSavePath] = useState<string | null>(null);
   const [levels, setLevels] = useState<string[]>([]);
   const [query, setQuery] = useState("");
   const [selectedFolder, setSelectedFolder] = useState("");
-
   const [saveLevelId, setSaveLevelId] = useState("");
-
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  const saveFolderPreview = useMemo(
-    () => normalizeLevelFolderNameUI(saveLevelId),
-    [saveLevelId]
-  );
+  // --- INIT ---
+  useEffect(() => {
+    const config = loadConfig();
+    if (config.savePath) {
+      setPersistentSavePath(config.savePath);
+      setBaseDir(config.savePath);
+    }
+  }, []);
 
-  // -------------------------
-  // Refresh folders
-  // -------------------------
+  // --- REFRESH ---
   const refreshLevels = useCallback(() => {
     try {
       if (!fs.existsSync(baseDir)) {
@@ -59,249 +76,250 @@ export const LayoutsPanel: React.FC<Props> = ({
         setSelectedFolder("");
         return;
       }
-
       const entries = fs.readdirSync(baseDir) as string[];
       const folders = entries.filter((name) => {
-        const full = path.join(baseDir, name);
+        const full = `${baseDir}/${name}`.replace(/\\/g, "/");
         try {
           return fs.statSync(full).isDirectory() && /^lvl_/.test(name);
-        } catch {
-          return false;
-        }
+        } catch { return false; }
       });
-
       folders.sort();
       setLevels(folders);
     } catch (e) {
-      console.log("refreshLevels error:", e);
       setLevels([]);
-      setSelectedFolder("");
     }
   }, [baseDir]);
 
-  useEffect(() => {
-    refreshLevels();
-  }, [refreshLevels]);
+  useEffect(() => { refreshLevels(); }, [refreshLevels]);
 
-  // -------------------------
-  // Filter list
-  // -------------------------
   const filtered = useMemo(() => {
     const q = safeTrim(query).toLowerCase();
     if (!q) return levels;
     return levels.filter((x) => x.toLowerCase().includes(q));
   }, [levels, query]);
 
-  // -------------------------
-  // Keep selection consistent with filtered list
-  // (Fix: do not override selection if it's still valid)
-  // -------------------------
   useEffect(() => {
-    // if selection is empty and we have options, pick first
-    if (!selectedFolder && filtered.length) {
-      setSelectedFolder(filtered[0]);
-      return;
-    }
-
-    // if selection exists but got filtered out, switch to first
-    if (selectedFolder && !filtered.includes(selectedFolder)) {
-      setSelectedFolder(filtered[0] ?? "");
-    }
+    if (!selectedFolder && filtered.length) setSelectedFolder(filtered[0]);
+    else if (selectedFolder && !filtered.includes(selectedFolder)) setSelectedFolder(filtered[0] ?? "");
   }, [filtered, selectedFolder]);
 
+
   // -------------------------
-  // Apply / Save
+  // APPLY
   // -------------------------
   const handleApply = useCallback(async () => {
-    if (!selectedFolder) {
-      alert("No level folder selected.\n\nPick a level and try again.");
-      return;
+    if (!selectedFolder) return alert("Select a level folder first.");
+
+    let rootPath = persistentSavePath || baseDir;
+    rootPath = rootPath.replace(/\\/g, "/");
+
+    const levelFolder = `${rootPath}/${selectedFolder}`;
+
+    const resolution = await evalTS("getCompResolution");
+    if (!resolution) return alert("No active comp found.");
+
+    const jsonPath = `${levelFolder}/${resolution}.json`;
+
+    if (!fs.existsSync(jsonPath)) {
+      return alert(`Layout file not found:\n${jsonPath}`);
     }
 
-    const levelId = stripLevelPrefix(selectedFolder); // "003-Abracadabra"
-    await evalTS("handleApplyCardsLayout", baseDir, levelId);
-  }, [baseDir, selectedFolder]);
+    try {
+      const raw = fs.readFileSync(jsonPath, "utf-8");
+      const layoutData = JSON.parse(raw);
 
+      const res = await evalTS("handleApplyCardsLayout", layoutData);
+      if (res !== "OK" && res !== undefined) alert(`Error applying: ${res}`);
+
+    } catch (e) {
+      alert("Error reading JSON file.");
+      console.error(e);
+    }
+  }, [baseDir, selectedFolder, persistentSavePath]);
+
+
+  // -------------------------
+  // SAVE
+  // -------------------------
   const handleSave = useCallback(async () => {
-    const lvl = safeTrim(saveLevelId);
-    if (!lvl) {
-      alert(
-        "Type a level id first.\n\nExamples:\n001-SomethingSpecial\n003-Abracadabra"
-      );
-      return;
+    const lvlRaw = safeTrim(saveLevelId);
+    if (!lvlRaw) return alert("Type a level ID first (e.g. 001-Boss).");
+
+    let targetFolder = persistentSavePath;
+
+    // 1. Selecionar Pasta se não houver
+    if (!targetFolder) {
+      if (!window.cep) return alert("CEP API unavailable.");
+      const result = window.cep.fs.showOpenDialogEx(false, true, "Select Save Folder", baseDir, []);
+
+      if (result.err !== 0 || !result.data || result.data.length === 0) return;
+
+      targetFolder = result.data[0];
+      if (!targetFolder) {
+        alert("Operation cancelled.")
+        return
+      }
+      targetFolder = targetFolder.replace(/\\/g, "/");
+
+      saveConfig({ savePath: targetFolder });
+      setPersistentSavePath(targetFolder);
+      setBaseDir(targetFolder);
+    } else {
+      targetFolder = targetFolder!.replace(/\\/g, "/");
     }
 
-    await evalTS("handleSaveCardsLayout", baseDir, lvl);
+    // 2. Pegar dados do AE
+    const jsonString = await evalTS("handleSaveCardsLayout", lvlRaw);
 
-    // ✅ Success feedback AFTER writing
-    // alert(`Layout saved.\n\nGame Level: ${saveFolderPreview.replace("lvl_","")}`);
+    let layoutData;
+    try {
+      layoutData = JSON.parse(jsonString);
+    } catch (e) {
+      return alert(`Error from AE: ${jsonString}`);
+    }
 
-    refreshLevels();
-  }, [baseDir, saveLevelId, saveFolderPreview, refreshLevels]);
+    if (layoutData.error) return alert(`Export Failed: ${layoutData.error}`);
+
+    // 3. Montar caminhos
+    const levelFolderName = normalizeLevelFolderNameUI(lvlRaw);
+    const levelFolderPath = `${targetFolder}/${levelFolderName}`;
+    const fileName = `${layoutData.resolution[0]}x${layoutData.resolution[1]}.json`;
+    const finalFilePath = `${levelFolderPath}/${fileName}`;
+
+    // 4. Cria pasta
+    if (!fs.existsSync(levelFolderPath)) {
+      try {
+        fs.mkdirSync(levelFolderPath, { recursive: true });
+      } catch (e) {
+        return alert(`Could not create folder: ${levelFolderPath}`);
+      }
+    }
+
+    // 5. Overwrite
+    if (fs.existsSync(finalFilePath)) {
+      const overwrite = confirm(`File exists: ${fileName}\nOverwrite?`);
+      if (!overwrite) return;
+    }
+
+    // 6. Salvar
+    try {
+      fs.writeFileSync(finalFilePath, JSON.stringify(layoutData, null, 2), "utf-8");
+      alert(`Saved!\nLevel: ${levelFolderName}\nFile: ${fileName}`);
+      refreshLevels();
+    } catch (e) {
+      alert(`Write error: ${e}`);
+    }
+
+  }, [baseDir, saveLevelId, persistentSavePath, refreshLevels]);
+
 
   // -------------------------
-  // Keyboard shortcuts
-  // Ctrl/Cmd + Enter => Apply
-  // Ctrl/Cmd + S     => Save
-  // (Do not trigger while typing)
+  // UI HANDLERS
   // -------------------------
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      const isMac = /Mac|iPhone|iPad|iPod/.test(navigator.platform);
-      const mod = isMac ? e.metaKey : e.ctrlKey;
 
-      // don't trigger shortcuts while typing in input/select/textarea
-      const target = e.target as HTMLElement | null;
-      const tag = target?.tagName?.toLowerCase();
-      const isTyping =
-        tag === "input" ||
-        tag === "textarea" ||
-        tag === "select" ||
-        (target as any)?.isContentEditable;
+  const handleChangePath = () => {
+    if (!window.cep) return alert("CEP API unavailable.");
 
-      if (isTyping) return;
+    const result = window.cep.fs.showOpenDialogEx(
+      false,
+      true,
+      "Select New Save Folder",
+      baseDir,
+      []
+    );
 
-      // Ctrl/Cmd + Enter => Apply
-      if (mod && e.key === "Enter") {
-        e.preventDefault();
-        handleApply();
-        return;
-      }
+    if (result.err === 0 && result.data && result.data.length > 0) {
+      const newPath = result.data[0].replace(/\\/g, "/");
+      saveConfig({ savePath: newPath });
+      setPersistentSavePath(newPath);
+      setBaseDir(newPath);
+    }
+  };
 
-      // Ctrl/Cmd + S => Save
-      if (mod && (e.key === "s" || e.key === "S")) {
-        e.preventDefault();
-        handleSave();
-        return;
-      }
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [handleApply, handleSave]);
+  const handleOpenSavePath = () => {
+    if (!persistentSavePath) return;
+    let cmd = "";
+    const p = path.normalize(persistentSavePath);
+    if (process.platform === "win32") {
+      cmd = `explorer "${p}"`;
+    } else {
+      cmd = `open "${p}"`;
+    }
+    require("child_process").exec(cmd);
+  };
 
   return (
     <section className="panel-section layouts-section">
-      {/* <div className="layouts-section-header">
+      <div className="layouts-section-header" style={{ display: 'flex', justifyContent: 'space-between' }}>
         <span className="section-label">{title}</span>
-
         <button
-          type="button"
           className="layouts-btn-ghost"
+          title={"Open Folder Path Setup"}
           onClick={() => {
             const next = !settingsOpen;
             setSettingsOpen(next);
             if (next) refreshLevels();
-          }}
-          title="Settings"
-        >
-          ⚙
-        </button>
-      </div> */}
+          }}>⚙</button>
+      </div>
 
-      {/* Settings (collapsed by default) */}
       {settingsOpen && (
         <div className="layouts-settings">
-          <div className="field-row">
-            <span className="field-label">Base Dir</span>
-            <input
-              className="field-input"
-              value={baseDir}
-              onChange={(e) => setBaseDir(e.target.value)}
-              placeholder="D:/Downloads/cardsLevels"
-            />
-          </div>
+          <div className="field-row" style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
 
-          <div className="layouts-hint">
-            Looking for folders starting with{" "}
-            <span className="layouts-mono">lvl_</span> inside{" "}
-            <span className="layouts-mono">{baseDir}</span>
+            <span
+              className="field-label"
+              style={{ color: '#61dafb', marginBottom: 0, cursor: 'help' }}
+              title={persistentSavePath || "Path not set"}
+            >
+              Folder Path
+            </span>
+
+            <div className="save-target-row">
+              {/* BOTÃO OPEN:
+                  Fica desabilitado (disabled) se persistentSavePath for null/vazio.
+              */}
+              <button
+                className={"btn-open-folder"}
+                onClick={handleOpenSavePath}
+                style={{ flex: 1, marginRight: "5px" }}
+                disabled={!persistentSavePath || !safeTrim(persistentSavePath)}
+              >
+                Open
+              </button>
+
+              {/* BOTÃO CHANGE/SET:
+                  Sempre habilitado para permitir definir o path.
+              */}
+              <button
+                className="btn-change"
+                onClick={handleChangePath}
+                style={{ flex: 1 }}
+              >
+                {persistentSavePath ? "Change" : "Set"}
+              </button>
+            </div>
+
           </div>
         </div>
       )}
 
       <div className="layouts-grid">
-        {/* APPLY */}
         <div className="layouts-card">
-          <div className="layouts-card-header">
-            <span className="layouts-card-title">Apply</span>
-            {/* <button
-              onClick={refreshLevels}
-              className="layouts-btn-ghost"
-              type="button"
-              title="Refresh folder list"
-            >
-              Refresh
-            </button> */}
-          </div>
-
+          <div className="layouts-card-header"><span className="layouts-card-title">Apply</span></div>
           <div className="layouts-apply-row">
-            <input
-              className="field-input"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search..."
-            />
-
-            <select
-              className="field-input"
-              value={selectedFolder}
-              onChange={(e) => setSelectedFolder(e.target.value)}
-              title="Level folder"
-            >
-              {filtered.length ? (
-                filtered.map((lvl) => (
-                  <option key={lvl} value={lvl}>
-                    {lvl.replace("lvl_", "")}
-                  </option>
-                ))
-              ) : (
-                <option value="">No level folders found</option>
-              )}
+            <input className="field-input" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search..." />
+            <select className="field-input" value={selectedFolder} onChange={e => setSelectedFolder(e.target.value)}>
+              {filtered.length ? filtered.map(l => <option key={l} value={l}>{l.replace("lvl_", "")}</option>) : <option value="">None</option>}
             </select>
-
-            <button
-              onClick={handleApply}
-              disabled={!selectedFolder}
-              type="button"
-              className="layouts-btn-primary"
-              title="Apply selected layout to the active comp (Ctrl/Cmd+Enter)"
-            >
-              Apply
-            </button>
+            <button className="layouts-btn-primary" onClick={handleApply} disabled={!selectedFolder}>Apply</button>
           </div>
-
-          {/* {selectedFolder && (
-            <div className="layouts-hint">
-              Selected: <span className="layouts-mono">{selectedFolder}</span>
-            </div>
-          )} */}
         </div>
-
-        {/* SAVE */}
         <div className="layouts-card">
-          <div className="layouts-card-header">
-            <span className="layouts-card-title">Save</span>
-          </div>
-
-          <input
-            className="field-input"
-            value={saveLevelId}
-            onChange={(e) => setSaveLevelId(e.target.value)}
-            placeholder="Ex: 001-SomethingSpecial"
-          />
-
-          {/* <div className="layouts-hint">
-            Will save to: <span className="layouts-mono">{saveFolderPreview}</span>
-          </div> */}
-
+          <div className="layouts-card-header"><span className="layouts-card-title">Save</span></div>
+          <input className="field-input" value={saveLevelId} onChange={e => setSaveLevelId(e.target.value)} placeholder="Ex: 001-Boss" />
           <div className="button-row layouts-actions">
-            <button
-              onClick={handleSave}
-              type="button"
-              title="Save layout (Ctrl/Cmd+S)"
-            >
-              Save Layout
+            <button onClick={handleSave}>
+              {persistentSavePath ? "Save Layout" : "Save Layout (Select Folder)"}
             </button>
           </div>
         </div>

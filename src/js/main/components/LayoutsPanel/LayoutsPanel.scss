@@ -1,0 +1,108 @@
+/* LayoutsPanel.scss */
+
+.layouts-settings {
+  background-color: #2b2f38;
+  padding: 0.75rem;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.layouts-settings .field-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  align-items: stretch;
+}
+
+/* Wrapper dos botões à direita */
+.save-target-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Botão Open Folder 
+*/
+.btn-open-folder {
+  font-size: 0.7rem;
+  padding: 0.25rem 0.5rem;
+  background-color: #3a3f4b;
+  color: #eeeeee;
+  -webkit-text-fill-color: #eeeeee; /* ✅ Importante para CEP/Chromium */
+  border: 1px solid #555;
+  cursor: pointer;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.btn-open-folder:not(:disabled):hover {
+  background-color: #4a505e;
+  border-color: #777;
+}
+
+/* ✅ OPEN realmente desabilitado visualmente */
+.btn-open-folder:disabled {
+  pointer-events: none;
+  cursor: not-allowed !important;
+
+  /* --- CORREÇÃO DE CONFLITO GLOBAL --- */
+  /* Força opacidade total para que as cores abaixo funcionem */
+  opacity: 1 !important; 
+  filter: none !important;
+  /* ----------------------------------- */
+
+  /* Cores escuras para indicar desabilitado */
+  background-color: #252830 !important;
+  border-color: #383838 !important;
+
+  /* Texto cinza apagado */
+  color: #666666 !important;
+  -webkit-text-fill-color: #666666 !important;
+}
+
+/* Garante que hover não mude a cor quando disabled */
+.btn-open-folder:disabled:hover,
+.btn-open-folder:disabled:active {
+  background-color: #252830 !important;
+  border-color: #383838 !important;
+  color: #666666 !important;
+  -webkit-text-fill-color: #666666 !important;
+}
+
+/* Botão Change 
+*/
+.btn-change {
+  font-size: 0.7rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid #61dafb;
+  color: #61dafb;
+  -webkit-text-fill-color: #61dafb;
+  background: transparent;
+  cursor: pointer;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.btn-change:hover {
+  background: rgba(97, 218, 251, 0.1);
+}
+
+/* Disabled global para outros botões deste painel
+  (Mantém o padrão global, mas sem atrapalhar o btn-open-folder que tem especificidade maior acima)
+*/
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: grayscale(100%);
+}
