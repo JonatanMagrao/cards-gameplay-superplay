@@ -1,6 +1,12 @@
 import { getActiveComp } from "./aeft-utils";
 import { alertError } from "./errors";
 
+interface MarkerProps {
+  title?: string,
+  label?: number,
+  duration?: number 
+}
+
 export const forEachSelectedLayer = (
   comp: CompItem,
   callback: (layer: Layer, layerIndexInComp: number) => void
@@ -47,7 +53,6 @@ export const filterSelectedLayers = (
   return out;
 };
 
-
 export const deselectAllSelectedLayers = (selectedLayers: Layer[]) => {
   for (let i = 0; i < selectedLayers.length; i++) {
     selectedLayers[i].selected = false
@@ -86,12 +91,6 @@ export const getLayerProp = (camada: any, properties: string[]) => {
     myLayerProps = myLayerProps.property(prop)
   }
   return myLayerProps
-}
-
-interface MarkerProps {
-  title?: string,
-  label?: number,
-  duration?: number 
 }
 
 export const addMarkerToLayer = (myLayer: Layer, markerTime: number, markerProps: MarkerProps) => {

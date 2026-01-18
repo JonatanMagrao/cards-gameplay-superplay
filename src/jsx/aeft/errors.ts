@@ -8,9 +8,9 @@ export const raise = (msg: string, file: string, line: number, action: string): 
   throw err;
 };
 
-export const alertError = (e: any) => {
+export const alertError = (e: any, line: number, action: string, file: string) => {
   const error = e as any
-  const msgError = `Error: ${error.message}\n\nLine     : ${error.line}\nAction : ${error.action}\nFile      : ${error.file}`
+  const msgError = `Error: ${error.message}\n\nFunction : ${action}\nLine         : ${line}\nFile          : ${file}`
   alert(msgError)
 }
 

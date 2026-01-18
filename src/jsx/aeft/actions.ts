@@ -129,7 +129,7 @@ export const applyJumpOnSelectedlayers = (presetPath: string) => {
     })
 
   } catch (e) {
-    alertError(e)
+    alertError(e, 132, "applyJumpOnSelectedlayers", "actions.ts")
   }
 }
 
@@ -338,7 +338,7 @@ export const setTargetLayer = () => {
     targetLayer.name = targetLayer.name.replace(removeOldPattern, "")
     targetLayer.name = `${targetLayer.name} [TARGET]`
   } catch (e) {
-    alertError(e)
+    alertError(e, 341, "setTargetLayer", "actions.ts")
   }
 
 }
@@ -362,7 +362,7 @@ export const setCardType = (cardTypeName: string, layerLabel: number) => {
 
     })
   } catch (e) {
-    alertError(e)
+    alertError(e, 365, "setCardType", "actions.ts")
   }
 
 }
@@ -472,8 +472,9 @@ export const addCardToPrecomp = (deckName: string, card: number, cardName: strin
     cardLayer.name = cardName
     const cardOption = getLayerProp(cardLayer, cardOptionEPPath)
     cardOption.setValue(card)
+
   } catch (e) {
-    alertError(e)
+    alertError(e, 479, "AddCardToPrecomp", "actions.ts")
   } finally {
     app.endUndoGroup()
   }

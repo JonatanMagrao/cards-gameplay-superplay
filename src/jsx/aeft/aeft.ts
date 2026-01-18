@@ -30,20 +30,20 @@ const precompRenderer = "ADBE Calder"
 
 export const handleApplyCardsLayout = (baseDir: string, levelName: string) => {
 
-  try{
+  try {
     const thisComp = getActiveComp()
     if (thisComp.renderer !== precompRenderer) {
       thisComp.renderer = precompRenderer
     }
-  }catch(e){
-    alertError(e)
+  } catch (e) {
+    alertError(e, 39, "handleApplyCardsLayout", "aeft.ts")
   }
 
   app.beginUndoGroup("Apply Cards Layout")
   try {
     applyCardsLayoutFromJson(baseDir, levelName)
   } catch (e) {
-    alertError(e)
+    alertError(e, 46, "handleApplyCardsLayout", "aeft.ts")
   } finally {
     app.endUndoGroup()
   }
@@ -53,7 +53,7 @@ export const handleSaveCardsLayout = (baseDir: string, levelName: string) => {
   try {
     exportCardsLayoutToJson(baseDir, levelName)
   } catch (e) {
-    alertError(e)
+    alertError(e, 56, "handleSaveCardsLayout", "aeft.ts")
   }
 }
 
@@ -62,7 +62,7 @@ export const handleSetTargetLayer = () => {
   try {
     setTargetLayer()
   } catch (e) {
-    alertError(e)
+    alertError(e, 65, "handleSetTargetLayer", "aeft.ts")
   } finally {
     app.endUndoGroup()
   }
@@ -73,7 +73,7 @@ export const handleSetStockLayer = () => {
   try {
     setCardType("stock", 2)
   } catch (e) {
-    alertError(e)
+    alertError(e, 76, "handleSetStockLayer", "aeft.ts")
   } finally {
     app.endUndoGroup()
   }
@@ -84,7 +84,7 @@ export const handleSetTableauLayer = () => {
   try {
     setCardType("TABLEAU", 9)
   } catch (e) {
-    alertError(e)
+    alertError(e, 87, "handleSetTableauLayer", "aeft.ts")
   } finally {
     app.endUndoGroup()
   }
@@ -92,7 +92,7 @@ export const handleSetTableauLayer = () => {
 
 export const handleApplyJump = (presetPath: string) => {
   const thisComp = getActiveComp()
-  if(thisComp.renderer !== precompRenderer){
+  if (thisComp.renderer !== precompRenderer) {
     thisComp.renderer = precompRenderer
   }
 
@@ -100,7 +100,7 @@ export const handleApplyJump = (presetPath: string) => {
   try {
     applyJumpOnSelectedlayers(presetPath)
   } catch (e) {
-    alertError(e)
+    alertError(e, 103, "handleApplyJump", "aeft.ts")
   } finally {
     app.endUndoGroup()
   }
@@ -111,7 +111,7 @@ export const handleFlipStockCards = () => {
   try {
     flipStockCards()
   } catch (e) {
-    alertError(e)
+    alertError(e, 114, "handleFlipStockCards", "aeft.ts")
   } finally {
     app.endUndoGroup()
   }
@@ -122,7 +122,7 @@ export const handleFlipCards = () => {
   try {
     applyFlipCardOnSelectedlayers()
   } catch (e) {
-    alertError(e)
+    alertError(e, 125, "handleFlipCards", "aeft.ts")
   } finally {
     app.endUndoGroup()
   }
@@ -133,7 +133,7 @@ export const handleTurnCards = () => {
   try {
     turnCards()
   } catch (e) {
-    alertError(e)
+    alertError(e, 136, "handleTurnCards", "aeft.ts")
   } finally {
     app.endUndoGroup()
   }
@@ -144,7 +144,7 @@ export const handleDuplicateCards = (numCopies: number, adjustPos: number[]) => 
   try {
     duplicateCards(numCopies, adjustPos)
   } catch (e) {
-    alertError(e)
+    alertError(e, 147, "handleDuplicateCards", "aeft.ts")
   } finally {
     app.endUndoGroup()
   }
@@ -155,7 +155,7 @@ export const handleDistributeLayers = (xStep: number, yStep: number, reverse: bo
   try {
     distributeLayers(xStep, yStep, reverse)
   } catch (e) {
-    alertError(e)
+    alertError(e, 158, "handleDistributeLayers", "aeft.ts")
   } finally {
     app.endUndoGroup()
   }
