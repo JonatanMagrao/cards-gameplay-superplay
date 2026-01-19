@@ -8,9 +8,10 @@ type Props = {
   setDeck: (v: string) => void;
   cardNumber: number;
   setCardNumber: (v: number) => void;
+  cardProject: string
 };
 
-export const CardPickerPanel: React.FC<Props> = ({ deck, setDeck, cardNumber, setCardNumber }) => {
+export const CardPickerPanel: React.FC<Props> = ({ deck, setDeck, cardNumber, setCardNumber, cardProject }) => {
   const [cardSrc, setCardSrc] = useState<string | null>(null);
 
   const deckPrefix = useMemo(() => deck.split("_")[0], [deck]);
@@ -59,7 +60,7 @@ export const CardPickerPanel: React.FC<Props> = ({ deck, setDeck, cardNumber, se
     await evalTS("handleChangeCard", deck, cardNumber, cardTitle);
 
   const handleAddCard = async () => {
-    await evalTS("handleAddCard", deck, cardNumber, cardTitle)
+    await evalTS("handleAddCard", deck, cardNumber, cardTitle, cardProject)
   }
 
   // --- NEW HANDLER FOR CLICKS ---

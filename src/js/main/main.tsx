@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { subscribeBackgroundColor } from "../lib/utils/bolt";
+import { csi, subscribeBackgroundColor } from "../lib/utils/bolt";
 import "./main.scss";
 
 // Import components
@@ -23,6 +23,10 @@ export const App = () => {
   const [cardNumber, setCardNumber] = useState(1);
 
   const [tab, setTab] = useState<TabKey>("cards");
+  
+  const projectRelPath = "disney_solitaire_cards.aepx"
+  const assets = `${csi.getSystemPath("extension")}/assets`;
+  const cardProject = `${assets}/${projectRelPath}`;
 
   useEffect(() => {
     if (window.cep) subscribeBackgroundColor(setBgColor);
@@ -71,6 +75,7 @@ export const App = () => {
                 setDeck={setDeck}
                 cardNumber={cardNumber}
                 setCardNumber={setCardNumber}
+                cardProject={cardProject}
               />
 
               <ActionsPanel />

@@ -172,7 +172,10 @@ export const handleChangeCard = (deckName: string, card: number, cardName: strin
   app.endUndoGroup()
 }
 
-export const handleAddCard = (deckName: string, card: number, cardName: string) => {
+export const handleAddCard = (deckName: string, card: number, cardName: string, filePath: string) => {
+
+  importFilesAndCompsForCards(filePath, cardsFolderName)
+  
   app.beginUndoGroup("Add Card to precomp")
   try {
     addCardToPrecomp(deckName, card, cardName)
