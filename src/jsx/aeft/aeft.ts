@@ -26,7 +26,7 @@ import { applyCardsLayoutFromObject, getActiveCompLayoutData, CardsLayoutJson, g
 import { alertError } from "./errors";
 
 const cardsFolderName = "Disney Solitaire Cards"
-const precompRenderer = "ADBE Calder"
+// const precompRenderer = "ADBE Calder"
 
 export const getCompResolution = () => {
   return getActiveCompResolution();
@@ -87,10 +87,10 @@ export const handleSetTableauLayer = () => {
 }
 
 export const handleApplyJump = (presetPath: string) => {
-  const thisComp = getActiveComp()
-  if (thisComp.renderer !== precompRenderer) {
-    thisComp.renderer = precompRenderer
-  }
+  // const thisComp = getActiveComp()
+  // if (thisComp.renderer !== precompRenderer) {
+  //   thisComp.renderer = precompRenderer
+  // }
 
   app.beginUndoGroup("Apply Jump")
   try {
