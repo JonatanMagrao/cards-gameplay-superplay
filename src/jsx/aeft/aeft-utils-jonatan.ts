@@ -127,7 +127,8 @@ export const readJsonFile = (jsonPath: string) => {
   try {
     return JSON.parse(fileContent);
   } catch (e) {
-    alertError("Invalid JSON:\n" + jsonPath + "\n\n" + e.toString());
+    //@ts-ignore
+    alert("Invalid JSON:\n" + jsonPath + "\n\n" + e.toString());
     return null;
   }
 }
@@ -171,7 +172,15 @@ export const distributeLayers = (xStep: number, yStep: number, reverse: boolean)
 
 };
 
-export const getLayerMarkersMetadata = (layer: Layer): [] => {
+export type LayerMarkerMeta = {
+  layer: Layer;
+  time: number;
+  label: number;
+  comment: string;
+  duration: number;
+}
+
+export const getLayerMarkersMetadata = (layer: Layer): LayerMarkerMeta[] => {
   const markerProp = layer.property("ADBE Marker") as Property
   const markerData = []
 

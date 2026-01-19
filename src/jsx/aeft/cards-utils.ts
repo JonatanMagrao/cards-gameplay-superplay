@@ -181,3 +181,78 @@ export const namedMarkerExists = (layer: Layer, markerComment: string) => {
 
   return false;
 }
+
+export const findCardLayers = () => {
+  const thisComp = getActiveComp()
+  const cardsList: Layer[] = []
+
+  forEachLayer(thisComp, camada => {
+    const tagsList = ["TARGET", "STOCK", "TABLEAU"]
+    const pattern = tagsList.join("|")
+    const tagPattern = new RegExp(`\\[(${pattern})\\]`, "g")
+    if (tagPattern.exec(camada.name)) {
+      cardsList.push(camada)
+    }
+  })
+
+  return cardsList
+
+}
+
+export const removePropertyKeyframesByLabel = (prop: Property, labelColor: number) => {
+  const keyData: PropertyKeyframesMetadata = getPropertyKeyframesMetadata(prop)
+  for (let i = keyData.keys.length - 1; i >= 0; i--) {
+    const { keyIndex, keyLabel } = keyData.keys[i];
+    if (keyLabel === labelColor) {
+      prop.removeKey(keyIndex);
+    }
+  }
+}
+
+export type PropertyKeyframeMeta = {
+  keyIndex: number;
+  keyTime: number;
+  keyValue: any;      // pode variar MUITO (number, array, MarkerValue, Shape, TextDocument...)
+  keyLabel: number;
+};
+
+export type PropertyKeyframesMetadata = {
+  camada: Layer;      // layer do qual a property pertence
+  propName: string;
+  keys: PropertyKeyframeMeta[];
+};
+
+export type AEProperty = Property & {
+  keyLabel: (keyIndex: number) => number;
+};
+
+export const getPropertyKeyframesMetadata = (layerProp: Property) => {
+  const prop = layerProp as AEProperty;
+
+  const keyData = {
+    camada: prop.propertyGroup(prop.propertyDepth) as Layer,
+    propName: prop.name,
+    keys: [] as any[],
+  };
+
+  for (let i = 1; i <= prop.numKeys; i++) {
+    const keyTime = prop.keyTime(i);
+    const keyIndex = prop.nearestKeyIndex(keyTime);
+    const keyLabel = prop.keyLabel(i);
+    const keyValue = prop.keyValue(i);
+
+    keyData.keys.push({ keyIndex, keyTime, keyValue, keyLabel });
+  }
+
+  return keyData;
+};
+
+export const filterLayerMarkersByLabelAndComment = (markerData: any, markerLabel: number, markerComment: string) => {
+  const filteredMarkers = []
+  for (let marker of markerData) {
+    if (marker.label === markerLabel && marker.comment === markerComment) {
+      filteredMarkers.push(marker)
+    }
+  }
+  return filteredMarkers
+}

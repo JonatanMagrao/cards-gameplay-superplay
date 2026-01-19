@@ -3,9 +3,6 @@ import { getLayerMarkersMetadata } from "./aeft-utils-jonatan";
 import { posPropPath, scalePropPath, zRotPropPath } from "./actions";
 import { getLayerProp } from "./aeft-utils-jonatan";
 
-// ===========================
-// Types
-// ===========================
 export type CardLayout = {
   deckName: string;
   position: [number, number] | [number, number, number];
@@ -24,15 +21,14 @@ export type CardsLayoutJson = {
   cards: CardLayout[];
 };
 
-// ===========================
-// Deck cache
-// ===========================
+//@ts-ignore
 const _deckItemCache: Record<string, ProjectItem> = {};
 
 export const resetDeckCache = (): void => {
   for (const k in _deckItemCache) delete _deckItemCache[k];
 };
 
+//@ts-ignore
 export const getDeckItem = (deckName: string): ProjectItem | null => {
   const cached = _deckItemCache[deckName];
   if (cached) return cached;
@@ -43,9 +39,6 @@ export const getDeckItem = (deckName: string): ProjectItem | null => {
   return deckItem ?? null;
 };
 
-// ===========================
-// Shared helpers (CORRIGIDO PARA ES3)
-// ===========================
 export const roundToDecimals = (
   value: number | number[],
   decimals: number = 3
@@ -63,9 +56,6 @@ export const roundToDecimals = (
   return Math.round(value * factor) / factor;
 };
 
-// ===========================
-// APPLY (Import)
-// ===========================
 export const createCardLayersFromLayout = (
   cardsLayout: CardLayout[],
   comp: CompItem
@@ -165,9 +155,6 @@ export const applyCardsLayoutFromObject = (layoutJson: CardsLayoutJson): string 
   return "OK";
 };
 
-// ===========================
-// EXPORT (Save)
-// ===========================
 export const isCardLayerByName = (layerName: string): boolean => {
   return /\[(TABLEAU|TARGET|STOCK)\]/.test(layerName);
 };
@@ -217,6 +204,7 @@ export const extractCardsLayoutFromLayers = (layers: AVLayer[], decimals: number
       }
     }
 
+    //@ts-ignore
     const src = (layer as any).source as ProjectItem | undefined;
     const deckName = src ? src.name : "";
 

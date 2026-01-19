@@ -199,7 +199,7 @@ export const LayoutsPanel: React.FC<Props> = ({
 
     // 5. Overwrite
     if (fs.existsSync(finalFilePath)) {
-      const overwrite = confirm(`File exists: ${fileName}\nOverwrite?`);
+      const overwrite = confirm(`Level: ${levelFolderName.replace("lvl_", "")}\nResolution: ${fileName.replace(".json", "")}\nOverwrite?`);
       if (!overwrite) return;
     }
 

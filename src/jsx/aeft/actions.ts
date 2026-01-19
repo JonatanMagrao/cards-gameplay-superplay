@@ -1,7 +1,16 @@
 import { raise, alertError } from "./errors"
 import { expPos, expRot } from "../utils/expressions"
 import { getActiveComp, forEachLayer, getItemByName } from "./aeft-utils"
-import { getDeepestZ, setKeyframeToLayer, getTargetLayer, cardsEffectExist, targetExist, namedMarkerExists } from "./cards-utils"
+import {
+  getDeepestZ,
+  setKeyframeToLayer,
+  getTargetLayer,
+  targetExist,
+  namedMarkerExists,
+  findCardLayers,
+  removePropertyKeyframesByLabel,
+  filterLayerMarkersByLabelAndComment
+} from "./cards-utils"
 import {
   frameDuration,
   getLayerProp,
@@ -9,7 +18,10 @@ import {
   selectAllSelectedLayers,
   deselectAllSelectedLayers,
   forEachSelectedLayer,
-  fxExists
+  fxExists,
+  removeFx,
+  LayerMarkerMeta,
+  getLayerMarkersMetadata
 } from "./aeft-utils-jonatan"
 
 
@@ -134,7 +146,6 @@ export const applyJumpOnSelectedlayers = (presetPath: string) => {
     alertError(e, 132, "applyJumpOnSelectedlayers", "actions.ts")
   }
 }
-
 
 // ============================== STOCK CARD ACTIONS
 
@@ -311,7 +322,6 @@ export const flipStockCards = (stockLayerToFlip?: Layer) => {
 
 }
 
-
 // ============================== CARDS MODIFIERS
 
 export const setTargetLayer = () => {
@@ -476,4 +486,86 @@ export const addCardToPrecomp = (deckName: string, card: number, cardName: strin
   } catch (e) {
     alertError(e, 479, "AddCardToPrecomp", "actions.ts")
   }
+}
+
+export const resetCardsAnimation = (presetName: string) => {
+
+  try {
+
+    const cardsList: Layer[] = findCardLayers()
+
+    for (let layer of cardsList) {
+      var zPosProp = getLayerProp(layer, zRotPropPath)
+      var posProp = getLayerProp(layer, posPropPath)
+      var scaleProp = getLayerProp(layer, scalePropPath)
+      var flipCardProp = getLayerProp(layer, flipCardEssPropPath)
+
+      posProp.expression = ""
+      zPosProp.expression = ""
+      // posProp.expressionEnabled = false
+      // zPosProp.expressionEnabled = false
+
+      const effectExists = fxExists(layer, presetName)
+      if (effectExists) { removeFx(layer, presetName) }
+
+      removePropertyKeyframesByLabel(posProp, 9)
+      removePropertyKeyframesByLabel(posProp, 2)
+      removePropertyKeyframesByLabel(scaleProp, 9)
+      removePropertyKeyframesByLabel(flipCardProp, 2)
+      removePropertyKeyframesByLabel(zPosProp, 9)
+      removePropertyKeyframesByLabel(flipCardProp, 9)
+    }
+  } catch (e) {
+    alertError(e, 240, "resetCardsAnimation", "aeft.ts")
+  }
+
+}
+
+export const restoreCardsAnimation = (presetPath: string, presetName: string) => {
+  const thisComp = getActiveComp()
+  const cardsLayers = findCardLayers()
+
+  const markers: LayerMarkerMeta[] = []
+
+  for (let i = 0; i < cardsLayers.length; i++) {
+    const camada = cardsLayers[i]
+    const layerMarkers: LayerMarkerMeta[] = getLayerMarkersMetadata(camada)
+
+    // only layers cards that have markers
+    if (layerMarkers.length > 0) {
+      markers.push(...layerMarkers)
+    }
+
+  }
+  // retorna todos os dados de marcadores
+
+  const greenJumpMarkers = filterLayerMarkersByLabelAndComment(markers, keyLabel.green, "Jump")
+  const yellowFlipMarkers = filterLayerMarkersByLabelAndComment(markers, keyLabel.yellow, "Flip")
+  const yellowFlipStockMarkers = filterLayerMarkersByLabelAndComment(markers, keyLabel.yellow, "Flip Stock")
+
+  const cardsMarkers = [...greenJumpMarkers, ...yellowFlipMarkers, ...yellowFlipStockMarkers]
+  cardsMarkers.sort((a, b) => a.time - b.time)
+
+  // aqui vem a aplicação
+  const targetLayer = getTargetLayer() as Layer
+
+  deselectAllSelectedLayers(cardsMarkers)
+  for (let card of cardsMarkers) {
+    if (card.comment === "Jump") {
+
+      card.layer.selected = true
+      if (!fxExists(card.layer, presetName)) card.layer.applyPreset(new File(presetPath))
+      jumpPos(card.time, card.layer, targetLayer)
+      jumpScale(card.time, card.layer)
+      jumpRotation(card.time, card.layer)
+      card.layer.selected = false
+
+    } else if (card.comment === "Flip") {
+      flipCard(card.time, card.layer)
+    } else if (card.comment === "Flip Stock") {
+      thisComp.time = card.time
+      flipStockCards(card.layer)
+    }
+  }
+
 }

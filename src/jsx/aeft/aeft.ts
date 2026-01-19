@@ -1,4 +1,4 @@
-import { getTargetLayer, importFilesAndCompsForCards, } from "./cards-utils"
+import { importFilesAndCompsForCards, } from "./cards-utils"
 import {
   applyJumpOnSelectedlayers,
   applyFlipCardOnSelectedlayers,
@@ -8,20 +8,12 @@ import {
   duplicateCards,
   changeCard,
   flipStockCards,
-  zRotPropPath,
-  posPropPath,
-  scalePropPath,
-  flipCardEssPropPath,
-  markerPropPath,
-  keyLabel,
-  jumpPos,
-  jumpScale,
-  jumpRotation,
-  flipCard,
-  addCardToPrecomp
+  addCardToPrecomp,
+  resetCardsAnimation,
+  restoreCardsAnimation
 } from "./actions";
-import { getActiveComp, forEachLayer } from "./aeft-utils";
-import { getLayerProp, distributeLayers, getLayerMarkersMetadata, deselectAllSelectedLayers, fxExists, removeFx } from "./aeft-utils-jonatan";
+import { getActiveComp } from "./aeft-utils";
+import { distributeLayers, } from "./aeft-utils-jonatan";
 import { applyCardsLayoutFromObject, getActiveCompLayoutData, CardsLayoutJson, getActiveCompResolution, } from "./game-levels-utils";
 import { alertError } from "./errors";
 
@@ -41,6 +33,7 @@ export const handleApplyCardsLayout = (layoutData: CardsLayoutJson, filePath: st
   try {
     return applyCardsLayoutFromObject(layoutData);
   } catch (e) {
+    //@ts-ignore
     alert("Error in AE: " + e.toString());
     return "ERROR";
   } finally {
@@ -53,6 +46,7 @@ export const handleSaveCardsLayout = (levelId: string) => {
     // Apenas retorna os dados. O React salva.
     return getActiveCompLayoutData(levelId);
   } catch (e) {
+    //@ts-ignore
     return JSON.stringify({ error: e.toString() });
   }
 };
@@ -184,162 +178,28 @@ export const handleAddCard = (deckName: string, card: number, cardName: string, 
   try {
     addCardToPrecomp(deckName, card, cardName)
   } catch (e) {
-    alert(e)
+    alertError(e, 179, "handleAddCard", "aeft.ts")
   } finally {
     app.endUndoGroup()
   }
 }
 
-const findCardLayers = () => {
-  const thisComp = getActiveComp()
-  const cardsList: Layer[] = []
-
-  forEachLayer(thisComp, camada => {
-    const tagsList = ["TARGET", "STOCK", "TABLEAU"]
-    const pattern = tagsList.join("|")
-    const tagPattern = new RegExp(`\\[(${pattern})\\]`, "g")
-    if (tagPattern.exec(camada.name)) {
-      cardsList.push(camada)
-    }
-  })
-
-  return cardsList
-
-}
-
-export const resetCardsAnimation = () => {
-
-  const cardsList: Layer[] = findCardLayers()
-
+export const handleResetCardsAnimation = () => {
   app.beginUndoGroup("Reset Cards Animation")
-  for (let layer of cardsList) {
-    var zPosProp = getLayerProp(layer, zRotPropPath)
-    var posProp = getLayerProp(layer, posPropPath)
-    var scaleProp = getLayerProp(layer, scalePropPath)
-    var flipCardProp = getLayerProp(layer, flipCardEssPropPath)
-
-
-    posProp.expression = ""
-    zPosProp.expression = ""
-    // posProp.expressionEnabled = false
-    // zPosProp.expressionEnabled = false
-
-    const effectExists = fxExists(layer, presetName)
-    if (effectExists) { removeFx(layer, presetName) }
-
-    removePropKeyByLabel(posProp, 9)
-    removePropKeyByLabel(posProp, 2)
-    removePropKeyByLabel(scaleProp, 9)
-    removePropKeyByLabel(flipCardProp, 2)
-    removePropKeyByLabel(zPosProp, 9)
-    removePropKeyByLabel(flipCardProp, 9)
-  }
+  resetCardsAnimation(presetName)
   app.endUndoGroup()
-
 }
 
-const getPropKeys = (layerProp: Property) => {
-  const keyData = {
-    camada: layerProp.propertyGroup(layerProp.propertyDepth),
-    propName: layerProp.name,
-    keys: []
-  }
-  for (let i = 1; i <= layerProp.numKeys; i++) {
-    const keyTime = layerProp.keyTime(i)
-    const keyIndex = layerProp.nearestKeyIndex(keyTime)
-    const keyLabel = layerProp.keyLabel(i)
-    const keyValue = layerProp.keyValue(i)
-    keyData.keys.push({ keyIndex, keyTime, keyValue, keyLabel })
-  }
-
-  return keyData
-}
-
-const removePropKeyByLabel = (prop: Property, labelColor: number) => {
-  const keyData = getPropKeys(prop)
-  for (let i = keyData.keys.length - 1; i >= 0; i--) {
-    const { keyIndex, keyLabel } = keyData.keys[i];
-    if (keyLabel === labelColor) {
-      prop.removeKey(keyIndex);
-    }
-  }
-}
-
-export const restoreCardsAnimation = (presetPath: string) => {
-  const thisComp = getActiveComp()
-  const cardsLayers = findCardLayers()
-
-  // função para recuperar todos os marcadores
-  const markers = []
-
-  for (let i = 0; i < cardsLayers.length; i++) {
-    const camada = cardsLayers[i]
-    const layerMarker = camada.property(markerPropPath) as Property
-    // only layers cards that have markers
-    if (layerMarker.numKeys > 0) {
-      markers.push(...getLayerMarkersData(layerMarker))
-    }
-
-  }
-  // retorna todos os dados de marcadores
-
-  const greenJumpMarkers = filterLayerMarkersByLabelAndComment(markers, keyLabel.green, "Jump")
-  const yellowFlipMarkers = filterLayerMarkersByLabelAndComment(markers, keyLabel.yellow, "Flip")
-  const yellowFlipStockMarkers = filterLayerMarkersByLabelAndComment(markers, keyLabel.yellow, "Flip Stock")
-
-  const cardsMarkers = [...greenJumpMarkers, ...yellowFlipMarkers, ...yellowFlipStockMarkers]
-  cardsMarkers.sort((a, b) => a.markerTime - b.markerTime)
-
-  // aqui vem a aplicação
-  const targetLayer = getTargetLayer() as Layer
+export const handleRestoreCardsAnimation = (presetPath: string) => {
   app.beginUndoGroup("Restore Cards Animation by Layout")
-  deselectAllSelectedLayers(cardsMarkers)
-  for (let card of cardsMarkers) {
-    if (card.comment === "Jump") {
-
-      card.layer.selected = true
-      if (!fxExists(card.layer, presetName)) card.layer.applyPreset(new File(presetPath))
-      jumpPos(card.markerTime, card.layer, targetLayer)
-      jumpScale(card.markerTime, card.layer)
-      jumpRotation(card.markerTime, card.layer)
-      card.layer.selected = false
-
-    } else if (card.comment === "Flip") {
-      flipCard(card.markerTime, card.layer)
-    } else if (card.comment === "Flip Stock") {
-      thisComp.time = card.markerTime
-      flipStockCards(card.layer)
-    }
-  }
+  restoreCardsAnimation(presetPath, presetName)
   app.endUndoGroup()
-
 }
 
-const filterLayerMarkersByLabelAndComment = (markerData: any, markerLabel: number, markerComment: string) => {
-  const filteredMarkers = []
-  for (let marker of markerData) {
-    if (marker.label === markerLabel && marker.comment === markerComment) {
-      filteredMarkers.push(marker)
-    }
-  }
-  return filteredMarkers
-}
 
-const getLayerMarkersData = (prop: Property) => {
-  const markerData = []
 
-  const layer = prop.propertyGroup(prop.propertyDepth)
-  for (let k = 1; k <= prop.numKeys; k++) {
-    const markerValue = prop.keyValue(k)
-    const { comment, label } = markerValue
-    const markerTime = prop.keyTime(k)
-    const markersData = { layer, markerTime, comment, label }
-    markerData.push(markersData)
-  }
 
-  return markerData
 
-}
 
 
 

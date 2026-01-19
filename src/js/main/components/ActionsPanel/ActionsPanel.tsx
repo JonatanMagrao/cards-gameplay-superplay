@@ -24,9 +24,9 @@ export const ActionsPanel: React.FC<Props> = ({
   const handleSetTableauLayer = async () =>
     await evalTS("handleSetTableauLayer");
 
-  const resetCardsAnimation = async () => await evalTS("resetCardsAnimation");
+  const resetCardsAnimation = async () => await evalTS("handleResetCardsAnimation");
   const restoreCardsAnimation = async () =>
-    await evalTS("restoreCardsAnimation", presetPath);
+    await evalTS("handleRestoreCardsAnimation", presetPath);
 
   const handleImportFilesAndComps = async () =>
     await evalTS("handleImportFilesAndComps", cardProject);
