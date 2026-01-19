@@ -106,13 +106,13 @@ export const ActionsPanel: React.FC<Props> = ({
           Restore
         </button>
 
-        <button
+        {/* <button
           onClick={handleImportFilesAndComps}
           style={{ border: "1px solid #677DE0" }}
           title={"Import Decks"}
         >
           Import
-        </button>
+        </button> */}
       </div>
     </section>
   );

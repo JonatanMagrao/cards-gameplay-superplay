@@ -67,13 +67,16 @@ export const getItemByName = (name: string): CompItem | null => {
   return null;
 };
 
-export const findProjectItemByName = (itemName: string) : Item | null => {
+export const findProjectItemByName = (itemName: string, advice: boolean = true) : Item | null => {
   var project = app.project;
   for (var i = 1; i <= project.numItems; i++) {
     var projectItem = project.item(i);
     if (projectItem && projectItem.name === itemName) return projectItem;
   }
-  alert(`Project Item "${itemName}" not found`);
+  if(advice){
+    alert(`Project Item "${itemName}" not found`);
+  }
+  
   return null;
 }
 

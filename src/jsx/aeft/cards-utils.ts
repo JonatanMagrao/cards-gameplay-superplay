@@ -1,7 +1,13 @@
-import { getActiveComp, forEachLayer } from "./aeft-utils";
+import { getActiveComp, forEachLayer, findProjectItemByName } from "./aeft-utils";
 import { getLayerProp, getKeyIndexAtTime } from "./aeft-utils-jonatan";
 
 export const importFilesAndCompsForCards = (filePath: string, cardsFolderName: string) => {
+
+  const projectFolder = findProjectItemByName("Disney Solitaire Cards", false)
+  if(projectFolder){
+    return
+  }
+
   const projectPath = new File(filePath)
   const importProject = new ImportOptions(projectPath)
   const folder = app.project.importFile(importProject)
