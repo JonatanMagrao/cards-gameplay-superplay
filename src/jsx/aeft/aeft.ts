@@ -1,4 +1,4 @@
-import { getTargetLayer, importFilesAndCompsForCards, } from "./cards-utils"
+import { cardsEffectExist, getTargetLayer, importFilesAndCompsForCards, } from "./cards-utils"
 import {
   applyJumpOnSelectedlayers,
   applyFlipCardOnSelectedlayers,
@@ -21,7 +21,7 @@ import {
   addCardToPrecomp
 } from "./actions";
 import { getActiveComp, forEachLayer } from "./aeft-utils";
-import { getLayerProp, distributeLayers } from "./aeft-utils-jonatan";
+import { getLayerProp, distributeLayers, getLayerMarkersMetadata } from "./aeft-utils-jonatan";
 import { applyCardsLayoutFromObject, getActiveCompLayoutData, CardsLayoutJson, getActiveCompResolution, } from "./game-levels-utils";
 import { alertError } from "./errors";
 
@@ -33,7 +33,7 @@ export const getCompResolution = () => {
 }
 
 export const handleApplyCardsLayout = (layoutData: CardsLayoutJson, filePath: string) => {
-  
+
   importFilesAndCompsForCards(filePath, cardsFolderName)
 
   app.beginUndoGroup("Apply Cards Layout");
@@ -217,10 +217,10 @@ export const resetCardsAnimation = () => {
     var scaleProp = getLayerProp(layer, scalePropPath)
     var flipCardProp = getLayerProp(layer, flipCardEssPropPath)
 
-    // posProp.expression = ""
-    // zPosProp.expression = ""
-    posProp.expressionEnabled = false
-    zPosProp.expressionEnabled = false
+    posProp.expression = ""
+    zPosProp.expression = ""
+    // posProp.expressionEnabled = false
+    // zPosProp.expressionEnabled = false
     removePropKeyByLabel(posProp, 9)
     removePropKeyByLabel(posProp, 2)
     removePropKeyByLabel(scaleProp, 9)

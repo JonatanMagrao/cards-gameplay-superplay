@@ -39,7 +39,7 @@ export const ActionsPanel: React.FC<Props> = ({
       <div className="button-row">
         <button
           onClick={applyFlipCard}
-          style={{border:"1px solid #E8920D"}}
+          style={{ border: "1px solid #E8920D" }}
           title={"Flip Card"}
         >
           Flip

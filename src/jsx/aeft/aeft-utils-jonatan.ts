@@ -170,3 +170,30 @@ export const distributeLayers = (xStep: number, yStep: number, reverse: boolean)
   }
 
 };
+
+export const getLayerMarkersMetadata = (layer: Layer) => {
+    const markerProp = layer.property("ADBE Marker") as Property
+    const markerData = []
+    
+    for(let i = 1; i <= markerProp.numKeys; i++){
+
+        const thisMarkerValue = markerProp.keyValue(i)
+        
+        const markerTime = markerProp.keyTime(i)
+        const markerComment = thisMarkerValue.comment;
+        const markerLabel = thisMarkerValue.label;
+        const markerDuration = thisMarkerValue.duration;
+        const markerLayer = layer //! não retornar para o front! layer aqui é um objeto. dará erro
+        
+        markerData.push({
+            layer:markerLayer,
+            time:markerTime,
+            label:markerLabel,
+            comment:markerComment,
+            duration:markerDuration
+        })
+        
+    }
+    
+    return markerData
+}

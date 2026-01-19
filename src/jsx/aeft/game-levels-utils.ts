@@ -1,4 +1,5 @@
 import { findProjectItemByName, getActiveComp } from "./aeft-utils";
+import { getLayerMarkersMetadata } from "./aeft-utils-jonatan";
 
 // ===========================
 // Types
@@ -12,6 +13,7 @@ export type CardLayout = {
   isTurned: boolean;
   label: number;
   card: number;
+  markers: [number, number, string][];
 };
 
 export type CardsLayoutJson = {
@@ -42,14 +44,17 @@ export const getDeckItem = (deckName: string): ProjectItem | null => {
 // ===========================
 // Shared helpers (CORRIGIDO PARA ES3)
 // ===========================
-export const roundToDecimals = (value: number | number[], decimals: number = 3): number | number[] => {
+export const roundToDecimals = (
+  value: number | number[],
+  decimals: number = 3
+): number | number[] => {
   const factor = Math.pow(10, decimals);
-  
+
   // CORREÇÃO AQUI: Removemos .map() e Array.isArray()
   if (value instanceof Array) {
     const rounded: number[] = [];
     for (let i = 0; i < value.length; i++) {
-        rounded.push(Math.round(value[i] * factor) / factor);
+      rounded.push(Math.round(value[i] * factor) / factor);
     }
     return rounded;
   }
@@ -59,7 +64,10 @@ export const roundToDecimals = (value: number | number[], decimals: number = 3):
 // ===========================
 // APPLY (Import)
 // ===========================
-export const createCardLayersFromLayout = (cardsLayout: CardLayout[], comp: CompItem): void => {
+export const createCardLayersFromLayout = (
+  cardsLayout: CardLayout[],
+  comp: CompItem
+): void => {
   let previousLayer: AVLayer | null = null;
 
   for (let i = 0; i < cardsLayout.length; i++) {
@@ -84,18 +92,40 @@ export const createCardLayersFromLayout = (cardsLayout: CardLayout[], comp: Comp
     cardLayer.label = cardLayout.label;
     cardLayer.threeDLayer = true;
 
+    // Markers (import)
+    try {
+      if (cardLayout.markers && cardLayout.markers.length > 0) {
+        const markerProp = cardLayer.property("ADBE Marker") as any;
+        if (markerProp) {
+          for (let m = 0; m < cardLayout.markers.length; m++) {
+            const tuple = cardLayout.markers[m];
+            if (!tuple || tuple.length !== 3) continue;
+
+            const markerTime = tuple[0];
+            const markerLabel = tuple[1];
+            const markerComment = tuple[2];
+
+            const mv = new MarkerValue(markerComment);
+            mv.label = markerLabel;
+
+            markerProp.setValueAtTime(markerTime, mv);
+          }
+        }
+      }
+    } catch (_) {}
+
     // Custom overrides
     try {
-        const overrides = cardLayer.property("ADBE Layer Overrides") as PropertyGroup;
-        if (overrides) {
-            const cardOption = overrides.property("Card Option") as Property;
-            const cardTurned = overrides.property("Flip Card") as Property;
-            
-            if (cardOption) cardOption.setValue(cardLayout.card);
-            if (cardTurned) cardTurned.setValue(cardLayout.isTurned ? 0 : 100);
-        }
-    } catch(e) {
-        // Ignora se não tiver override
+      const overrides = cardLayer.property("ADBE Layer Overrides") as PropertyGroup;
+      if (overrides) {
+        const cardOption = overrides.property("Card Option") as Property;
+        const cardTurned = overrides.property("Flip Card") as Property;
+
+        if (cardOption) cardOption.setValue(cardLayout.card);
+        if (cardTurned) cardTurned.setValue(cardLayout.isTurned ? 0 : 100);
+      }
+    } catch (e) {
+      // Ignora se não tiver override
     }
 
     // Stacking
@@ -151,15 +181,29 @@ export const extractCardsLayoutFromLayers = (layers: AVLayer[], decimals: number
 
     let isTurned = false;
     let cardFaceIndex = 0;
-    
+
     try {
       const overrides = layer.property("ADBE Layer Overrides") as unknown as PropertyGroup;
       const flipCard = (overrides as any).property("Flip Card") as Property;
       const cardOption = (overrides as any).property("Card Option") as Property;
-      
+
       if (flipCard) isTurned = flipCard.value === 0;
       if (cardOption) cardFaceIndex = Number(cardOption.value) || 0;
     } catch (_) {}
+
+    const markersRaw = getLayerMarkersMetadata(layer) as any[];
+    const markers: [number, number, string][] = [];
+
+    if (markersRaw && markersRaw.length > 0) {
+      for (let m = 0; m < markersRaw.length; m++) {
+        const item = markersRaw[m];
+        markers.push([
+          Number(item.time) || 0,
+          Number(item.label) || 0,
+          String(item.comment || "")
+        ]);
+      }
+    }
 
     const src = (layer as any).source as ProjectItem | undefined;
     const deckName = src ? src.name : "";
@@ -173,6 +217,7 @@ export const extractCardsLayoutFromLayers = (layers: AVLayer[], decimals: number
       position: position as any,
       scale: scale as any,
       rotation,
+      markers
     });
   }
 
@@ -202,7 +247,7 @@ export const getActiveCompLayoutData = (levelId: string): string => {
 };
 
 export const getActiveCompResolution = (): string => {
-    const comp = getActiveComp?.() as CompItem | null;
-    if (!comp) return "";
-    return `${comp.width}x${comp.height}`;
-}
+  const comp = getActiveComp?.() as CompItem | null;
+  if (!comp) return "";
+  return `${comp.width}x${comp.height}`;
+};
