@@ -4,7 +4,7 @@ import { getLayerProp, getKeyIndexAtTime } from "./aeft-utils-jonatan";
 export const importFilesAndCompsForCards = (filePath: string, cardsFolderName: string) => {
 
   const projectFolder = findProjectItemByName("Disney Solitaire Cards", false)
-  if(projectFolder){
+  if (projectFolder) {
     return
   }
 
@@ -177,3 +177,22 @@ export const setKeyframeToLayer = (
   layerProp.setLabelAtKey(keyIndex, label)
 }
 
+export const namedMarkerExists = (layer: Layer, markerComment: string) => {
+  if (!layer) return false;
+
+  const markerProp = layer.property("ADBE Marker") as Property;
+  if (!markerProp || markerProp.numKeys < 1) return false;
+
+  const target = String(markerComment || "").toLowerCase();
+
+  for (let i = 1; i <= markerProp.numKeys; i++) {
+    const mv = markerProp.keyValue(i);
+    const comment = String(mv.comment || "").toLowerCase();
+
+    if (comment === target) {
+      return true;
+    }
+  }
+
+  return false;
+}

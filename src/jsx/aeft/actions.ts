@@ -1,7 +1,7 @@
 import { raise, alertError } from "./errors"
 import { expPos, expRot } from "../utils/expressions"
 import { getActiveComp, forEachLayer, getItemByName } from "./aeft-utils"
-import { getDeepestZ, setKeyframeToLayer, getTargetLayer, cardsEffectExist, targetExist } from "./cards-utils"
+import { getDeepestZ, setKeyframeToLayer, getTargetLayer, cardsEffectExist, targetExist, namedMarkerExists } from "./cards-utils"
 import {
   frameDuration,
   getLayerProp,
@@ -121,10 +121,12 @@ export const applyJumpOnSelectedlayers = (presetPath: string) => {
 
     forEachSelectedLayer(thisComp, camada => {
       if (!cardsEffectExist(camada)) camada.applyPreset(new File(presetPath))
+      if (namedMarkerExists(camada, "Jump")) return
+
       jumpPos(thisTime, camada, targetLayer)
       jumpScale(thisTime, camada)
       jumpRotation(thisTime, camada)
-      addMarkerToLayer(camada, thisTime, { title: "Jump", label: 9 })
+      addMarkerToLayer(camada, thisTime, { title: "Jump", label: keyLabel.green })
     })
 
   } catch (e) {
@@ -472,5 +474,5 @@ export const addCardToPrecomp = (deckName: string, card: number, cardName: strin
 
   } catch (e) {
     alertError(e, 479, "AddCardToPrecomp", "actions.ts")
-  } 
+  }
 }
