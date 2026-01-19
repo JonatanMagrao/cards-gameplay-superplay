@@ -4,7 +4,7 @@ import { alertError } from "./errors";
 interface MarkerProps {
   title?: string,
   label?: number,
-  duration?: number 
+  duration?: number
 }
 
 export const forEachSelectedLayer = (
@@ -109,27 +109,27 @@ export const addMarkerToLayer = (myLayer: Layer, markerTime: number, markerProps
 
 }
 
-export const readJsonFile = (jsonPath:string) => {
-    const fileRef = new File(jsonPath);
+export const readJsonFile = (jsonPath: string) => {
+  const fileRef = new File(jsonPath);
 
-    if (!fileRef.exists) {
-        alert("JSON file not found:\n" + jsonPath);
-        return null;
-    }
-    if (!fileRef.open("r")) {
-        alert("Could not open JSON file:\n" + fileRef.error);
-        return null;
-    }
+  if (!fileRef.exists) {
+    alert("JSON file not found:\n" + jsonPath);
+    return null;
+  }
+  if (!fileRef.open("r")) {
+    alert("Could not open JSON file:\n" + fileRef.error);
+    return null;
+  }
 
-    const fileContent = fileRef.read();
-    fileRef.close();
+  const fileContent = fileRef.read();
+  fileRef.close();
 
-    try {
-        return JSON.parse(fileContent);
-    } catch (e) {
-        alertError("Invalid JSON:\n" + jsonPath + "\n\n" + e.toString());
-        return null;
-    }
+  try {
+    return JSON.parse(fileContent);
+  } catch (e) {
+    alertError("Invalid JSON:\n" + jsonPath + "\n\n" + e.toString());
+    return null;
+  }
 }
 
 export const distributeLayers = (xStep: number, yStep: number, reverse: boolean) => {
@@ -140,7 +140,7 @@ export const distributeLayers = (xStep: number, yStep: number, reverse: boolean)
 
   // 1. Converter selectedLayers para Array padrão
   const selectedLayers: Layer[] = [];
-  
+
   // CORREÇÃO AQUI: O índice deve ser 'i', não 'i + 1'
   for (let i = 0; i < thisComp.selectedLayers.length; i++) {
     selectedLayers.push(thisComp.selectedLayers[i]);
@@ -162,7 +162,7 @@ export const distributeLayers = (xStep: number, yStep: number, reverse: boolean)
     // Posição = Âncora + (Passo * Índice Relativo)
     const newX = anchorPos[0] + (xStep * i);
     const newY = anchorPos[1] + (yStep * i);
-    
+
     // Mantém Z original
     const currentZ = (layer.transform.position.value as number[])[2];
 
@@ -171,29 +171,56 @@ export const distributeLayers = (xStep: number, yStep: number, reverse: boolean)
 
 };
 
-export const getLayerMarkersMetadata = (layer: Layer) => {
-    const markerProp = layer.property("ADBE Marker") as Property
-    const markerData = []
-    
-    for(let i = 1; i <= markerProp.numKeys; i++){
+export const getLayerMarkersMetadata = (layer: Layer): [] => {
+  const markerProp = layer.property("ADBE Marker") as Property
+  const markerData = []
 
-        const thisMarkerValue = markerProp.keyValue(i)
-        
-        const markerTime = markerProp.keyTime(i)
-        const markerComment = thisMarkerValue.comment;
-        const markerLabel = thisMarkerValue.label;
-        const markerDuration = thisMarkerValue.duration;
-        const markerLayer = layer //! não retornar para o front! layer aqui é um objeto. dará erro
-        
-        markerData.push({
-            layer:markerLayer,
-            time:markerTime,
-            label:markerLabel,
-            comment:markerComment,
-            duration:markerDuration
-        })
-        
+  for (let i = 1; i <= markerProp.numKeys; i++) {
+
+    const thisMarkerValue = markerProp.keyValue(i)
+
+    const markerTime = markerProp.keyTime(i)
+    const markerComment = thisMarkerValue.comment;
+    const markerLabel = thisMarkerValue.label;
+    const markerDuration = thisMarkerValue.duration;
+    const markerLayer = layer //! não retornar para o front! layer aqui é um objeto. dará erro
+
+    markerData.push({
+      layer: markerLayer,
+      time: markerTime,
+      label: markerLabel,
+      comment: markerComment,
+      duration: markerDuration
+    })
+
+  }
+
+  return markerData
+}
+
+export const fxExists = (camada: Layer, fxName: string) => {
+  const effects = camada.property("ADBE Effect Parade") as unknown as PropertyGroup
+  const numEffects = effects.numProperties;
+
+  for (let i = 1; i <= numEffects; i++) {
+    const layerEffect = effects.property(i);
+    if (layerEffect.name === fxName) {
+      return true
     }
-    
-    return markerData
+  }
+
+  return false
+}
+
+export const removeFx = (camada: Layer, fxName: string) => {
+  const effects = camada.property("ADBE Effect Parade") as unknown as PropertyGroup
+  const numEffects = effects.numProperties;
+
+  for (let i = 1; i <= numEffects; i++) {
+    const layerEffect = effects.property(i);
+    if (layerEffect.name === "Cards Gameplay SuperPlay") {
+      layerEffect.remove()
+    }
+  }
+
 }

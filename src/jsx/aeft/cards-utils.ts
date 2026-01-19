@@ -46,21 +46,6 @@ export const getTargetLayer = () => {
 
 }
 
-export const cardsEffectExist = (camada: Layer) => {
-  const effects = camada.property("ADBE Effect Parade") as unknown as PropertyGroup
-  const numEffects = effects.numProperties;
-
-  for (let i = 1; i <= numEffects; i++) {
-    const layerEffect = effects.property(i);
-    if (layerEffect.name === "Cards Gameplay SuperPlay") {
-      return true
-    }
-  }
-
-  return false
-}
-
-
 const getGameCardsLayers = () => {
   const thisComp = getActiveComp()
   const layerCards: Layer[] = []

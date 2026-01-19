@@ -8,7 +8,8 @@ import {
   addMarkerToLayer,
   selectAllSelectedLayers,
   deselectAllSelectedLayers,
-  forEachSelectedLayer
+  forEachSelectedLayer,
+  fxExists
 } from "./aeft-utils-jonatan"
 
 
@@ -120,7 +121,7 @@ export const applyJumpOnSelectedlayers = (presetPath: string) => {
   try {
 
     forEachSelectedLayer(thisComp, camada => {
-      if (!cardsEffectExist(camada)) camada.applyPreset(new File(presetPath))
+      if (!fxExists(camada, "Cards Gameplay SuperPlay")) camada.applyPreset(new File(presetPath))
       if (namedMarkerExists(camada, "Jump")) return
 
       jumpPos(thisTime, camada, targetLayer)

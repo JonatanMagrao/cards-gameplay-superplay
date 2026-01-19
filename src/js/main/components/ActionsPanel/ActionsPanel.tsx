@@ -26,7 +26,7 @@ export const ActionsPanel: React.FC<Props> = ({
 
   const resetCardsAnimation = async () => await evalTS("resetCardsAnimation");
   const restoreCardsAnimation = async () =>
-    await evalTS("restoreCardsAnimation");
+    await evalTS("restoreCardsAnimation", presetPath);
 
   const handleImportFilesAndComps = async () =>
     await evalTS("handleImportFilesAndComps", cardProject);

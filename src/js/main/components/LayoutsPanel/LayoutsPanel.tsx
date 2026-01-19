@@ -206,7 +206,7 @@ export const LayoutsPanel: React.FC<Props> = ({
     // 6. Salvar
     try {
       fs.writeFileSync(finalFilePath, JSON.stringify(layoutData, null, 2), "utf-8");
-      alert(`Saved!\nLevel: ${levelFolderName}\nFile: ${fileName}`);
+      alert(`Saved!\nLevel: ${levelFolderName.replace("lvl_", "")}\nResolution: ${fileName.replace(".json", "")}`);
       refreshLevels();
     } catch (e) {
       alert(`Write error: ${e}`);

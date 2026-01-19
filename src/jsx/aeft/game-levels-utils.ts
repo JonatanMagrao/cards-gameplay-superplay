@@ -1,5 +1,7 @@
 import { findProjectItemByName, getActiveComp } from "./aeft-utils";
 import { getLayerMarkersMetadata } from "./aeft-utils-jonatan";
+import { posPropPath, scalePropPath, zRotPropPath } from "./actions";
+import { getLayerProp } from "./aeft-utils-jonatan";
 
 // ===========================
 // Types
@@ -82,10 +84,20 @@ export const createCardLayersFromLayout = (
 
     const cardLayer = comp.layers.add(deckItem) as AVLayer;
 
+    cardLayer.threeDLayer = true;
+
     // Transforms
-    (cardLayer.property("Position") as Property).setValue(cardLayout.position);
-    (cardLayer.property("Scale") as Property).setValue(cardLayout.scale);
-    (cardLayer.property("Rotation") as Property).setValue(cardLayout.rotation);
+    const posValue = getLayerProp(cardLayer, posPropPath)
+    const scaleValue = getLayerProp(cardLayer, scalePropPath)
+    const rotValue = getLayerProp(cardLayer, zRotPropPath)
+
+    posValue.setValue(cardLayout.position)
+    scaleValue.setValue(cardLayout.scale)
+    rotValue.setValue(cardLayout.rotation)
+
+    //   (cardLayer.property("Position") as Property).setValue(cardLayout.position);
+    // (cardLayer.property("Scale") as Property).setValue(cardLayout.scale);
+    // (cardLayer.property("Rotation") as Property).setValue(cardLayout.rotation);
 
     // Naming / label
     cardLayer.name = cardLayout.name;
@@ -112,7 +124,7 @@ export const createCardLayersFromLayout = (
           }
         }
       }
-    } catch (_) {}
+    } catch (_) { }
 
     // Custom overrides
     try {
@@ -189,7 +201,7 @@ export const extractCardsLayoutFromLayers = (layers: AVLayer[], decimals: number
 
       if (flipCard) isTurned = flipCard.value === 0;
       if (cardOption) cardFaceIndex = Number(cardOption.value) || 0;
-    } catch (_) {}
+    } catch (_) { }
 
     const markersRaw = getLayerMarkersMetadata(layer) as any[];
     const markers: [number, number, string][] = [];

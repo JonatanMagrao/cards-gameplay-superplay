@@ -1,4 +1,4 @@
-import { cardsEffectExist, getTargetLayer, importFilesAndCompsForCards, } from "./cards-utils"
+import { getTargetLayer, importFilesAndCompsForCards, } from "./cards-utils"
 import {
   applyJumpOnSelectedlayers,
   applyFlipCardOnSelectedlayers,
@@ -21,11 +21,12 @@ import {
   addCardToPrecomp
 } from "./actions";
 import { getActiveComp, forEachLayer } from "./aeft-utils";
-import { getLayerProp, distributeLayers, getLayerMarkersMetadata } from "./aeft-utils-jonatan";
+import { getLayerProp, distributeLayers, getLayerMarkersMetadata, deselectAllSelectedLayers, fxExists, removeFx } from "./aeft-utils-jonatan";
 import { applyCardsLayoutFromObject, getActiveCompLayoutData, CardsLayoutJson, getActiveCompResolution, } from "./game-levels-utils";
 import { alertError } from "./errors";
 
 const cardsFolderName = "Disney Solitaire Cards"
+const presetName = "Cards Gameplay SuperPlay"
 // const precompRenderer = "ADBE Calder"
 
 export const getCompResolution = () => {
@@ -217,10 +218,15 @@ export const resetCardsAnimation = () => {
     var scaleProp = getLayerProp(layer, scalePropPath)
     var flipCardProp = getLayerProp(layer, flipCardEssPropPath)
 
+
     posProp.expression = ""
     zPosProp.expression = ""
     // posProp.expressionEnabled = false
     // zPosProp.expressionEnabled = false
+
+    const effectExists = fxExists(layer, presetName)
+    if (effectExists) { removeFx(layer, presetName) }
+
     removePropKeyByLabel(posProp, 9)
     removePropKeyByLabel(posProp, 2)
     removePropKeyByLabel(scaleProp, 9)
@@ -259,7 +265,7 @@ const removePropKeyByLabel = (prop: Property, labelColor: number) => {
   }
 }
 
-export const restoreCardsAnimation = () => {
+export const restoreCardsAnimation = (presetPath: string) => {
   const thisComp = getActiveComp()
   const cardsLayers = findCardLayers()
 
@@ -269,7 +275,6 @@ export const restoreCardsAnimation = () => {
   for (let i = 0; i < cardsLayers.length; i++) {
     const camada = cardsLayers[i]
     const layerMarker = camada.property(markerPropPath) as Property
-
     // only layers cards that have markers
     if (layerMarker.numKeys > 0) {
       markers.push(...getLayerMarkersData(layerMarker))
@@ -287,12 +292,18 @@ export const restoreCardsAnimation = () => {
 
   // aqui vem a aplicação
   const targetLayer = getTargetLayer() as Layer
-  app.beginUndoGroup("teste")
+  app.beginUndoGroup("Restore Cards Animation by Layout")
+  deselectAllSelectedLayers(cardsMarkers)
   for (let card of cardsMarkers) {
     if (card.comment === "Jump") {
+
+      card.layer.selected = true
+      if (!fxExists(card.layer, presetName)) card.layer.applyPreset(new File(presetPath))
       jumpPos(card.markerTime, card.layer, targetLayer)
       jumpScale(card.markerTime, card.layer)
       jumpRotation(card.markerTime, card.layer)
+      card.layer.selected = false
+
     } else if (card.comment === "Flip") {
       flipCard(card.markerTime, card.layer)
     } else if (card.comment === "Flip Stock") {
@@ -329,5 +340,7 @@ const getLayerMarkersData = (prop: Property) => {
   return markerData
 
 }
+
+
 
 
