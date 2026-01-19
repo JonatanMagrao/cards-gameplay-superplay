@@ -84,7 +84,7 @@ export const App = () => {
               <DuplicatePanel />
             </>
           ) : (
-            <LayoutsPanel baseDirDefault={getDefaultCardsLevelsDir()} />
+            <LayoutsPanel baseDirDefault={getDefaultCardsLevelsDir()} cardProject={cardProject} />
           )}
         </div>
       </header>

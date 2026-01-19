@@ -32,7 +32,10 @@ export const getCompResolution = () => {
   return getActiveCompResolution();
 }
 
-export const handleApplyCardsLayout = (layoutData: CardsLayoutJson) => {
+export const handleApplyCardsLayout = (layoutData: CardsLayoutJson, filePath: string) => {
+  
+  importFilesAndCompsForCards(filePath, cardsFolderName)
+
   app.beginUndoGroup("Apply Cards Layout");
   try {
     return applyCardsLayoutFromObject(layoutData);
@@ -175,7 +178,7 @@ export const handleChangeCard = (deckName: string, card: number, cardName: strin
 export const handleAddCard = (deckName: string, card: number, cardName: string, filePath: string) => {
 
   importFilesAndCompsForCards(filePath, cardsFolderName)
-  
+
   app.beginUndoGroup("Add Card to precomp")
   try {
     addCardToPrecomp(deckName, card, cardName)

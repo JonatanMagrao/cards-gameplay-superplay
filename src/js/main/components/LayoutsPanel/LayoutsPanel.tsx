@@ -45,11 +45,13 @@ const normalizeLevelFolderNameUI = (levelId: string): string => {
 type Props = {
   baseDirDefault?: string;
   title?: string;
+  cardProject: string
 };
 
 export const LayoutsPanel: React.FC<Props> = ({
   baseDirDefault = "D:/Downloads/cardsLevels",
   title = "Layouts",
+  cardProject
 }) => {
   const [baseDir, setBaseDir] = useState(baseDirDefault);
   const [persistentSavePath, setPersistentSavePath] = useState<string | null>(null);
@@ -128,7 +130,7 @@ export const LayoutsPanel: React.FC<Props> = ({
       const raw = fs.readFileSync(jsonPath, "utf-8");
       const layoutData = JSON.parse(raw);
 
-      const res = await evalTS("handleApplyCardsLayout", layoutData);
+      const res = await evalTS("handleApplyCardsLayout", layoutData, cardProject);
       if (res !== "OK" && res !== undefined) alert(`Error applying: ${res}`);
 
     } catch (e) {
