@@ -1,5 +1,5 @@
 export const expPos = `
-const control = effect("Cards Gameplay SuperPlay");
+const control = effect("Pseudo/cards_gameplay_superplay");
 const jumpHeight = control("Jump Height").value;
 // --- CONFIGURAÇÕES GERAIS ---
 const jumpCurveShape = control("Jump Curve Shape").value;
@@ -56,7 +56,7 @@ const firstKeyPosX = thisLayer.position.key(1)[0];
 const compCenterX = thisComp.width / 2;
 const isOnLeftSide = firstKeyPosX < compCenterX;
 
-const rotationCtrl = effect("Cards Gameplay SuperPlay")("Rotation Cycles").value;
+const rotationCtrl = effect("Pseudo/cards_gameplay_superplay")("Rotation Cycles").value;
 const spinRotation = isOnLeftSide ? rotationCtrl : -rotationCtrl;
 
 // --- CÓDIGO ---

@@ -18,7 +18,7 @@ import { applyCardsLayoutFromObject, getActiveCompLayoutData, CardsLayoutJson, g
 import { alertError } from "./errors";
 
 const cardsFolderName = "Disney Solitaire Cards"
-const presetName = "Cards Gameplay SuperPlay"
+const presetMatchName = "Pseudo/cards_gameplay_superplay"
 // const precompRenderer = "ADBE Calder"
 
 export const getCompResolution = () => {
@@ -186,13 +186,13 @@ export const handleAddCard = (deckName: string, card: number, cardName: string, 
 
 export const handleResetCardsAnimation = () => {
   app.beginUndoGroup("Reset Cards Animation")
-  resetCardsAnimation(presetName)
+  resetCardsAnimation(presetMatchName)
   app.endUndoGroup()
 }
 
 export const handleRestoreCardsAnimation = (presetPath: string) => {
   app.beginUndoGroup("Restore Cards Animation by Layout")
-  restoreCardsAnimation(presetPath, presetName)
+  restoreCardsAnimation(presetPath, presetMatchName)
   app.endUndoGroup()
 }
 

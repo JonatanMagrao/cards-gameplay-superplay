@@ -18,10 +18,10 @@ import {
   selectAllSelectedLayers,
   deselectAllSelectedLayers,
   forEachSelectedLayer,
-  fxExists,
-  removeFx,
+  fxExistsByMatchName,
+  removeFxByMatchName,
   LayerMarkerMeta,
-  getLayerMarkersMetadata
+  getLayerMarkersMetadata,
 } from "./aeft-utils-jonatan"
 
 
@@ -43,6 +43,8 @@ export const keyLabel = {
   sandstone: 15,
   darkGreen: 16
 } as const
+
+const cardFxMatchName = "Pseudo/cards_gameplay_superplay"
 
 const actionLabelColor = keyLabel.green
 const anticipationLabelColor = keyLabel.yellow
@@ -133,7 +135,7 @@ export const applyJumpOnSelectedlayers = (presetPath: string) => {
   try {
 
     forEachSelectedLayer(thisComp, camada => {
-      if (!fxExists(camada, "Cards Gameplay SuperPlay")) camada.applyPreset(new File(presetPath))
+      if (!fxExistsByMatchName(camada, cardFxMatchName)) camada.applyPreset(new File(presetPath))
       if (namedMarkerExists(camada, "Jump")) return
 
       jumpPos(thisTime, camada, targetLayer)
@@ -488,40 +490,67 @@ export const addCardToPrecomp = (deckName: string, card: number, cardName: strin
   }
 }
 
-export const resetCardsAnimation = (presetName: string) => {
-
+export const resetCardsAnimation = (presetMatchName: string) => {
+  // 1. O Try Externo protege contra falhas globais (ex: findCardLayers quebra)
   try {
-
     const cardsList: Layer[] = findCardLayers()
 
     for (let layer of cardsList) {
-      var zPosProp = getLayerProp(layer, zRotPropPath)
-      var posProp = getLayerProp(layer, posPropPath)
-      var scaleProp = getLayerProp(layer, scalePropPath)
-      var flipCardProp = getLayerProp(layer, flipCardEssPropPath)
+      // --- BLOCO 1: Propriedades e Expressões ---
+      // Agrupamos a obtenção E o uso da propriedade no mesmo bloco seguro
+      try {
+        // Se falhar ao pegar a prop, ele nem tenta limpar a expressão, o que é correto.
+        const zPosProp = getLayerProp(layer, zRotPropPath)
+        const posProp = getLayerProp(layer, posPropPath)
+        
+        // Só executa se as variáveis acima foram definidas com sucesso
+        posProp.expression = ""
+        zPosProp.expression = ""
+        
+        // --- BLOCO 3: Keyframes (Depende das props existirem) ---
+        // Podemos aninhar ou colocar logo abaixo. 
+        // Se as props existem, tentamos limpar as keys.
+        try {
+           const scaleProp = getLayerProp(layer, scalePropPath)
+           const flipCardProp = getLayerProp(layer, flipCardEssPropPath)
+           
+           removePropertyKeyframesByLabel(posProp, 9)
+           removePropertyKeyframesByLabel(posProp, 2)
+           removePropertyKeyframesByLabel(scaleProp, 9)
+           removePropertyKeyframesByLabel(flipCardProp, 2)
+           removePropertyKeyframesByLabel(zPosProp, 9)
+           removePropertyKeyframesByLabel(flipCardProp, 9)
+        } catch (errKey) {
+           // Erro ao limpar keys não deve parar o resto
+           $.writeln("Erro ao limpar keys na layer " + layer.name)
+        }
 
-      posProp.expression = ""
-      zPosProp.expression = ""
-      // posProp.expressionEnabled = false
-      // zPosProp.expressionEnabled = false
+      } catch (e) {
+        // Se falhou ao pegar as propriedades principais, não dá pra fazer nada nessa parte
+        // Mas não travamos o loop para a próxima layer.
+        // DICA: Evite 'alert' dentro de loop. Use $.writeln para não ter que clicar em OK 50 vezes.
+        $.writeln("Erro ao acessar propriedades da layer: " + layer.name)
+      }
 
-      const effectExists = fxExists(layer, presetName)
-      if (effectExists) { removeFx(layer, presetName) }
-
-      removePropertyKeyframesByLabel(posProp, 9)
-      removePropertyKeyframesByLabel(posProp, 2)
-      removePropertyKeyframesByLabel(scaleProp, 9)
-      removePropertyKeyframesByLabel(flipCardProp, 2)
-      removePropertyKeyframesByLabel(zPosProp, 9)
-      removePropertyKeyframesByLabel(flipCardProp, 9)
+      // --- BLOCO 2: Efeitos (Independente das propriedades) ---
+      // Este bloco fica separado. Se o BLOCO 1 falhar, este AINDA RODA.
+      try {
+        const effectExists = fxExistsByMatchName(layer, presetMatchName)
+        if (effectExists) { 
+            removeFxByMatchName(layer, presetMatchName) 
+        }
+      } catch (e) {
+        $.writeln("Erro ao remover efeitos da layer: " + layer.name)
+      }
     }
+    
   } catch (e) {
-    alertError(e, 240, "resetCardsAnimation", "aeft.ts")
+    // Erro crítico: algo impediu o script de sequer começar a processar a lista
+    alertError(e, 549, "resetCardsAnimation", "actions.ts")
   }
-
 }
 
-export const restoreCardsAnimation = (presetPath: string, presetName: string) => {
+export const restoreCardsAnimation = (presetPath: string, presetMatchName: string) => {
   const thisComp = getActiveComp()
   const cardsLayers = findCardLayers()
 
@@ -554,7 +583,7 @@ export const restoreCardsAnimation = (presetPath: string, presetName: string) =>
     if (card.comment === "Jump") {
 
       card.layer.selected = true
-      if (!fxExists(card.layer, presetName)) card.layer.applyPreset(new File(presetPath))
+      if (!fxExistsByMatchName(card.layer, presetMatchName)) card.layer.applyPreset(new File(presetPath))
       jumpPos(card.time, card.layer, targetLayer)
       jumpScale(card.time, card.layer)
       jumpRotation(card.time, card.layer)

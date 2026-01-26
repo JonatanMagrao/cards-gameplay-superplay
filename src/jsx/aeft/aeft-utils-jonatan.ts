@@ -207,13 +207,13 @@ export const getLayerMarkersMetadata = (layer: Layer): LayerMarkerMeta[] => {
   return markerData
 }
 
-export const fxExists = (camada: Layer, fxName: string) => {
+export const fxExistsByMatchName = (camada: Layer, fxMatchName: string) => {
   const effects = camada.property("ADBE Effect Parade") as unknown as PropertyGroup
   const numEffects = effects.numProperties;
 
   for (let i = 1; i <= numEffects; i++) {
     const layerEffect = effects.property(i);
-    if (layerEffect.name === fxName) {
+    if (layerEffect.matchName === fxMatchName) {
       return true
     }
   }
@@ -221,15 +221,14 @@ export const fxExists = (camada: Layer, fxName: string) => {
   return false
 }
 
-export const removeFx = (camada: Layer, fxName: string) => {
-  const effects = camada.property("ADBE Effect Parade") as unknown as PropertyGroup
-  const numEffects = effects.numProperties;
-
-  for (let i = 1; i <= numEffects; i++) {
+export const removeFxByMatchName = (camada: Layer, fxMatchName: string) => {
+  const effects = camada.property("ADBE Effect Parade") as unknown as PropertyGroup;
+  const numEffects = effects.numProperties
+  
+  for (let i = numEffects; i >= 1; i--) {
     const layerEffect = effects.property(i);
-    if (layerEffect.name === "Cards Gameplay SuperPlay") {
-      layerEffect.remove()
+    if (layerEffect.matchName === fxMatchName) {
+      layerEffect.remove();
     }
   }
-
-}
+} 
