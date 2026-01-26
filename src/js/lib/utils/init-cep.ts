@@ -5,6 +5,13 @@ import { keyRegisterOverride, dropDisable } from "./cep";
 const buildFlyoutMenu = () => {
   const menu = `<Menu>
   <MenuItem Id="website" Label="Website"/>
+  <MenuItem Label="Tutorials">
+    <MenuItem Id="cards" Label="Cards"/>
+    <MenuItem Id="actions" Label="Actions"/>
+    <MenuItem Id="copies" Label="Copies"/>
+    <MenuItem Id="layouts" Label="Layouts"/>
+    <MenuItem Id="vfx" Label="vfx"/>
+  </MenuItem>
   <MenuItem Id="info" Label="${displayName} ${version}" Enabled="false" Checked="false"/>
   <MenuItem Id="website" Label="by ${company}" Enabled="false" Checked="false"/>
   <MenuItem Label="---" />
@@ -38,6 +45,16 @@ const buildFlyoutMenu = () => {
       // openLinkInBrowser(productPage);
     } else if (menuId === "refresh") {
       location.reload();
+    } else if (menuId === "cards") {
+      openLinkInBrowser("https://www.superplay.co/")
+    } else if(menuId === "actions") {
+      openLinkInBrowser("https://www.superplay.co/")
+    } else if (menuId === "copies") {
+      openLinkInBrowser("https://www.superplay.co/")
+    } else if (menuId === "layouts") {
+      openLinkInBrowser("https://www.superplay.co/")
+    } else if (menuId === "vfx") {
+      openLinkInBrowser("https://www.superplay.co/")
     }
   };
 

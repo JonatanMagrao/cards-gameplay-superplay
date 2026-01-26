@@ -100,10 +100,10 @@ export const CardPickerPanel: React.FC<Props> = ({ deck, setDeck, cardNumber, se
             onChange={(e) => setDeck(e.target.value)}
             className="field-input"
           >
-            <option value="Club_Deck">Club Cards</option>
-            <option value="Diamond_Deck">Diamond Cards</option>
-            <option value="Spade_Deck">Spade Cards</option>
-            <option value="Heart_Deck">Heart Cards</option>
+            <option value="Club_Deck">♣️ Club Cards</option>
+            <option value="Diamond_Deck">♦️ Diamond Cards</option>
+            <option value="Spade_Deck">♠️ Spade Cards</option>
+            <option value="Heart_Deck">♥️ Heart Cards</option>
           </select>
 
           <select
