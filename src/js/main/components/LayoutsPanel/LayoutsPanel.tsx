@@ -123,7 +123,7 @@ export const LayoutsPanel: React.FC<Props> = ({
     const jsonPath = `${levelFolder}/${resolution}.json`;
 
     if (!fs.existsSync(jsonPath)) {
-      return alert(`Layout file not found:\n${jsonPath}`);
+      return alert(`Layout Resolution not found: ${jsonPath.match(/\d{2,4}x\d{2,4}/gi)}`);
     }
 
     try {
