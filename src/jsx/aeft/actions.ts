@@ -577,6 +577,8 @@ export const restoreCardsAnimation = (presetPath: string, presetMatchName: strin
 
   // aqui vem a aplicação
   const targetLayer = getTargetLayer() as Layer
+  const currentTime = thisComp.time
+  thisComp.time = thisComp.duration
 
   deselectAllSelectedLayers(cardsMarkers)
   for (let card of cardsMarkers) {
@@ -596,5 +598,7 @@ export const restoreCardsAnimation = (presetPath: string, presetMatchName: strin
       flipStockCards(card.layer)
     }
   }
+
+  thisComp.time = currentTime
 
 }
