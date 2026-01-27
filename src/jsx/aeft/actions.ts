@@ -57,8 +57,13 @@ export const markerPropPath = "ADBE Marker"
 export const posPropPath = [transformGroupMatchName, "ADBE Position"] as const
 export const zRotPropPath = [transformGroupMatchName, "ADBE Rotate Z"] as const
 export const scalePropPath = [transformGroupMatchName, "ADBE Scale"] as const
+export const anchorPropPath = [transformGroupMatchName, "ADBE Anchor Point"] as const
+
 export const flipCardEssPropPath = [essentialPropertiesMatchName, "Flip Card"] as const
 export const cardOptionEPPath = [essentialPropertiesMatchName, "Card Option"] as const
+export const progressBarEPPath = [essentialPropertiesMatchName, "Bar Control"] as const
+
+export const textPropPath = ["ADBE Text Properties", "ADBE Text Document"] as const
 
 
 //================================= TABLEAU JUMP ACTIONS

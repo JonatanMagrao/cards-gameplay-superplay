@@ -16,6 +16,7 @@ import { getActiveComp } from "./aeft-utils";
 import { distributeLayers, } from "./aeft-utils-jonatan";
 import { applyCardsLayoutFromObject, getActiveCompLayoutData, CardsLayoutJson, getActiveCompResolution, } from "./game-levels-utils";
 import { alertError } from "./errors";
+import { addProgressBar } from "./progressBar-utils";
 
 const cardsFolderName = "Disney Solitaire Cards"
 const presetMatchName = "Pseudo/cards_gameplay_superplay"
@@ -193,6 +194,12 @@ export const handleResetCardsAnimation = () => {
 export const handleRestoreCardsAnimation = (presetPath: string) => {
   app.beginUndoGroup("Restore Cards Animation by Layout")
   restoreCardsAnimation(presetPath, presetMatchName)
+  app.endUndoGroup()
+}
+
+export const handleAddProgressBar = (presetPath: string) => {
+  app.beginUndoGroup("Add Progress Bar")
+  addProgressBar(presetPath)
   app.endUndoGroup()
 }
 

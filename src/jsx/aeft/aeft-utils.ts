@@ -55,6 +55,7 @@ export const getActiveComp = () => {
 
 // Project Item Helpers
 export const getItemByName = (name: string): CompItem | null => {
+  // todo adicionar na função uma busca por tipo. atualmente está buscando apenas CompItem
   // Percorre todos os itens na raiz do projeto
   for (var i = 1; i <= app.project.numItems; i++) {
     const item = app.project.item(i);

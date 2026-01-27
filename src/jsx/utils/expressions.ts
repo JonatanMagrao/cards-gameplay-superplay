@@ -84,3 +84,85 @@ if (numKeys >= 2) {
     value;
 }
 `
+
+export const expProgressBar = `
+const findTriggerMoments = (comp, rules) => {
+    const moments = [];
+    for (let i = 1; i <= comp.numLayers; i++) {
+        const layer = comp.layer(i);
+        const rule = rules.find(r => layer.name.includes(r.nameTag));
+        if (rule && layer.marker.numKeys > 0) {
+            for (let j = 1; j <= layer.marker.numKeys; j++) {
+                const m = layer.marker.key(j);
+                if (m.comment === rule.markerTag) moments.push(m.time);
+            }
+        }
+    }
+    return moments.sort((a, b) => a - b);
+};
+
+const readCurveProgress = (curve, timeSinceStart) => {
+    if (curve.numKeys < 2) return 1;
+    const kStart = curve.key(1);
+    const kEnd = curve.key(curve.numKeys);
+    const duration = kEnd.time - kStart.time;
+    const mappedTime = kStart.time + clamp(timeSinceStart, 0, duration);
+    return (curve.valueAtTime(mappedTime) - kStart.value) / ((kEnd.value - kStart.value) || 0.001);
+};
+
+const generateStepMotion = (comp, currentTime, triggers, increment, curve, framesDelay, startVal, endVal) => {
+    const delay = framesDelay * comp.frameDuration;
+    let passedIndex = -1;
+    for (let i = 0; i < triggers.length; i++) {
+        if ((triggers[i] + delay) <= currentTime) passedIndex = i;
+        else break;
+    }
+    if (passedIndex === -1) return startVal;
+    const progress = readCurveProgress(curve, currentTime - (triggers[passedIndex] + delay));
+    return Math.min(startVal + (passedIndex * increment) + (increment * progress), endVal);
+};
+
+const refLayer = effect("Comp Ref")("Layer");
+let targetComp = thisComp;
+
+if (refLayer != undefined) {
+    try {
+        if (refLayer.source.numLayers === undefined) throw 0;
+        targetComp = refLayer.source;
+    } catch (e) {
+        // EASTER EGGS
+        const quotes = [
+            "In Precomps We Trust.",
+            "It’s what’s inside that counts.",
+            "This layer have no secrets.",
+            "One layer is the loneliest number.",
+            "Layers within layers. That is the way.",
+            "Judge a comp by its contents.",
+            "Knock, knock. No layers inside.",
+            "Silence is golden, but markers are data.",
+            "Don't bring a flat or Footage layer to a Comp fight.",
+            "No secrets found here."
+        ];
+        
+        const randomIndex = Math.floor(Math.abs(time * 10)) % quotes.length;
+        
+        throw \`
+[Cards Gameplay Alert]
+- \${quotes[randomIndex]}
+- Please, select a valid Precomp containing Cards and Markers.\`;
+    }
+}
+
+const searchRules = [{ nameTag: "[TABLEAU]", markerTag: "Jump" }];
+const delayInFrames = 5;
+
+const barProgressValue = effect("Animation Progress")("Slider");
+const startPercent = effect("Start Percent")("Slider").value;
+const endPercent = effect("End Percent")("Slider").value;
+
+const times = findTriggerMoments(targetComp, searchRules);
+const stepSize = times.length > 0 ? (endPercent - startPercent) / times.length : 0;
+
+generateStepMotion(targetComp, time, times, stepSize, barProgressValue, delayInFrames, startPercent, endPercent);
+
+`
