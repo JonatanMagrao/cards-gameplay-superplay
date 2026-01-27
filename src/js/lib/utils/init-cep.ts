@@ -6,11 +6,12 @@ const buildFlyoutMenu = () => {
   const menu = `<Menu>
   <MenuItem Id="website" Label="Website"/>
   <MenuItem Label="Tutorials">
-    <MenuItem Id="cards" Label="Cards"/>
-    <MenuItem Id="actions" Label="Actions"/>
+    <MenuItem Id="project" Label="Project"/>
+    <MenuItem Id="cards" Label="Cards Manager"/>
     <MenuItem Id="copies" Label="Copies"/>
-    <MenuItem Id="layouts" Label="Layouts"/>
-    <MenuItem Id="vfx" Label="vfx"/>
+    <MenuItem Id="actions" Label="Actions (Comming soon)"/>
+    <MenuItem Id="layouts" Label="Layouts (Comming soon)"/>
+    <MenuItem Id="vfx" Label="VFX (Comming soon)"/>
   </MenuItem>
   <MenuItem Id="info" Label="${displayName} ${version}" Enabled="false" Checked="false"/>
   <MenuItem Id="website" Label="by ${company}" Enabled="false" Checked="false"/>
@@ -20,10 +21,10 @@ const buildFlyoutMenu = () => {
 
   interface FlyoutMenuEvent {
     data:
-      | {
-          menuId: string;
-        }
-      | string;
+    | {
+      menuId: string;
+    }
+    | string;
   }
   const flyoutHandler = (event: FlyoutMenuEvent) => {
     let menuId;
@@ -46,15 +47,17 @@ const buildFlyoutMenu = () => {
     } else if (menuId === "refresh") {
       location.reload();
     } else if (menuId === "cards") {
-      openLinkInBrowser("https://www.superplay.co/")
-    } else if(menuId === "actions") {
+      openLinkInBrowser("https://drive.google.com/open?id=195Tjs4jxnePCmRNM4rdQltc7l2RGEplL&usp=drive_fs")
+    } else if (menuId === "actions") {
       openLinkInBrowser("https://www.superplay.co/")
     } else if (menuId === "copies") {
-      openLinkInBrowser("https://www.superplay.co/")
+      openLinkInBrowser("https://drive.google.com/open?id=1YhIqmu3kn4NmtGca-1OXZ1Goa4-kgdPd&usp=drive_fs")
     } else if (menuId === "layouts") {
       openLinkInBrowser("https://www.superplay.co/")
     } else if (menuId === "vfx") {
       openLinkInBrowser("https://www.superplay.co/")
+    } else if (menuId === "project") {
+      openLinkInBrowser("https://drive.google.com/open?id=18s_LHsMI24e6sjb0Gp2Bh8zUO5UWLqIG&usp=drive_fs")
     }
   };
 
