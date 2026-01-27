@@ -473,6 +473,12 @@ export const addCardToPrecomp = (deckName: string, card: number, cardName: strin
 
   try {
     const thisComp = getActiveComp()
+
+    if(!thisComp){
+      alert("No active composition found.\nPlease open a composition to add the card.");
+      return
+    }
+
     const deck = getItemByName(deckName)
 
     if (!deck) {
