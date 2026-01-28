@@ -687,7 +687,6 @@ export const restoreCardsAnimation = (presetPath: string, presetMatchName: strin
       flipCard(card.time, card.layer)
     } else if (card.comment === "Flip Stock") {
       thisComp.time = card.time
-      applySfx(thisComp, card.time, "flip-stock_sfx_01.wav", keyLabel.yellow)
       flipStockCards(card.layer)
     }
   }
