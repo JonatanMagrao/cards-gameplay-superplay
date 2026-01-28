@@ -59,6 +59,15 @@ export const deselectAllSelectedLayers = (selectedLayers: Layer[]) => {
   }
 }
 
+export const deselectAllLayer = () => {
+  const thisComp = getActiveComp();
+  if (!thisComp) return;
+  for (let i = 1; i <= thisComp.numLayers; i++) {
+    const layer = thisComp.layer(i)
+    layer.selected = false
+  }
+}
+
 export const selectAllSelectedLayers = (selectedLayers: Layer[]) => {
   for (let i = 0; i < selectedLayers.length; i++) {
     selectedLayers[i].selected = true

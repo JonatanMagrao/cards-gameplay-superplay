@@ -23,6 +23,7 @@ import {
   LayerMarkerMeta,
   getLayerMarkersMetadata,
   getFootageByName,
+  deselectAllLayer,
 } from "./aeft-utils-jonatan"
 
 
@@ -46,6 +47,7 @@ export const keyLabel = {
 } as const
 
 const cardFxMatchName = "Pseudo/cards_gameplay_superplay"
+const sfxPrecompName = "SFX Precomp"
 
 const actionLabelColor = keyLabel.green
 const anticipationLabelColor = keyLabel.yellow
@@ -69,14 +71,14 @@ export const textPropPath = ["ADBE Text Properties", "ADBE Text Document"] as co
 
 //================================= TABLEAU JUMP ACTIONS
 
-const ensureSfxPrecomp = (comp: CompItem): CompItem => {
-  let sfxPrecomp = getItemByName("SFX Precomp") as CompItem
+const ensureSfxPrecomp = (): CompItem => {
+  let sfxPrecomp = getItemByName(sfxPrecompName) as CompItem
   const thisComp = getActiveComp() as CompItem;
 
   if (!sfxPrecomp) {
     const { pixelAspect, duration, frameRate } = thisComp
     //@ts-ignore
-    sfxPrecomp = app.project.items.addComp("SFX Precomp", 100, 100, pixelAspect, duration, frameRate);
+    sfxPrecomp = app.project.items.addComp(sfxPrecompName, 100, 100, pixelAspect, duration, frameRate);
   }
 
   return sfxPrecomp
@@ -95,17 +97,22 @@ const findPrecompBySourceName = (comp: CompItem, sourceName: string): AVLayer | 
   return null;
 };
 
-const applySfx = (comp: CompItem, sfxName: string, labelColor: number) => {
-  const sfxPrecomp = ensureSfxPrecomp(comp) as CompItem;
+const applySfx = (comp: CompItem, sfxTime: number, sfxName: string, labelColor: number) => {
+  const sfxPrecomp = ensureSfxPrecomp() as CompItem;
 
-  let sfxLayer = findPrecompBySourceName(comp, "SFX Precomp");
+  let sfxPrecompRef = findPrecompBySourceName(comp, sfxPrecompName);
 
-  if (!sfxLayer) {
-    sfxLayer = comp.layers.add(sfxPrecomp) as AVLayer;
-    sfxLayer.label = keyLabel.brown;
-    sfxLayer.startTime = 0;
+  if (!sfxPrecompRef) {
+    sfxPrecompRef = comp.layers.add(sfxPrecomp) as AVLayer;
+    sfxPrecompRef.label = keyLabel.brown;
+    sfxPrecompRef.startTime = 0;
+    sfxPrecompRef.shy = true
+    sfxPrecompRef.selected = false
+    sfxPrecompRef.moveToEnd();
+    sfxPrecompRef.locked = true
+    comp.hideShyLayers = true
   } else {
-    sfxLayer.label = keyLabel.brown;
+    sfxPrecompRef.label = keyLabel.brown;
   }
 
   const sfxFile = getFootageByName(sfxName);
@@ -114,10 +121,20 @@ const applySfx = (comp: CompItem, sfxName: string, labelColor: number) => {
     return;
   }
 
-  const sfxLayerItem = sfxLayer.source.layers.add(sfxFile)
-  sfxLayerItem.startTime = comp.time
+  const sfxLayerItem = sfxPrecompRef.source.layers.add(sfxFile)
+  sfxLayerItem.startTime = sfxTime
   sfxLayerItem.label = labelColor
 
+};
+
+const clearSfxPrecompLayers = () => {
+  const sfxPrecomp = getItemByName("SFX Precomp") as CompItem;
+
+  if (!sfxPrecomp) return;
+
+  for (let i = sfxPrecomp.numLayers; i > 0; i--) {
+    sfxPrecomp.layer(i).remove();
+  }
 };
 
 export const jumpPos = (time: number, camada: Layer, targetLayer: Layer) => {
@@ -200,7 +217,7 @@ export const applyJumpOnSelectedlayers = (presetPath: string) => {
       jumpRotation(thisTime, camada)
       addMarkerToLayer(camada, thisTime, { title: "Jump", label: keyLabel.green })
 
-      applySfx(thisComp, "jump_sfx_01.wav", keyLabel.green)
+      applySfx(thisComp, thisTime, "jump_sfx_01.wav", keyLabel.green)
     })
 
   } catch (e) {
@@ -291,7 +308,7 @@ export const flipStockCards = (stockLayerToFlip?: Layer) => {
   }
 
   const jumpHeight = 29
-  const stockLayers = getAllStockLayers(thisComp)
+  // const stockLayers = getAllStockLayers(thisComp)
 
   let firstSelectedLayer = null
 
@@ -369,7 +386,7 @@ export const flipStockCards = (stockLayerToFlip?: Layer) => {
     setKeyframeToLayer(layerFlip, keyFlip2, 100, actionLabelColor)
   }
 
-  applySfx(thisComp, "flip-stock_sfx_01.wav", keyLabel.yellow)
+  applySfx(thisComp, thisComp.time, "flip-stock_sfx_01.wav", keyLabel.yellow)
   const nextLayer = getNextStockCard(thisComp, firstSelectedLayer, anticipationLabelColor)
 
   if (nextLayer) {
@@ -610,6 +627,8 @@ export const resetCardsAnimation = (presetMatchName: string) => {
       }
     }
 
+    clearSfxPrecompLayers()
+
   } catch (e) {
     // Erro crítico: algo impediu o script de sequer começar a processar a lista
     alertError(e, 549, "resetCardsAnimation", "actions.ts")
@@ -617,6 +636,10 @@ export const resetCardsAnimation = (presetMatchName: string) => {
 }
 
 export const restoreCardsAnimation = (presetPath: string, presetMatchName: string) => {
+
+  deselectAllLayer()
+  clearSfxPrecompLayers()
+  
   const thisComp = getActiveComp()
   const cardsLayers = findCardLayers()
 
@@ -645,8 +668,9 @@ export const restoreCardsAnimation = (presetPath: string, presetMatchName: strin
   const targetLayer = getTargetLayer() as Layer
   const currentTime = thisComp.time
   thisComp.time = thisComp.duration
-
+  
   deselectAllSelectedLayers(cardsMarkers)
+
   for (let card of cardsMarkers) {
     if (card.comment === "Jump") {
 
@@ -657,10 +681,13 @@ export const restoreCardsAnimation = (presetPath: string, presetMatchName: strin
       jumpRotation(card.time, card.layer)
       card.layer.selected = false
 
+      applySfx(thisComp, card.time, "jump_sfx_01.wav", keyLabel.green)
+
     } else if (card.comment === "Flip") {
       flipCard(card.time, card.layer)
     } else if (card.comment === "Flip Stock") {
       thisComp.time = card.time
+      applySfx(thisComp, card.time, "flip-stock_sfx_01.wav", keyLabel.yellow)
       flipStockCards(card.layer)
     }
   }
