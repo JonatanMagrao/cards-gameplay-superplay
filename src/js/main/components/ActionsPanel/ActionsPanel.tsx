@@ -35,7 +35,8 @@ export const ActionsPanel: React.FC<Props> = ({
   const handleImportFilesAndComps = async () =>
     await evalTS("handleImportFilesAndComps", cardProject);
 
-  const handleAddProgressBar = async () => await evalTS("handleAddProgressBar", progressBarPresetPath);
+  const handleAddProgressBar = async () =>
+    await evalTS("handleAddProgressBar", progressBarPresetPath);
 
   return (
     <section className="panel-section">
@@ -112,6 +113,7 @@ export const ActionsPanel: React.FC<Props> = ({
           Restore
         </button>
 
+
         {/* <button
           onClick={handleImportFilesAndComps}
           style={{ border: "1px solid #677DE0" }}
@@ -127,6 +129,8 @@ export const ActionsPanel: React.FC<Props> = ({
         >
           Progress Bar
         </button>
+
+
       </div>
     </section>
   );

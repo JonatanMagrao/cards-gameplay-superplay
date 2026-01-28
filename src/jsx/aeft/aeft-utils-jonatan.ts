@@ -232,3 +232,30 @@ export const removeFxByMatchName = (camada: Layer, fxMatchName: string) => {
     }
   }
 } 
+
+export const getFootageByName = (name: string): CompItem | null => {
+  // todo adicionar na função uma busca por tipo. atualmente está buscando apenas CompItem
+  for (var i = 1; i <= app.project.numItems; i++) {
+    const item = app.project.item(i);
+
+    if (item.name === name && item instanceof FootageItem) {
+      //@ts-ignore
+      return item;
+    }
+  }
+  return null;
+};
+
+export const removeMarkersFromSelectedLayers = () => {
+  const comp = getActiveComp();
+  if (!comp) return;
+
+  forEachSelectedLayer(comp, (layer) => {
+    const markers = layer.property("ADBE Marker") as Property;
+    if (!markers) return;
+
+    for (let k = markers.numKeys; k >= 1; k--) {
+      markers.removeKey(k);
+    }
+  });
+};

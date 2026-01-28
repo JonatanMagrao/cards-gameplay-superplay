@@ -22,6 +22,7 @@ import {
   removeFxByMatchName,
   LayerMarkerMeta,
   getLayerMarkersMetadata,
+  getFootageByName,
 } from "./aeft-utils-jonatan"
 
 
@@ -67,6 +68,57 @@ export const textPropPath = ["ADBE Text Properties", "ADBE Text Document"] as co
 
 
 //================================= TABLEAU JUMP ACTIONS
+
+const ensureSfxPrecomp = (comp: CompItem): CompItem => {
+  let sfxPrecomp = getItemByName("SFX Precomp") as CompItem
+  const thisComp = getActiveComp() as CompItem;
+
+  if (!sfxPrecomp) {
+    const { pixelAspect, duration, frameRate } = thisComp
+    //@ts-ignore
+    sfxPrecomp = app.project.items.addComp("SFX Precomp", 100, 100, pixelAspect, duration, frameRate);
+  }
+
+  return sfxPrecomp
+
+}
+
+const findPrecompBySourceName = (comp: CompItem, sourceName: string): AVLayer | null => {
+  for (let i = 1; i <= comp.numLayers; i++) {
+    const layer = comp.layer(i) as AVLayer;
+    const src = (layer as any).source as any;
+
+    if (src && src.name === sourceName) {
+      return layer;
+    }
+  }
+  return null;
+};
+
+const applySfx = (comp: CompItem, sfxName: string, labelColor: number) => {
+  const sfxPrecomp = ensureSfxPrecomp(comp) as CompItem;
+
+  let sfxLayer = findPrecompBySourceName(comp, "SFX Precomp");
+
+  if (!sfxLayer) {
+    sfxLayer = comp.layers.add(sfxPrecomp) as AVLayer;
+    sfxLayer.label = keyLabel.brown;
+    sfxLayer.startTime = 0;
+  } else {
+    sfxLayer.label = keyLabel.brown;
+  }
+
+  const sfxFile = getFootageByName(sfxName);
+  if (!sfxFile) {
+    alert(`Sound file "${sfxName}" not found in project.`);
+    return;
+  }
+
+  const sfxLayerItem = sfxLayer.source.layers.add(sfxFile)
+  sfxLayerItem.startTime = comp.time
+  sfxLayerItem.label = labelColor
+
+};
 
 export const jumpPos = (time: number, camada: Layer, targetLayer: Layer) => {
 
@@ -147,10 +199,12 @@ export const applyJumpOnSelectedlayers = (presetPath: string) => {
       jumpScale(thisTime, camada)
       jumpRotation(thisTime, camada)
       addMarkerToLayer(camada, thisTime, { title: "Jump", label: keyLabel.green })
+
+      applySfx(thisComp, "jump_sfx_01.wav", keyLabel.green)
     })
 
   } catch (e) {
-    alertError(e, 132, "applyJumpOnSelectedlayers", "actions.ts")
+    alertError(e, 208, "applyJumpOnSelectedlayers", "actions.ts")
   }
 }
 
@@ -315,6 +369,7 @@ export const flipStockCards = (stockLayerToFlip?: Layer) => {
     setKeyframeToLayer(layerFlip, keyFlip2, 100, actionLabelColor)
   }
 
+  applySfx(thisComp, "flip-stock_sfx_01.wav", keyLabel.yellow)
   const nextLayer = getNextStockCard(thisComp, firstSelectedLayer, anticipationLabelColor)
 
   if (nextLayer) {
@@ -479,7 +534,7 @@ export const addCardToPrecomp = (deckName: string, card: number, cardName: strin
   try {
     const thisComp = getActiveComp()
 
-    if(!thisComp){
+    if (!thisComp) {
       alert("No active composition found.\nPlease open a composition to add the card.");
       return
     }
@@ -513,27 +568,27 @@ export const resetCardsAnimation = (presetMatchName: string) => {
         // Se falhar ao pegar a prop, ele nem tenta limpar a expressão, o que é correto.
         const zPosProp = getLayerProp(layer, zRotPropPath)
         const posProp = getLayerProp(layer, posPropPath)
-        
+
         // Só executa se as variáveis acima foram definidas com sucesso
         posProp.expression = ""
         zPosProp.expression = ""
-        
+
         // --- BLOCO 3: Keyframes (Depende das props existirem) ---
         // Podemos aninhar ou colocar logo abaixo. 
         // Se as props existem, tentamos limpar as keys.
         try {
-           const scaleProp = getLayerProp(layer, scalePropPath)
-           const flipCardProp = getLayerProp(layer, flipCardEssPropPath)
-           
-           removePropertyKeyframesByLabel(posProp, 9)
-           removePropertyKeyframesByLabel(posProp, 2)
-           removePropertyKeyframesByLabel(scaleProp, 9)
-           removePropertyKeyframesByLabel(flipCardProp, 2)
-           removePropertyKeyframesByLabel(zPosProp, 9)
-           removePropertyKeyframesByLabel(flipCardProp, 9)
+          const scaleProp = getLayerProp(layer, scalePropPath)
+          const flipCardProp = getLayerProp(layer, flipCardEssPropPath)
+
+          removePropertyKeyframesByLabel(posProp, 9)
+          removePropertyKeyframesByLabel(posProp, 2)
+          removePropertyKeyframesByLabel(scaleProp, 9)
+          removePropertyKeyframesByLabel(flipCardProp, 2)
+          removePropertyKeyframesByLabel(zPosProp, 9)
+          removePropertyKeyframesByLabel(flipCardProp, 9)
         } catch (errKey) {
-           // Erro ao limpar keys não deve parar o resto
-           $.writeln("Erro ao limpar keys na layer " + layer.name)
+          // Erro ao limpar keys não deve parar o resto
+          $.writeln("Erro ao limpar keys na layer " + layer.name)
         }
 
       } catch (e) {
@@ -547,14 +602,14 @@ export const resetCardsAnimation = (presetMatchName: string) => {
       // Este bloco fica separado. Se o BLOCO 1 falhar, este AINDA RODA.
       try {
         const effectExists = fxExistsByMatchName(layer, presetMatchName)
-        if (effectExists) { 
-            removeFxByMatchName(layer, presetMatchName) 
+        if (effectExists) {
+          removeFxByMatchName(layer, presetMatchName)
         }
       } catch (e) {
         $.writeln("Erro ao remover efeitos da layer: " + layer.name)
       }
     }
-    
+
   } catch (e) {
     // Erro crítico: algo impediu o script de sequer começar a processar a lista
     alertError(e, 549, "resetCardsAnimation", "actions.ts")
@@ -613,3 +668,4 @@ export const restoreCardsAnimation = (presetPath: string, presetMatchName: strin
   thisComp.time = currentTime
 
 }
+

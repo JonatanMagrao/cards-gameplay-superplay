@@ -13,7 +13,7 @@ import {
   restoreCardsAnimation
 } from "./actions";
 import { getActiveComp } from "./aeft-utils";
-import { distributeLayers, } from "./aeft-utils-jonatan";
+import { distributeLayers } from "./aeft-utils-jonatan";
 import { applyCardsLayoutFromObject, getActiveCompLayoutData, CardsLayoutJson, getActiveCompResolution, } from "./game-levels-utils";
 import { alertError } from "./errors";
 import { addProgressBar } from "./progressBar-utils";
@@ -197,10 +197,16 @@ export const handleRestoreCardsAnimation = (presetPath: string) => {
   app.endUndoGroup()
 }
 
+
 export const handleAddProgressBar = (presetPath: string) => {
   app.beginUndoGroup("Add Progress Bar")
-  addProgressBar(presetPath)
-  app.endUndoGroup()
+  try {
+    addProgressBar(presetPath)
+  } catch (e) {
+    alertError(e, 216, "handleAddProgressBar", "aeft.ts")
+  } finally {
+    app.endUndoGroup()
+  }
 }
 
 
