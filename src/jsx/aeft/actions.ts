@@ -106,13 +106,14 @@ const applySfx = (comp: CompItem, sfxTime: number, sfxName: string, labelColor: 
     sfxPrecompRef = comp.layers.add(sfxPrecomp) as AVLayer;
     sfxPrecompRef.label = keyLabel.brown;
     sfxPrecompRef.startTime = 0;
-    sfxPrecompRef.shy = true
     sfxPrecompRef.selected = false
     sfxPrecompRef.moveToEnd();
+    sfxPrecompRef.threeDLayer = true
     sfxPrecompRef.locked = true
-    comp.hideShyLayers = true
   } else {
-    sfxPrecompRef.label = keyLabel.brown;
+    sfxPrecompRef.locked = false
+    sfxPrecompRef.moveToEnd()
+    sfxPrecompRef.locked = true
   }
 
   const sfxFile = getFootageByName(sfxName);
