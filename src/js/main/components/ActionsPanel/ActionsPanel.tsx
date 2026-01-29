@@ -38,6 +38,9 @@ export const ActionsPanel: React.FC<Props> = ({
   const handleAddProgressBar = async () =>
     await evalTS("handleAddProgressBar", progressBarPresetPath);
 
+  const handleClearExpressions = async () => 
+    await evalTS("handleClearLayerExpressions");
+
   return (
     <section className="panel-section">
       <span className="section-label">Actions</span>
@@ -128,6 +131,14 @@ export const ActionsPanel: React.FC<Props> = ({
           title={"Add Progress Bar"}
         >
           Progress Bar
+        </button>
+
+        <button
+          onClick={handleClearExpressions}
+          style={{ border: "1px solid #E8920D" }}
+          title={"Clear Layer Expressions"}
+        >
+          Clear Expressions
         </button>
 
 

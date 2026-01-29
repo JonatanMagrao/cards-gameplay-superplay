@@ -13,7 +13,7 @@ import {
   restoreCardsAnimation
 } from "./actions";
 import { getActiveComp } from "./aeft-utils";
-import { distributeLayers } from "./aeft-utils-jonatan";
+import { clearLayerExpressions, distributeLayers, forEachSelectedLayer } from "./aeft-utils-jonatan";
 import { applyCardsLayoutFromObject, getActiveCompLayoutData, CardsLayoutJson, getActiveCompResolution, } from "./game-levels-utils";
 import { alertError } from "./errors";
 import { addProgressBar } from "./progressBar-utils";
@@ -197,7 +197,6 @@ export const handleRestoreCardsAnimation = (presetPath: string) => {
   app.endUndoGroup()
 }
 
-
 export const handleAddProgressBar = (presetPath: string) => {
   app.beginUndoGroup("Add Progress Bar")
   try {
@@ -209,7 +208,20 @@ export const handleAddProgressBar = (presetPath: string) => {
   }
 }
 
+export const handleClearLayerExpressions = () => {
+  app.beginUndoGroup("Clear Layer Expressions")
+  try{
 
+    const thisComp = app.project.activeItem as CompItem
+    forEachSelectedLayer(thisComp, layer => {
+      clearLayerExpressions(layer)
+    })
+  }catch(e){
+    alertError(e, 220, "handleClearLayerExpressions", "aeft.ts")
+  } finally {
+    app.endUndoGroup()
+  }
+}
 
 
 

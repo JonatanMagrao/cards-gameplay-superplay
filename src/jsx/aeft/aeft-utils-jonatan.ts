@@ -233,14 +233,14 @@ export const fxExistsByMatchName = (camada: Layer, fxMatchName: string) => {
 export const removeFxByMatchName = (camada: Layer, fxMatchName: string) => {
   const effects = camada.property("ADBE Effect Parade") as unknown as PropertyGroup;
   const numEffects = effects.numProperties
-  
+
   for (let i = numEffects; i >= 1; i--) {
     const layerEffect = effects.property(i);
     if (layerEffect.matchName === fxMatchName) {
       layerEffect.remove();
     }
   }
-} 
+}
 
 export const getFootageByName = (name: string): CompItem | null => {
   // todo adicionar na função uma busca por tipo. atualmente está buscando apenas CompItem
@@ -268,3 +268,34 @@ export const removeMarkersFromSelectedLayers = () => {
     }
   });
 };
+
+export const clearLayerExpressions = (layer: Layer, pattern: string = ""): void => {
+
+  let regex = null;
+  if (pattern && pattern !== "") {
+    regex = new RegExp(pattern, "gi");
+  }
+
+  const getPropExp = (prop: any) => {
+    if (prop.canSetExpression && prop.expression !== "") {
+
+      if (regex === null) {
+        prop.expression = "";
+      } else if (prop.expression.match(regex)) {
+        prop.expression = "";
+      }
+    }
+
+    if (prop instanceof PropertyGroup) {
+      for (let i = 1; i <= prop.numProperties; i++) {
+        getPropExp(prop.property(i));
+      }
+    }
+  }
+
+  if (layer) {
+    for (let j = 1; j <= layer.numProperties; j++) {
+      getPropExp(layer.property(j));
+    }
+  }
+}
