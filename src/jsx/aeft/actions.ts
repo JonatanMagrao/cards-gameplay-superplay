@@ -218,7 +218,7 @@ export const applyJumpOnSelectedlayers = (presetPath: string) => {
       jumpRotation(thisTime, camada)
       addMarkerToLayer(camada, thisTime, { title: "Jump", label: keyLabel.green })
 
-      applySfx(thisComp, thisTime, "jump_sfx_01.wav", keyLabel.green)
+      // applySfx(thisComp, thisTime, "jump_sfx_01.wav", keyLabel.green)
     })
 
   } catch (e) {
@@ -387,7 +387,7 @@ export const flipStockCards = (stockLayerToFlip?: Layer) => {
     setKeyframeToLayer(layerFlip, keyFlip2, 100, actionLabelColor)
   }
 
-  applySfx(thisComp, thisComp.time, "flip-stock_sfx_01.wav", keyLabel.yellow)
+  // applySfx(thisComp, thisComp.time, "flip-stock_sfx_01.wav", keyLabel.yellow)
   const nextLayer = getNextStockCard(thisComp, firstSelectedLayer, anticipationLabelColor)
 
   if (nextLayer) {
@@ -577,7 +577,12 @@ export const addCardToPrecomp = (deckName: string, card: number, cardName: strin
 export const resetCardsAnimation = (presetMatchName: string) => {
   // 1. O Try Externo protege contra falhas globais (ex: findCardLayers quebra)
   try {
-    const cardsList: Layer[] = findCardLayers()
+    const thisComp = app.project.activeItem as CompItem
+    const selectedLayers = thisComp.selectedLayers
+
+    const cardsList: Layer[] = selectedLayers.length > 0
+      ? thisComp.selectedLayers
+      : findCardLayers()
 
     for (let layer of cardsList) {
       // --- BLOCO 1: Propriedades e Expressões ---
@@ -628,7 +633,7 @@ export const resetCardsAnimation = (presetMatchName: string) => {
       }
     }
 
-    clearSfxPrecompLayers()
+    // clearSfxPrecompLayers()
 
   } catch (e) {
     // Erro crítico: algo impediu o script de sequer começar a processar a lista
@@ -638,9 +643,8 @@ export const resetCardsAnimation = (presetMatchName: string) => {
 
 export const restoreCardsAnimation = (presetPath: string, presetMatchName: string) => {
 
-  deselectAllLayer()
-  clearSfxPrecompLayers()
-  
+  // clearSfxPrecompLayers()
+
   const thisComp = getActiveComp()
   const cardsLayers = findCardLayers()
 
@@ -668,8 +672,8 @@ export const restoreCardsAnimation = (presetPath: string, presetMatchName: strin
   // aqui vem a aplicação
   const targetLayer = getTargetLayer() as Layer
   const currentTime = thisComp.time
-  thisComp.time = thisComp.duration
-  
+  thisComp.time = 0
+
   deselectAllSelectedLayers(cardsMarkers)
 
   for (let card of cardsMarkers) {
@@ -682,7 +686,7 @@ export const restoreCardsAnimation = (presetPath: string, presetMatchName: strin
       jumpRotation(card.time, card.layer)
       card.layer.selected = false
 
-      applySfx(thisComp, card.time, "jump_sfx_01.wav", keyLabel.green)
+      // applySfx(thisComp, card.time, "jump_sfx_01.wav", keyLabel.green)
 
     } else if (card.comment === "Flip") {
       flipCard(card.time, card.layer)
