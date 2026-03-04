@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useState } from "react";
-
 import { csi, evalTS } from "../../../lib/utils/bolt";
 import { fs } from "../../../lib/cep/node";
 
@@ -8,7 +7,7 @@ type Props = {
   setDeck: (v: string) => void;
   cardNumber: number;
   setCardNumber: (v: number) => void;
-  cardProject: string
+  cardProject: string;
 };
 
 export const CardPickerPanel: React.FC<Props> = ({ deck, setDeck, cardNumber, setCardNumber, cardProject }) => {
@@ -33,6 +32,7 @@ export const CardPickerPanel: React.FC<Props> = ({ deck, setDeck, cardNumber, se
       12: { name: "K", fileImg: `DS-Cards_K_${deckPrefix}.png` },
       13: { name: "A", fileImg: `DS-Cards_A_${deckPrefix}.png` },
       14: { name: "Wild", fileImg: `wild_card.png` },
+      15: { name: "Plus", fileImg: `plus_card.png` },
     } as Record<number, { name: string; fileImg: string }>;
   }, [deckPrefix]);
 
@@ -46,26 +46,29 @@ export const CardPickerPanel: React.FC<Props> = ({ deck, setDeck, cardNumber, se
   };
 
   const suitLabel = suitLabelMap[deckPrefix] ?? deckPrefix;
-  const cardTitle = `${safeCard.name} - ${suitLabel}`;
+
+  // Determina se é uma carta que não pertence a um naipe específico
+  const isSpecialCard = safeCard.fileImg === "wild_card.png" || safeCard.fileImg === "plus_card.png";
+
+  // Ajusta o título: Se for especial, mostra apenas o nome (ex: "Wild"). Se não, mostra "A - Hearts"
+  const cardTitle = isSpecialCard ? safeCard.name : `${safeCard.name} - ${suitLabel}`;
 
   const assets = `${csi.getSystemPath("extension")}/assets`;
   const cardsDeckPath = `${assets}/cards-deck`;
 
-  const cardImage =
-    safeCard.fileImg === "wild_card.png"
-      ? `${cardsDeckPath}/${safeCard.fileImg}`
-      : `${cardsDeckPath}/${deck}/${safeCard.fileImg}`;
+  // Define o caminho: Cartas especiais ficam na raiz de /cards-deck/, as outras dentro da pasta do Deck
+  const cardImage = isSpecialCard
+    ? `${cardsDeckPath}/${safeCard.fileImg}`
+    : `${cardsDeckPath}/${deck}/${safeCard.fileImg}`;
 
   const changeCard = async () =>
     await evalTS("handleChangeCard", deck, cardNumber, cardTitle);
 
   const handleAddCard = async () => {
-    await evalTS("handleAddCard", deck, cardNumber, cardTitle, cardProject)
-  }
+    await evalTS("handleAddCard", deck, cardNumber, cardTitle, cardProject);
+  };
 
-  // --- NEW HANDLER FOR CLICKS ---
   const handlePreviewClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    // Checks for Control Key (Win) or Command Key (Mac)
     if (e.ctrlKey || e.metaKey) {
       handleAddCard();
     } else {
@@ -79,15 +82,19 @@ export const CardPickerPanel: React.FC<Props> = ({ deck, setDeck, cardNumber, se
       return;
     }
 
-    const buffer = fs.readFileSync(cardImage) as Buffer;
-    const uint8Array = new Uint8Array(buffer);
-    const blob = new Blob([uint8Array], { type: "image/png" });
+    try {
+      const buffer = fs.readFileSync(cardImage) as Buffer;
+      const uint8Array = new Uint8Array(buffer);
+      const blob = new Blob([uint8Array], { type: "image/png" });
+      const url = URL.createObjectURL(blob);
+      setCardSrc(url);
 
-    const url = URL.createObjectURL(blob);
-    setCardSrc(url);
-
-    return () => URL.revokeObjectURL(url);
-  }, [cardImage, deck, cardNumber, safeCard.fileImg]);
+      return () => URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Erro ao ler arquivo de imagem:", err);
+      setCardSrc(null);
+    }
+  }, [cardImage, safeCard.fileImg]);
 
   return (
     <section className="panel-section">
@@ -95,10 +102,13 @@ export const CardPickerPanel: React.FC<Props> = ({ deck, setDeck, cardNumber, se
 
       <div className="field-row">
         <div className="field-input-group">
+          {/* O seletor de Deck pode ser desabilitado visualmente para cartas especiais se desejar */}
           <select
             value={deck}
             onChange={(e) => setDeck(e.target.value)}
             className="field-input"
+            disabled={isSpecialCard} 
+            style={{ opacity: isSpecialCard ? 0.5 : 1 }}
           >
             <option value="Club_Deck">♣️ Club Cards</option>
             <option value="Diamond_Deck">♦️ Diamond Cards</option>
@@ -125,12 +135,9 @@ export const CardPickerPanel: React.FC<Props> = ({ deck, setDeck, cardNumber, se
             <option value="12">K</option>
             <option value="13">A</option>
             <option value="14">Wild</option>
+            <option value="15">Plus</option>
           </select>
-          <button
-            onClick={turnCards}
-            // style={{ border: "1px solid #E8920D" }}
-            title="Turn Cards"
-          >
+          <button onClick={turnCards} title="Turn Cards">
             Turn
           </button>
         </div>
@@ -138,16 +145,15 @@ export const CardPickerPanel: React.FC<Props> = ({ deck, setDeck, cardNumber, se
 
       <section className="panel-section panel-preview">
         {cardSrc && (
-          <div 
-            className="card-preview" 
-            onClick={handlePreviewClick} 
+          <div
+            className="card-preview"
+            onClick={handlePreviewClick}
             style={{ cursor: "pointer" }}
             title="Click to Change | Ctrl + Click to Add"
           >
             <img className="card-image" src={cardSrc} alt={cardTitle} />
             <span className="card-hint">
-               {/* Updated hint text for UX */}
-               Click to change / Ctrl+Click to add
+              Click to change / Ctrl+Click to add
             </span>
           </div>
         )}

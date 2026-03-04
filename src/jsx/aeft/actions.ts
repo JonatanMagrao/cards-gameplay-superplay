@@ -557,6 +557,14 @@ export const addCardToPrecomp = (deckName: string, card: number, cardName: strin
       return
     }
 
+    if(card === 15){
+      const plusCardSource = getItemByName("Plus_Card") as CompItem
+      const plusCard = thisComp.layers.add(plusCardSource)
+      thisComp.layer("Plus_Card").label = keyLabel.purple
+
+      return
+    }
+
     const deck = getItemByName(deckName)
 
     if (!deck) {
