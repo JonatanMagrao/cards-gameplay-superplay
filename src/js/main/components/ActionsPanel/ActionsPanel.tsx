@@ -141,7 +141,6 @@ export const ActionsPanel: React.FC<Props> = ({
           Clear Expressions
         </button>
 
-
       </div>
     </section>
   );
