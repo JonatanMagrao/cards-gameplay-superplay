@@ -218,6 +218,13 @@ export const applyJumpOnSelectedlayers = (presetPath: string) => {
       jumpRotation(thisTime, camada)
       addMarkerToLayer(camada, thisTime, { title: "Jump", label: keyLabel.green })
 
+      camada
+        .property("ADBE Effect Parade")
+        .property(cardFxMatchName)
+        .property("Target Layer")
+        //@ts-ignore
+        .setValue(targetLayer.index)
+
       // applySfx(thisComp, thisTime, "jump_sfx_01.wav", keyLabel.green)
     })
 
@@ -557,7 +564,7 @@ export const addCardToPrecomp = (deckName: string, card: number, cardName: strin
       return
     }
 
-    if(card === 15){
+    if (card === 15) {
       const plusCardSource = getItemByName("Plus_Card") as CompItem
       const plusCard = thisComp.layers.add(plusCardSource)
       thisComp.layer("Plus_Card").label = keyLabel.purple
@@ -693,6 +700,12 @@ export const restoreCardsAnimation = (presetPath: string, presetMatchName: strin
       jumpScale(card.time, card.layer)
       jumpRotation(card.time, card.layer)
       card.layer.selected = false
+
+      card.layer
+        .property("ADBE Effect Parade")
+        .property(cardFxMatchName)
+        .property("Target Layer")
+        .setValue(targetLayer.index)
 
       // applySfx(thisComp, card.time, "jump_sfx_01.wav", keyLabel.green)
 

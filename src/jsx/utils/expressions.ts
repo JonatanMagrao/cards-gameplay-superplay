@@ -1,19 +1,21 @@
 export const expPos = `
 const control = effect("Pseudo/cards_gameplay_superplay");
 const jumpHeight = control("Jump Height").value;
-// --- CONFIGURAÇÕES GERAIS ---
 const jumpCurveShape = control("Jump Curve Shape").value;
-
-// --- CONFIGURAÇÃO DO QUIQUE FINAL (LANDING / OVERSHOOT) ---
 const bounceAmplitude = control("Bounce Amplitude").value;
 const bounceFrequency = control("Bounce Frequency").value;
 const bounceDecay = control("Bounce Decay").value;
+const targetLayer = control("Target Layer");
+const targetOffset = control("Target Offset").value;
+const targetOffsetAngle = control("Target Offset Angle").value;
 
-// --- LABEL ALVO (cor do keyframe) ---
-const targetLabel = 9; // 1–16 (igual aos labels do AE)
-const baseValue = value;
+// Lendo o checkbox (1 = true/marcado, 0 = false/desmarcado)
+const behindTarget = control("Behind Target").value;
+const targetLabel = 9; 
 
-// --- COLETA APENAS KEYS COM ESSE LABEL ---
+// Se behindTarget for 1, zOffset é 0.01. Senão, é 0.
+const zOffset = behindTarget == 1 ? 0.01 : 0;
+
 let labeledKeys = [];
 for (let i = 1; i <= numKeys; i++) {
     if (key(i).label == targetLabel) {
@@ -22,31 +24,35 @@ for (let i = 1; i <= numKeys; i++) {
 }
 
 if (labeledKeys.length < 2) {
-    baseValue;
+    value; 
 } else {
-    const firstKey = labeledKeys[0];
-    const secondKey = labeledKeys[1];
-    const firstKeyTime = firstKey.time;
-    const secondKeyTime = secondKey.time;
+    const firstKeyTime = labeledKeys[0].time;
+    const secondKeyTime = labeledKeys[1].time;
 
-    // FASE 2: O VOO (arco somado ao valor base)
-    if (time >= firstKeyTime && time <= secondKeyTime) {
+    const rad = degreesToRadians(targetOffsetAngle - 90);
+    const offsetX = Math.cos(rad) * targetOffset;
+    const offsetY = Math.sin(rad) * targetOffset;
+
+    if (time < firstKeyTime) {
+        value; 
+    } else if (time >= firstKeyTime && time <= secondKeyTime) {
         const normalizedTime = (time - firstKeyTime) / (secondKeyTime - firstKeyTime);
+        const startPos = thisProperty.valueAtTime(firstKeyTime);
+        const rawTargetPos = targetLayer.transform.position.valueAtTime(time);
+        const targetPos = [rawTargetPos[0] + offsetX, rawTargetPos[1] + offsetY, rawTargetPos[2]];
+        const currentBasePos = linear(normalizedTime, 0, 1, startPos, targetPos);
         const baseArc = Math.sin(normalizedTime * Math.PI);
         const adjustedArc = Math.pow(baseArc, jumpCurveShape) * jumpHeight;
-        [baseValue[0], baseValue[1] - adjustedArc, baseValue[2]];
-
-    // FASE 3: ATERRISSAGEM (quique por cima da animação normal)
-    } else if (time > secondKeyTime) {
-        const landingTime = time - secondKeyTime;
-        const bounce =
-            Math.sin(landingTime * bounceFrequency * Math.PI * 2) *
-            bounceAmplitude *
-            Math.exp(-landingTime * bounceDecay);
-        [baseValue[0], baseValue[1] + bounce, baseValue[2]];
-
+        
+        // Usamos targetPos[2] direto aqui para evitar sobreposição durante o voo
+        [currentBasePos[0], currentBasePos[1] - adjustedArc, targetPos[2] + zOffset];
     } else {
-        baseValue;
+        const landingTime = time - secondKeyTime;
+        const rawTargetPos = targetLayer.transform.position.valueAtTime(time);
+        const targetPos = [rawTargetPos[0] + offsetX, rawTargetPos[1] + offsetY, rawTargetPos[2]];
+        const bounce = Math.sin(landingTime * bounceFrequency * Math.PI * 2) * bounceAmplitude * Math.exp(-landingTime * bounceDecay);
+            
+        [targetPos[0], targetPos[1] + bounce, targetPos[2] + zOffset];
     }
 }
 `
