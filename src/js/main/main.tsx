@@ -6,7 +6,7 @@ import "./main.scss";
 import { CardPickerPanel } from "./components/CardPickerPanel/CardPickerPanel";
 import { ActionsPanel } from "./components/ActionsPanel/ActionsPanel";
 import { LayoutsPanel } from "./components/LayoutsPanel/LayoutsPanel";
-import { DuplicatePanel } from "./components/DuplicatePanel/DuplicatePanel"; // <--- NOVO IMPORT
+import { DuplicatePanel } from "./components/DuplicatePanel/DuplicatePanel";
 
 import { os, path } from "../lib/cep/node";
 
@@ -21,6 +21,7 @@ export const App = () => {
 
   const [deck, setDeck] = useState("Club_Deck");
   const [cardNumber, setCardNumber] = useState(1);
+  const [coinValue, setCoinValue] = useState("02"); // NOVO: Estado da moeda morando no App
 
   const [tab, setTab] = useState<TabKey>("cards");
   
@@ -76,11 +77,12 @@ export const App = () => {
                 cardNumber={cardNumber}
                 setCardNumber={setCardNumber}
                 cardProject={cardProject}
+                coinValue={coinValue}       // <--- Passando valor
+                setCoinValue={setCoinValue} // <--- Passando função de alterar valor
               />
 
-              <ActionsPanel />
+              <ActionsPanel coinValue={coinValue} /> {/* <--- Passando o valor para o botão Jump usar */}
 
-              {/* Adicionado aqui logo após o painel de ações */}
               <DuplicatePanel />
             </>
           ) : (

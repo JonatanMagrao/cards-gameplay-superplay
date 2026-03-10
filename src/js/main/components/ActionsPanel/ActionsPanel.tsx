@@ -2,24 +2,30 @@ import React from "react";
 import { csi, evalTS } from "../../../lib/utils/bolt";
 
 type Props = {
-  cardsPreset?: string; // relative to extension assets
-  projectRelPath?: string; // relative to extension assets
-  progressBarPreset?: string; // relative to extension assets
+  cardsPreset?: string; 
+  projectRelPath?: string; 
+  progressBarPreset?: string; 
+  coinValue: string; // NOVO: Recebendo a moeda escolhida
 };
 
 export const ActionsPanel: React.FC<Props> = ({
   cardsPreset = "presets/cards_gameplay_superplay.ffx",
   progressBarPreset = "presets/cards_gameplay_progressbar.ffx",
   projectRelPath = "disney_solitaire_cards.aepx",
-
+  coinValue, // Extraindo das props
 }) => {
   const assets = `${csi.getSystemPath("extension")}/assets`;
 
   const cardPresetPath = `${assets}/${cardsPreset}`;
   const progressBarPresetPath = `${assets}/${progressBarPreset}`;
   const cardProject = `${assets}/${projectRelPath}`;
+  
+  // NOVO: Montando o caminho do arquivo de moeda baseado no que foi selecionado
+  const coinPath = `${assets}/coins-vfx/coin_plus-${coinValue}.mov`;
 
-  const applyJump = async () => await evalTS("handleApplyJump", cardPresetPath);
+  // NOVO: Passando os dois caminhos pro seu ExtendScript
+  const applyJump = async () => await evalTS("handleApplyJump", cardPresetPath, coinPath);
+  
   const flipStockCards = async () => await evalTS("handleFlipStockCards");
   const applyFlipCard = async () => await evalTS("handleFlipCards");
 
@@ -57,7 +63,7 @@ export const ActionsPanel: React.FC<Props> = ({
 
         <button onClick={applyJump}
           style={{ border: "1px solid #4AA44C" }}
-          title={"Apply Jump"}
+          title={"Apply Jump with Coin"}
         >
           Jump
         </button>
@@ -116,15 +122,6 @@ export const ActionsPanel: React.FC<Props> = ({
           Restore
         </button>
 
-
-        {/* <button
-          onClick={handleImportFilesAndComps}
-          style={{ border: "1px solid #677DE0" }}
-          title={"Import Decks"}
-        >
-          Import
-        </button> */}
-
         <button
           onClick={handleAddProgressBar}
           style={{ border: "1px solid #E8920D" }}
@@ -140,7 +137,6 @@ export const ActionsPanel: React.FC<Props> = ({
         >
           Clear Expressions
         </button>
-
       </div>
     </section>
   );

@@ -85,17 +85,12 @@ export const handleSetTableauLayer = () => {
   }
 }
 
-export const handleApplyJump = (presetPath: string) => {
-  // const thisComp = getActiveComp()
-  // if (thisComp.renderer !== precompRenderer) {
-  //   thisComp.renderer = precompRenderer
-  // }
-
+export const handleApplyJump = (presetPath: string, coinFilePath: string) => {
   app.beginUndoGroup("Apply Jump")
   try {
-    applyJumpOnSelectedlayers(presetPath)
+    applyJumpOnSelectedlayers(presetPath, coinFilePath)
   } catch (e) {
-    alertError(e, 103, "handleApplyJump", "aeft.ts")
+    alertError(e, 93, "handleApplyJump", "aeft.ts")
   } finally {
     app.endUndoGroup()
   }
@@ -210,13 +205,13 @@ export const handleAddProgressBar = (presetPath: string) => {
 
 export const handleClearLayerExpressions = () => {
   app.beginUndoGroup("Clear Layer Expressions")
-  try{
+  try {
 
     const thisComp = app.project.activeItem as CompItem
     forEachSelectedLayer(thisComp, layer => {
       clearLayerExpressions(layer)
     })
-  }catch(e){
+  } catch (e) {
     alertError(e, 220, "handleClearLayerExpressions", "aeft.ts")
   } finally {
     app.endUndoGroup()

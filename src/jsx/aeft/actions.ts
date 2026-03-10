@@ -166,7 +166,21 @@ export const setJumpTargetLayer = (camada: Layer, targetLayer: Layer) => {
     .setValue(targetLayer.index)
 }
 
-export const applyJumpOnSelectedlayers = (presetPath: string) => {
+const applyCoin = (camada: Layer, coinFilePath: string) => {
+
+  const importOptions = new ImportOptions(new File(coinFilePath))
+  const importedItem = app.project.importFile(importOptions) as AVItem
+  const coinLayer = thisComp.layers.add(importedItem)
+
+  const camadaPosValue = getLayerProp(camada, posPropPath).value
+  const coinLayerPos = getLayerProp(coinLayer, posPropPath)
+
+  coinLayer.startTime = thisComp.time
+  coinLayerPos.setValue(camadaPosValue)
+
+}
+
+export const applyJumpOnSelectedlayers = (presetPath: string, coinFilePath: string) => {
 
   const targetLayer = getTargetLayer() as Layer
   const thisComp = getActiveComp();
@@ -192,8 +206,9 @@ export const applyJumpOnSelectedlayers = (presetPath: string) => {
       jumpRotation(camada)
 
       addMarkerToLayer(camada, thisTime, { title: "Jump", label: keyLabel.green })
-
       setJumpTargetLayer(camada, targetLayer)
+
+      applyCoin(camada, coinFilePath)
 
       // applySfx(thisComp, thisTime, "jump_sfx_01.wav", keyLabel.green)
     })
@@ -636,8 +651,8 @@ export const restoreCardsAnimation = (presetPath: string, presetMatchName: strin
       if (!fxExistsByMatchName(card.layer, presetMatchName)) card.layer.applyPreset(new File(presetPath))
       jumpPos(card.layer)
       jumpScale(card.layer)
-      jumpRotation(card.layer)      
-      setJumpTargetLayer(card.layer,targetLayer)
+      jumpRotation(card.layer)
+      setJumpTargetLayer(card.layer, targetLayer)
 
       card.layer.selected = false
 
