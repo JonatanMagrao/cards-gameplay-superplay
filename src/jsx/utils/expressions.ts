@@ -1,92 +1,145 @@
 export const expPos = `
-const control = effect("Pseudo/cards_gameplay_superplay");
-const jumpHeight = control("Jump Height").value;
-const jumpCurveShape = control("Jump Curve Shape").value;
-const bounceAmplitude = control("Bounce Amplitude").value;
-const bounceFrequency = control("Bounce Frequency").value;
-const bounceDecay = control("Bounce Decay").value;
-const targetLayer = control("Target Layer");
-const targetOffset = control("Target Offset").value;
-const targetOffsetAngle = control("Target Offset Angle").value;
-
-// Lendo o checkbox (1 = true/marcado, 0 = false/desmarcado)
-const behindTarget = control("Behind Target").value;
-const targetLabel = 9; 
-
-// Se behindTarget for 1, zOffset é 0.01. Senão, é 0.
-const zOffset = behindTarget == 1 ? 0.01 : 0;
-
-let labeledKeys = [];
-for (let i = 1; i <= numKeys; i++) {
-    if (key(i).label == targetLabel) {
-        labeledKeys.push(key(i));
-    }
-}
-
-if (labeledKeys.length < 2) {
-    value; 
-} else {
-    const firstKeyTime = labeledKeys[0].time;
-    const secondKeyTime = labeledKeys[1].time;
-
-    const rad = degreesToRadians(targetOffsetAngle - 90);
-    const offsetX = Math.cos(rad) * targetOffset;
-    const offsetY = Math.sin(rad) * targetOffset;
-
-    if (time < firstKeyTime) {
-        value; 
-    } else if (time >= firstKeyTime && time <= secondKeyTime) {
-        const normalizedTime = (time - firstKeyTime) / (secondKeyTime - firstKeyTime);
-        const startPos = thisProperty.valueAtTime(firstKeyTime);
-        const rawTargetPos = targetLayer.transform.position.valueAtTime(time);
-        const targetPos = [rawTargetPos[0] + offsetX, rawTargetPos[1] + offsetY, rawTargetPos[2]];
-        const currentBasePos = linear(normalizedTime, 0, 1, startPos, targetPos);
-        const baseArc = Math.sin(normalizedTime * Math.PI);
-        const adjustedArc = Math.pow(baseArc, jumpCurveShape) * jumpHeight;
+try {
+    const jumpMarkerTime = thisLayer.marker.key("Jump").time;
         
-        // Usamos targetPos[2] direto aqui para evitar sobreposição durante o voo
-        [currentBasePos[0], currentBasePos[1] - adjustedArc, targetPos[2] + zOffset];
+    const control = effect("Cards Gameplay Superplay");
+    const jumpDurationFrames = control("Jump Duration").value;
+
+    if (jumpDurationFrames <= 0) {
+        value;
     } else {
-        const landingTime = time - secondKeyTime;
-        const rawTargetPos = targetLayer.transform.position.valueAtTime(time);
-        const targetPos = [rawTargetPos[0] + offsetX, rawTargetPos[1] + offsetY, rawTargetPos[2]];
-        const bounce = Math.sin(landingTime * bounceFrequency * Math.PI * 2) * bounceAmplitude * Math.exp(-landingTime * bounceDecay);
+        const jumpHeight = control("Jump Height").value;
+        const jumpCurveShape = control("Jump Curve Shape").value;
+        const bounceAmplitude = control("Bounce Amplitude").value;
+        const bounceFrequency = control("Bounce Frequency").value;
+        const bounceDecay = control("Bounce Decay").value;
+        const zDepthOffset = control("Z Depth Offset").value;
+
+        const targetLayer = control("Target Layer");
+        const targetOffset = control("Target Offset").value;
+        const targetOffsetAngle = control("Target Offset Angle").value;
+
+        const behindTarget = control("Behind Target").value;
+        const zOffset = behindTarget === 1 ? 0.02 : -0.02;
+
+        const jumpTime = framesToTime(jumpDurationFrames);
+        const endTime = jumpMarkerTime + jumpTime;
+
+        const rad = degreesToRadians(targetOffsetAngle - 90);
+        const offsetX = Math.cos(rad) * targetOffset;
+        const offsetY = Math.sin(rad) * targetOffset;
+
+        if (time < jumpMarkerTime) {
+            value; 
+        } else if (time >= jumpMarkerTime && time < endTime) {
+            const startPos = thisProperty.valueAtTime(jumpMarkerTime); 
+            const rawTargetPos = targetLayer.transform.position.valueAtTime(time);
             
-        [targetPos[0], targetPos[1] + bounce, targetPos[2] + zOffset];
+            const targetPos = [rawTargetPos[0] + offsetX, rawTargetPos[1] + offsetY, rawTargetPos[2]];
+            
+            const progress = linear(time, jumpMarkerTime, endTime, 0, 1);
+            
+            const currentX = linear(progress, 0, 1, startPos[0], targetPos[0]);
+            const currentY = linear(progress, 0, 1, startPos[1], targetPos[1]);
+            
+            const baseArc = Math.sin(progress * Math.PI);
+            const adjustedArc = Math.pow(baseArc, jumpCurveShape) * jumpHeight; 
+            
+            [currentX, currentY - adjustedArc, targetPos[2] + zOffset + zDepthOffset];
+            
+        } else {
+            const landingTime = time - endTime;
+            const rawTargetPos = targetLayer.transform.position.valueAtTime(time);
+            const targetPos = [rawTargetPos[0] + offsetX, rawTargetPos[1] + offsetY, rawTargetPos[2]];
+            
+            const bounce = Math.sin(landingTime * bounceFrequency * Math.PI * 2) * bounceAmplitude * Math.exp(-landingTime * bounceDecay);
+                
+            [targetPos[0], targetPos[1] + bounce, targetPos[2] + zOffset + zDepthOffset];
+        }
     }
+} catch (err) {
+    value;
+}
+`
+
+export const expScale = `
+try {
+    const jumpMarkerTime = thisLayer.marker.key("Jump").time;
+    
+    const control = effect("Pseudo/cards_gameplay_superplay");
+    const jumpDurationFrames = control("Jump Duration").value;
+
+    if (jumpDurationFrames <= 0) {
+        value; 
+    } else {
+        const jumpTime = framesToTime(jumpDurationFrames);
+        const endTime = jumpMarkerTime + jumpTime;
+        const anticipationStart = jumpMarkerTime - framesToTime(4);
+
+        if (time < anticipationStart) {
+            value; 
+        } else if (time >= anticipationStart && time <= endTime) {
+            // Lê a escala base e calcula o alvo apenas durante o tempo do pulo
+            const startScale = thisProperty.valueAtTime(anticipationStart); 
+            
+            const targetScale = startScale.length === 3 
+                ? [startScale[0] * 0.8, startScale[1] * 0.8, startScale[2]] 
+                : [startScale[0] * 0.8, startScale[1] * 0.8];
+
+            if (time < jumpMarkerTime) {
+                const t = ease(time, anticipationStart, jumpMarkerTime, 0, 1);
+                linear(t, 0, 1, startScale, targetScale);
+            } else {
+                const t = linear(time, jumpMarkerTime, endTime, 0, 1);
+                linear(t, 0, 1, targetScale, startScale);
+            }
+        } else {
+            value; 
+        }
+    }
+} catch (err) {
+    value;
 }
 `
 
 export const expRot = `
-const firstKeyPosX = thisLayer.position.key(1)[0];
-const compCenterX = thisComp.width / 2;
-const isOnLeftSide = firstKeyPosX < compCenterX;
+try {
+    const jumpMarkerTime = thisLayer.marker.key("Jump").time;
+    
+    const control = effect("Pseudo/cards_gameplay_superplay");
+    const jumpDurationFrames = control("Jump Duration").value;
 
-const rotationCtrl = effect("Pseudo/cards_gameplay_superplay")("Rotation Cycles").value;
-const spinRotation = isOnLeftSide ? rotationCtrl : -rotationCtrl;
-
-// --- CÓDIGO ---
-if (numKeys >= 2) {
-    const firstKey = key(1);
-    const secondKey = key(2);
-    const firstKeyTime = firstKey.time;
-    const secondKeyTime = secondKey.time;
-
-    const baseRotation = value;
-
-    // FASE 2: VOO — adiciona o giro desejado em cima do value
-    if (time >= firstKeyTime && time <= secondKeyTime) {
-        const spinOffset = linear(time, firstKeyTime, secondKeyTime, 0, spinRotation);
-        baseRotation + spinOffset;
-
-    // FASE 3: pós-queda — mantém o giro total somado
-    } else if (time > secondKeyTime) {
-        baseRotation + spinRotation;
-
+    if (jumpDurationFrames <= 0) {
+        value; 
     } else {
-        baseRotation;
+        if (time < jumpMarkerTime) {
+            value; 
+        } else {
+            // Avaliação preguiçosa: só lê camadas e direções se a carta já estiver pulando/pousada
+            const targetLayer = control("Target Layer");
+            const spinDegrees = control("Rotation Cycles").value;
+            
+            const startX = transform.position.valueAtTime(jumpMarkerTime)[0];
+            const targetX = targetLayer.transform.position.valueAtTime(jumpMarkerTime)[0];
+            
+            const dir = startX > targetX ? -1 : 1; 
+            const giroFinal = spinDegrees * dir;
+            
+            const jumpTime = framesToTime(jumpDurationFrames);
+            const endTime = jumpMarkerTime + jumpTime;
+            const targetRot = targetLayer.transform.zRotation.valueAtTime(time);
+
+            if (time <= endTime) {
+                const progress = linear(time, jumpMarkerTime, endTime, 0, 1);
+                const startRot = thisProperty.valueAtTime(jumpMarkerTime);
+                
+                linear(progress, 0, 1, startRot, targetRot) + (progress * giroFinal);
+            } else {
+                targetRot + giroFinal;
+            }
+        }
     }
-} else {
+} catch (err) {
     value;
 }
 `

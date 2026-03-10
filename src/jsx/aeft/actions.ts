@@ -1,5 +1,5 @@
 import { raise, alertError } from "./errors"
-import { expPos, expRot } from "../utils/expressions"
+import { expPos, expRot, expScale } from "../utils/expressions"
 import { getActiveComp, forEachLayer, getItemByName } from "./aeft-utils"
 import {
   getDeepestZ,
@@ -55,6 +55,7 @@ const zAdjust = .1
 
 const transformGroupMatchName = "ADBE Transform Group"
 const essentialPropertiesMatchName = "ADBE Layer Overrides"
+const layerEffect = "ADBE Effect Parade"
 
 export const markerPropPath = "ADBE Marker"
 export const posPropPath = [transformGroupMatchName, "ADBE Position"] as const
@@ -67,6 +68,8 @@ export const cardOptionEPPath = [essentialPropertiesMatchName, "Card Option"] as
 export const progressBarEPPath = [essentialPropertiesMatchName, "Bar Control"] as const
 
 export const textPropPath = ["ADBE Text Properties", "ADBE Text Document"] as const
+
+export const superplayCardEffect = [layerEffect, cardFxMatchName]
 
 
 //================================= TABLEAU JUMP ACTIONS
@@ -138,62 +141,29 @@ const clearSfxPrecompLayers = () => {
   }
 };
 
-export const jumpPos = (time: number, camada: Layer, targetLayer: Layer) => {
-
-  const myLayer = camada as unknown as AVLayer
-  myLayer.threeDLayer = true
-
-  const posProp = getLayerProp(myLayer, posPropPath)
-  const targetPosProp = getLayerProp(targetLayer, posPropPath)
-  const startPos = posProp.value
-  const targetEndPos = targetPosProp.valueAtTime(targetLayer.outPoint, false)
-  const lastZPos = getDeepestZ()
-
-  targetEndPos[2] = lastZPos - zAdjust
-
-  const keyTime1 = time + frameDuration(4)
-  const keyTime2 = time + frameDuration(24)
-
-  setKeyframeToLayer(posProp, keyTime1, startPos, actionLabelColor)
-  setKeyframeToLayer(posProp, keyTime2, targetEndPos, actionLabelColor)
-
+export const jumpPos = (camada: Layer) => {
+  const posProp = getLayerProp(camada, posPropPath)
   posProp.expression = expPos
-
 }
 
-export const jumpScale = (time: number, camada: Layer) => {
-
+export const jumpScale = (camada: Layer) => {
   const scaleProp = getLayerProp(camada, scalePropPath)
-  const layerScale = scaleProp.value
-  const pressScaleEffect = []
-
-  for (let i of layerScale) {
-    pressScaleEffect.push(i * .8)
-  }
-
-  const firstKeyTime = time
-  const secondKeyTime = firstKeyTime + frameDuration(4)
-  const thirdKeyTime = secondKeyTime + frameDuration(4)
-
-  setKeyframeToLayer(scaleProp, firstKeyTime, layerScale, actionLabelColor, { ease: true, easeIn: 16, easeOut: 100 })
-  setKeyframeToLayer(scaleProp, secondKeyTime, pressScaleEffect, actionLabelColor, { ease: true, easeIn: 33.3333, easeOut: 33.3333 })
-  setKeyframeToLayer(scaleProp, thirdKeyTime, layerScale, actionLabelColor, { ease: true, easeIn: 100, easeOut: 16 })
-
+  scaleProp.expression = expScale
 }
 
-export const jumpRotation = (time: number, camada: Layer) => {
-
+export const jumpRotation = (camada: Layer) => {
   const rotationProp = getLayerProp(camada, zRotPropPath)
-  const layerRotation = rotationProp.value
-
-  const firstKeyTime = time + frameDuration(4)
-  const secondkeyTime = time + frameDuration(24)
-
-  setKeyframeToLayer(rotationProp, firstKeyTime, layerRotation, actionLabelColor)
-  setKeyframeToLayer(rotationProp, secondkeyTime, 0, actionLabelColor)
-
   rotationProp.expression = expRot
+}
 
+export const setJumpTargetLayer = (camada: Layer, targetLayer: Layer) => {
+
+  camada
+    .property("ADBE Effect Parade")
+    .property(cardFxMatchName)
+    .property("Target Layer")
+    //@ts-ignore
+    .setValue(targetLayer.index)
 }
 
 export const applyJumpOnSelectedlayers = (presetPath: string) => {
@@ -210,20 +180,20 @@ export const applyJumpOnSelectedlayers = (presetPath: string) => {
   try {
 
     forEachSelectedLayer(thisComp, camada => {
+
       if (!fxExistsByMatchName(camada, cardFxMatchName)) camada.applyPreset(new File(presetPath))
       if (namedMarkerExists(camada, "Jump")) return
 
-      jumpPos(thisTime, camada, targetLayer)
-      jumpScale(thisTime, camada)
-      jumpRotation(thisTime, camada)
+      //@ts-ignore
+      camada.threeDLayer = true
+
+      jumpPos(camada)
+      jumpScale(camada)
+      jumpRotation(camada)
+
       addMarkerToLayer(camada, thisTime, { title: "Jump", label: keyLabel.green })
 
-      camada
-        .property("ADBE Effect Parade")
-        .property(cardFxMatchName)
-        .property("Target Layer")
-        //@ts-ignore
-        .setValue(targetLayer.index)
+      setJumpTargetLayer(camada, targetLayer)
 
       // applySfx(thisComp, thisTime, "jump_sfx_01.wav", keyLabel.green)
     })
@@ -525,6 +495,7 @@ export const duplicateCards = (numCopies: number, adjustPos: number[]) => {
 
 export const changeCard = (deckName: string, card: number, cardName: string) => {
   const thisComp = getActiveComp();
+
   const cardsSet = getItemByName(deckName) as any
   const camadas = thisComp.selectedLayers
 
@@ -566,7 +537,7 @@ export const addCardToPrecomp = (deckName: string, card: number, cardName: strin
 
     if (card === 15) {
       const plusCardSource = getItemByName("Plus_Card") as CompItem
-      const plusCard = thisComp.layers.add(plusCardSource)
+      thisComp.layers.add(plusCardSource)
       thisComp.layer("Plus_Card").label = keyLabel.purple
 
       return
@@ -585,7 +556,7 @@ export const addCardToPrecomp = (deckName: string, card: number, cardName: strin
     cardOption.setValue(card)
 
   } catch (e) {
-    alertError(e, 479, "AddCardToPrecomp", "actions.ts")
+    alertError(e, 558, "AddCardToPrecomp", "actions.ts")
   }
 }
 
@@ -600,59 +571,25 @@ export const resetCardsAnimation = (presetMatchName: string) => {
       : findCardLayers()
 
     for (let layer of cardsList) {
-      // --- BLOCO 1: Propriedades e Expressões ---
-      // Agrupamos a obtenção E o uso da propriedade no mesmo bloco seguro
       try {
-        // Se falhar ao pegar a prop, ele nem tenta limpar a expressão, o que é correto.
         const zPosProp = getLayerProp(layer, zRotPropPath)
         const posProp = getLayerProp(layer, posPropPath)
+        const scaleProp = getLayerProp(layer, scalePropPath)
 
-        // Só executa se as variáveis acima foram definidas com sucesso
         posProp.expression = ""
         zPosProp.expression = ""
-
-        // --- BLOCO 3: Keyframes (Depende das props existirem) ---
-        // Podemos aninhar ou colocar logo abaixo. 
-        // Se as props existem, tentamos limpar as keys.
-        try {
-          const scaleProp = getLayerProp(layer, scalePropPath)
-          const flipCardProp = getLayerProp(layer, flipCardEssPropPath)
-
-          removePropertyKeyframesByLabel(posProp, 9)
-          removePropertyKeyframesByLabel(posProp, 2)
-          removePropertyKeyframesByLabel(scaleProp, 9)
-          removePropertyKeyframesByLabel(flipCardProp, 2)
-          removePropertyKeyframesByLabel(zPosProp, 9)
-          removePropertyKeyframesByLabel(flipCardProp, 9)
-        } catch (errKey) {
-          // Erro ao limpar keys não deve parar o resto
-          $.writeln("Erro ao limpar keys na layer " + layer.name)
-        }
+        scaleProp.expression = ""
 
       } catch (e) {
-        // Se falhou ao pegar as propriedades principais, não dá pra fazer nada nessa parte
-        // Mas não travamos o loop para a próxima layer.
-        // DICA: Evite 'alert' dentro de loop. Use $.writeln para não ter que clicar em OK 50 vezes.
         $.writeln("Erro ao acessar propriedades da layer: " + layer.name)
       }
 
-      // --- BLOCO 2: Efeitos (Independente das propriedades) ---
-      // Este bloco fica separado. Se o BLOCO 1 falhar, este AINDA RODA.
-      try {
-        const effectExists = fxExistsByMatchName(layer, presetMatchName)
-        if (effectExists) {
-          removeFxByMatchName(layer, presetMatchName)
-        }
-      } catch (e) {
-        $.writeln("Erro ao remover efeitos da layer: " + layer.name)
-      }
     }
 
     // clearSfxPrecompLayers()
 
   } catch (e) {
-    // Erro crítico: algo impediu o script de sequer começar a processar a lista
-    alertError(e, 549, "resetCardsAnimation", "actions.ts")
+    alertError(e, 591, "resetCardsAnimation", "actions.ts")
   }
 }
 
@@ -695,17 +632,14 @@ export const restoreCardsAnimation = (presetPath: string, presetMatchName: strin
     if (card.comment === "Jump") {
 
       card.layer.selected = true
-      if (!fxExistsByMatchName(card.layer, presetMatchName)) card.layer.applyPreset(new File(presetPath))
-      jumpPos(card.time, card.layer, targetLayer)
-      jumpScale(card.time, card.layer)
-      jumpRotation(card.time, card.layer)
-      card.layer.selected = false
 
-      card.layer
-        .property("ADBE Effect Parade")
-        .property(cardFxMatchName)
-        .property("Target Layer")
-        .setValue(targetLayer.index)
+      if (!fxExistsByMatchName(card.layer, presetMatchName)) card.layer.applyPreset(new File(presetPath))
+      jumpPos(card.layer)
+      jumpScale(card.layer)
+      jumpRotation(card.layer)      
+      setJumpTargetLayer(card.layer,targetLayer)
+
+      card.layer.selected = false
 
       // applySfx(thisComp, card.time, "jump_sfx_01.wav", keyLabel.green)
 
