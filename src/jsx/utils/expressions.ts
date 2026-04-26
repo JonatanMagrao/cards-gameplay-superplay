@@ -319,9 +319,9 @@ const findTriggerMoments = (comp, rules) => {
     return moments.sort((a, b) => a - b);
 };
 
-const readCardsControlSlider = (sliderName, fallbackValue) => {
+const readLayerSlider = (sliderName, fallbackValue) => {
     try {
-        const rawValue = thisComp.layer("Cards Controls").effect(sliderName)("Slider").value;
+        const rawValue = effect(sliderName)("Slider").value;
         const numberValue = parseFloat(rawValue);
         return isNaN(numberValue) ? fallbackValue : numberValue;
     } catch (err) {
@@ -383,7 +383,7 @@ if (refLayer != undefined) {
 }
 
 const searchRules = [{ nameTag: "[TABLEAU]", markerTag: "Jump" }];
-const delayInFrames = readCardsControlSlider("Progress Delay Frames", 5);
+const delayInFrames = readLayerSlider("Progress Delay Frames", 5);
 
 const barProgressValue = effect("Animation Progress")("Slider");
 const startPercent = effect("Start Percent")("Slider").value;

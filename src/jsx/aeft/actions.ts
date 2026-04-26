@@ -70,7 +70,6 @@ const cardsControlsSliders: CardsControlSlider[] = [
   { name: "Stock Shift Duration Frames", fallback: "11" },
   { name: "Stock Flip Start Frames", fallback: "2" },
   { name: "Stock Flip End Frames", fallback: "17" },
-  { name: "Progress Delay Frames", fallback: "5" },
 ] 
 
 const jumpCardsControlsSliders: string[] = ["Global Z Step"]
@@ -85,7 +84,6 @@ const stockCardsControlsSliders: string[] = [
   "Stock Flip Start Frames",
   "Stock Flip End Frames",
 ]
-export const progressCardsControlsSliders: string[] = ["Progress Delay Frames"]
 
 const actionLabelColor = keyLabel.green
 const anticipationLabelColor = keyLabel.yellow

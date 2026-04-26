@@ -14,8 +14,7 @@
     { name: "Stock Shift Delay Frames", value: 2 },
     { name: "Stock Shift Duration Frames", value: 11 },
     { name: "Stock Flip Start Frames", value: 2 },
-    { name: "Stock Flip End Frames", value: 17 },
-    { name: "Progress Delay Frames", value: 5 }
+    { name: "Stock Flip End Frames", value: 17 }
   ];
 
   function getActiveComp() {

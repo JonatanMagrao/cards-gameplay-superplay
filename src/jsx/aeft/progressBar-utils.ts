@@ -1,10 +1,11 @@
 import { captureCompState, findCompItemByName, requireActiveComp, restoreCompState } from "./aeft-utils";
 import { getLayerProp, setExpressionSafely } from "./aeft-utils-jonatan";
-import { posPropPath, scalePropPath, anchorPropPath, textPropPath, progressBarEPPath, progressCardsControlsSliders, warnCardsControlsFallbacks } from "./actions";
+import { posPropPath, scalePropPath, anchorPropPath, textPropPath, progressBarEPPath } from "./actions";
 import { expProgressBar } from "../utils/expressions";
 import { keyLabel } from "./actions";
 
 const progressBarFxMatchName = "Pseudo/cards_gameplay_progressbar"
+const progressDelayFramesSliderName = "Progress Delay Frames"
 
 type ProgressBarProp = {
   pos: [number, number];
@@ -34,11 +35,27 @@ const progressBarProps: Record<string, ProgressBarProp> = {
   }
 }
 
-const progressBarText = (thisComp: CompItem, parentLayer: Layer) => {
+const setTextLayerFont = (textLayer: Layer) => {
+  const textProp = getLayerProp(textLayer, textPropPath) as Property;
+  const textDocument = textProp.value as TextDocument;
+  const fontCandidates = ["Arial-Black", "Arial Black", "Arial-BlackMT", "ArialMT"];
+
+  for (let i = 0; i < fontCandidates.length; i++) {
+    try {
+      textDocument.font = fontCandidates[i];
+      textProp.setValue(textDocument);
+      return;
+    } catch (_) { }
+  }
+}
+
+const progressBarText = (thisComp: CompItem, parentLayer: Layer, startTime: number) => {
   const textLayer = thisComp.layers.addText("Progress Percentage")
+  textLayer.startTime = startTime
   textLayer.guideLayer = true;
   textLayer.parent = parentLayer
   textLayer.label = keyLabel.orange
+  setTextLayerFont(textLayer)
   textLayer.locked = true
   textLayer.shy = true
   thisComp.hideShyLayers = true
@@ -50,12 +67,70 @@ const progressBarText = (thisComp: CompItem, parentLayer: Layer) => {
 
 }
 
+const getProgressBarStartTime = (comp: CompItem): number => {
+  if (comp.selectedLayers && comp.selectedLayers.length > 0) {
+    return comp.selectedLayers[0].startTime;
+  }
+
+  return 0;
+}
+
+const getProgressBarReferenceLayer = (comp: CompItem): Layer | null => {
+  if (comp.selectedLayers && comp.selectedLayers.length > 0) {
+    return comp.selectedLayers[0];
+  }
+
+  return null;
+}
+
+const getLayerEffectByName = (layer: Layer, effectName: string): PropertyGroup | null => {
+  const effects = layer.property("ADBE Effect Parade") as PropertyGroup;
+  if (!effects) return null;
+
+  for (let i = 1; i <= effects.numProperties; i++) {
+    const effect = effects.property(i) as PropertyGroup;
+    if (effect && effect.name === effectName) return effect;
+  }
+
+  return null;
+}
+
+const ensureSliderControl = (layer: Layer, sliderName: string, defaultValue: number): Property | null => {
+  const effects = layer.property("ADBE Effect Parade") as PropertyGroup;
+  if (!effects) return null;
+
+  let sliderEffect = getLayerEffectByName(layer, sliderName);
+
+  if (!sliderEffect) {
+    sliderEffect = effects.addProperty("ADBE Slider Control") as PropertyGroup;
+    sliderEffect.name = sliderName;
+
+    const createdSlider = sliderEffect.property("ADBE Slider Control-0001") as Property;
+    if (createdSlider) createdSlider.setValue(defaultValue);
+
+    return createdSlider;
+  }
+
+  const slider = sliderEffect.property("ADBE Slider Control-0001") as Property;
+  return slider || null;
+}
+
+const setProgressBarCompRefLayer = (progressBarLayer: Layer, referenceLayer: Layer | null) => {
+  if (!referenceLayer) return;
+
+  try {
+    const compRefEffect = getLayerEffectByName(progressBarLayer, "Comp Ref");
+    if (!compRefEffect) return;
+
+    const layerProp = compRefEffect.property("Layer") as Property;
+    if (layerProp) layerProp.setValue(referenceLayer.index);
+  } catch (_) { }
+}
+
 export const addProgressBar = (presetPath: string) => {
   const thisComp = requireActiveComp("Add Progress Bar");
 
   if (!thisComp) return;
-
-  warnCardsControlsFallbacks(thisComp, progressCardsControlsSliders);
 
   const compRes = `${thisComp.width}x${thisComp.height}`
 
@@ -66,16 +141,21 @@ export const addProgressBar = (presetPath: string) => {
   }
 
   const compSnapshot = captureCompState(thisComp)
+  const progressStartTime = getProgressBarStartTime(thisComp)
+  const progressReferenceLayer = getProgressBarReferenceLayer(thisComp)
 
   try {
     progressBar.label = keyLabel.orange
     const progressBarLayer = thisComp.layers.add(progressBar)
+    progressBarLayer.startTime = progressStartTime
     const barPos = getLayerProp(progressBarLayer, posPropPath);
     const barScale = getLayerProp(progressBarLayer, scalePropPath);
 
     progressBarLayer.applyPreset(new File(presetPath))
+    ensureSliderControl(progressBarLayer, progressDelayFramesSliderName, 5)
+    setProgressBarCompRefLayer(progressBarLayer, progressReferenceLayer)
 
-    const textLayer = progressBarText(thisComp, progressBarLayer)
+    const textLayer = progressBarText(thisComp, progressBarLayer, progressStartTime)
     const textAnchor = getLayerProp(textLayer, anchorPropPath);
     const textSrcTxt = getLayerProp(textLayer, textPropPath);
 
