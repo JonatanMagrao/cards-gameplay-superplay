@@ -50,8 +50,11 @@ const legacySfxPrecompName = "SFX Precomp"
 const expressionLibName = "superplay-expression-lib.jsx"
 const cardsControlsLayerName = "Cards Controls"
 const coinVfxLayerNamePrefix = "Coin VFX"
-const jumpSfxFileName = "jump_sfx_01.wav"
+const jumpSfxFilePrefix = "jump_sfx_"
+const jumpSfxFileExtension = ".wav"
+const jumpSfxMaxScanCount = 99
 const flipStockSfxFileName = "flip-stock_sfx_01.wav"
+const markerTimeTolerance = 0.0001
 
 type CardsControlSlider = {
   name: string;
@@ -205,6 +208,39 @@ const joinPath = (folderPath: string | undefined, fileName: string): string => {
     : `${folder}/${fileName}`;
 }
 
+const getNumberedSfxFileName = (prefix: string, fileNumber: number): string => {
+  const numberText = fileNumber < 10
+    ? `0${fileNumber}`
+    : String(fileNumber);
+
+  return `${prefix}${numberText}${jumpSfxFileExtension}`;
+}
+
+const getJumpSfxVariationCount = (sfxFolderPath?: string): number => {
+  const folderPath = String(sfxFolderPath || "");
+  if (folderPath === "") return 1;
+
+  let variationCount = 0;
+
+  for (let i = 1; i <= jumpSfxMaxScanCount; i++) {
+    const fileName = getNumberedSfxFileName(jumpSfxFilePrefix, i);
+    const sfxFile = new File(joinPath(folderPath, fileName));
+
+    if (!sfxFile.exists) break;
+    variationCount = i;
+  }
+
+  return variationCount > 0 ? variationCount : 1;
+}
+
+const getJumpSfxFileNameForSequence = (sfxFolderPath: string | undefined, sequenceIndex: number): string => {
+  const variationCount = getJumpSfxVariationCount(sfxFolderPath);
+  const safeSequenceIndex = sequenceIndex < 1 ? 1 : Math.floor(sequenceIndex);
+  const wrappedIndex = ((safeSequenceIndex - 1) % variationCount) + 1;
+
+  return getNumberedSfxFileName(jumpSfxFilePrefix, wrappedIndex);
+}
+
 const ensureFootageItem = (filePath: string, missingLabel: string): FootageItem | null => {
   const itemName = getFileNameFromPath(filePath);
   const existingItem = findProjectItemByName(itemName, false) as FootageItem | null;
@@ -301,6 +337,64 @@ const clearCoinVfxLayers = (comp: CompItem) => {
   }
 }
 
+const getMarkerActionName = (marker: LayerMarkerMeta): string => {
+  return marker.title || getMarkerCommentTitle(marker.comment);
+}
+
+const compareLayerMarkersByTime = (a: LayerMarkerMeta, b: LayerMarkerMeta): number => {
+  const timeDiff = a.time - b.time;
+  if (Math.abs(timeDiff) > markerTimeTolerance) return timeDiff;
+
+  return a.layer.index - b.layer.index;
+}
+
+const getJumpSfxSequenceMarkers = (): LayerMarkerMeta[] => {
+  const cardsLayers = findCardLayers();
+  const sequenceMarkers: LayerMarkerMeta[] = [];
+
+  for (let i = 0; i < cardsLayers.length; i++) {
+    const layerMarkers = getLayerMarkersMetadata(cardsLayers[i]);
+
+    for (let j = 0; j < layerMarkers.length; j++) {
+      const marker = layerMarkers[j];
+      const markerAction = getMarkerActionName(marker);
+
+      if (markerAction === "Jump" || markerAction === "Flip Stock") {
+        sequenceMarkers.push(marker);
+      }
+    }
+  }
+
+  sequenceMarkers.sort(compareLayerMarkersByTime);
+
+  return sequenceMarkers;
+}
+
+const getNextJumpSfxSequenceIndexAtTime = (time: number): number => {
+  const sequenceMarkers = getJumpSfxSequenceMarkers();
+  let sequenceIndex = 1;
+
+  for (let i = 0; i < sequenceMarkers.length; i++) {
+    const marker = sequenceMarkers[i];
+    if (marker.time > time + markerTimeTolerance) break;
+
+    const markerAction = getMarkerActionName(marker);
+
+    if (markerAction === "Flip Stock") {
+      sequenceIndex = 1;
+    } else if (markerAction === "Jump") {
+      sequenceIndex++;
+    }
+  }
+
+  return sequenceIndex;
+}
+
+const applyJumpSfx = (comp: CompItem, sfxTime: number, sfxFolderPath: string | undefined, sequenceIndex: number) => {
+  const jumpSfxFileName = getJumpSfxFileNameForSequence(sfxFolderPath, sequenceIndex);
+  applySfx(comp, sfxTime, joinPath(sfxFolderPath, jumpSfxFileName), keyLabel.green);
+}
+
 export const jumpPos = (camada: Layer) => {
   const posProp = getLayerProp(camada, posPropPath)
   setExpressionSafely(posProp, expPos)
@@ -361,11 +455,18 @@ export const applyJumpOnSelectedlayers = (presetPath: string, coinFilePath: stri
 
   try {
     warnCardsControlsFallbacks(thisComp, jumpCardsControlsSliders)
+    let jumpSfxSequenceIndex = getNextJumpSfxSequenceIndexAtTime(thisTime)
+    const selectedLayers: Layer[] = []
 
-    forEachSelectedLayer(thisComp, camada => {
+    for (let i = 0; i < thisComp.selectedLayers.length; i++) {
+      selectedLayers.push(thisComp.selectedLayers[i])
+    }
+
+    for (let i = 0; i < selectedLayers.length; i++) {
+      const camada = selectedLayers[i]
 
       if (!fxExistsByMatchName(camada, cardFxMatchName)) camada.applyPreset(new File(presetPath))
-      if (namedMarkerExists(camada, "Jump")) return
+      if (namedMarkerExists(camada, "Jump")) continue
 
       //@ts-ignore
       camada.threeDLayer = true
@@ -379,8 +480,9 @@ export const applyJumpOnSelectedlayers = (presetPath: string, coinFilePath: stri
       addMarkerToLayer(camada, thisTime, { title: "Jump", label: keyLabel.green })
       setJumpTargetLayer(camada, targetLayer)
 
-      applySfx(thisComp, thisTime, joinPath(sfxFolderPath, jumpSfxFileName), keyLabel.green)
-    })
+      applyJumpSfx(thisComp, thisTime, sfxFolderPath, jumpSfxSequenceIndex)
+      jumpSfxSequenceIndex++
+    }
 
   } catch (e) {
     alertError(e, 208, "applyJumpOnSelectedlayers", "actions.ts")
@@ -1017,9 +1119,7 @@ export const restoreCardsAnimation = (
     cardsMarkers.push(yellowFlipStockMarkers[i])
   }
 
-  cardsMarkers.sort(function (a, b) {
-    return a.time - b.time
-  })
+  cardsMarkers.sort(compareLayerMarkersByTime)
 
   // aqui vem a aplicação
   const targetLayer = getTargetLayer() as Layer
@@ -1041,6 +1141,8 @@ export const restoreCardsAnimation = (
 
   deselectAllSelectedLayers(cardMarkerLayers)
 
+  let jumpSfxSequenceIndex = 1
+
   for (let i = 0; i < cardsMarkers.length; i++) {
     const card = cardsMarkers[i]
     const cardAction = card.title || getMarkerCommentTitle(card.comment)
@@ -1055,7 +1157,8 @@ export const restoreCardsAnimation = (
       jumpRotation(card.layer)
       setJumpTargetLayer(card.layer, targetLayer)
       applyCoin(card.layer, coinFilePath, card.time)
-      applySfx(thisComp, card.time, joinPath(sfxFolderPath, jumpSfxFileName), keyLabel.green)
+      applyJumpSfx(thisComp, card.time, sfxFolderPath, jumpSfxSequenceIndex)
+      jumpSfxSequenceIndex++
 
       card.layer.selected = false
 
@@ -1064,6 +1167,7 @@ export const restoreCardsAnimation = (
     } else if (cardAction === "Flip Stock") {
       thisComp.time = card.time
       flipStockCards(card.layer, expressionLibPath, sfxFolderPath)
+      jumpSfxSequenceIndex = 1
     }
   }
 
