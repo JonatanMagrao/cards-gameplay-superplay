@@ -1,5 +1,5 @@
 import { raise, alertError } from "./errors"
-import { expPos, expRot, expScale } from "../utils/expressions"
+import { expPos, expRot, expScale, expStockFlip, expStockPos } from "../utils/expressions"
 import { getActiveComp, forEachLayer, getItemByName } from "./aeft-utils"
 import {
   getDeepestZ,
@@ -24,6 +24,7 @@ import {
   getLayerMarkersMetadata,
   getFootageByName,
   deselectAllLayer,
+  setExpressionSafely,
 } from "./aeft-utils-jonatan"
 
 
@@ -51,7 +52,7 @@ const sfxPrecompName = "SFX Precomp"
 
 const actionLabelColor = keyLabel.green
 const anticipationLabelColor = keyLabel.yellow
-const zAdjust = .1
+const zAdjust = .05
 
 const transformGroupMatchName = "ADBE Transform Group"
 const essentialPropertiesMatchName = "ADBE Layer Overrides"
@@ -143,17 +144,17 @@ const clearSfxPrecompLayers = () => {
 
 export const jumpPos = (camada: Layer) => {
   const posProp = getLayerProp(camada, posPropPath)
-  posProp.expression = expPos
+  setExpressionSafely(posProp, expPos)
 }
 
 export const jumpScale = (camada: Layer) => {
   const scaleProp = getLayerProp(camada, scalePropPath)
-  scaleProp.expression = expScale
+  setExpressionSafely(scaleProp, expScale)
 }
 
 export const jumpRotation = (camada: Layer) => {
   const rotationProp = getLayerProp(camada, zRotPropPath)
-  rotationProp.expression = expRot
+  setExpressionSafely(rotationProp, expRot)
 }
 
 export const setJumpTargetLayer = (camada: Layer, targetLayer: Layer) => {
@@ -168,14 +169,23 @@ export const setJumpTargetLayer = (camada: Layer, targetLayer: Layer) => {
 
 const applyCoin = (camada: Layer, coinFilePath: string) => {
 
-  const importOptions = new ImportOptions(new File(coinFilePath))
+  const thisComp = getActiveComp()
+  const coinFile = new File(coinFilePath)
+
+  if (!coinFile.exists) {
+    alert(`Coin file not found:\n${coinFilePath}`)
+    return
+  }
+
+  const importOptions = new ImportOptions(coinFile)
   const importedItem = app.project.importFile(importOptions) as AVItem
   const coinLayer = thisComp.layers.add(importedItem)
 
-  const camadaPosValue = getLayerProp(camada, posPropPath).value
+  const camadaPosValue = getLayerProp(camada, posPropPath).valueAtTime(thisComp.time, false)
   const coinLayerPos = getLayerProp(coinLayer, posPropPath)
 
   coinLayer.startTime = thisComp.time
+  coinLayer.threeDLayer = true
   coinLayerPos.setValue(camadaPosValue)
 
 }
@@ -201,14 +211,14 @@ export const applyJumpOnSelectedlayers = (presetPath: string, coinFilePath: stri
       //@ts-ignore
       camada.threeDLayer = true
 
+      applyCoin(camada, coinFilePath)
+
       jumpPos(camada)
       jumpScale(camada)
       jumpRotation(camada)
 
       addMarkerToLayer(camada, thisTime, { title: "Jump", label: keyLabel.green })
       setJumpTargetLayer(camada, targetLayer)
-
-      applyCoin(camada, coinFilePath)
 
       // applySfx(thisComp, thisTime, "jump_sfx_01.wav", keyLabel.green)
     })
@@ -289,6 +299,23 @@ const getNextStockCard = (comp: CompItem, baseLayer: Layer, labelColor: Number):
   return nextLayer;
 }
 
+const applyStockExpressions = (comp: CompItem) => {
+  for (let i = 1; i <= comp.numLayers; i++) {
+    const layer = comp.layer(i) as AVLayer;
+    if (!layer || !layer.name || layer.name.indexOf("[STOCK]") === -1) continue;
+
+    layer.threeDLayer = true;
+
+    const layerPos = getLayerProp(layer, posPropPath);
+    setExpressionSafely(layerPos, expStockPos);
+
+    try {
+      const layerFlip = getLayerProp(layer, flipCardEssPropPath);
+      setExpressionSafely(layerFlip, expStockFlip);
+    } catch (_) { }
+  }
+}
+
 export const flipStockCards = (stockLayerToFlip?: Layer) => {
 
   // main consts
@@ -299,9 +326,6 @@ export const flipStockCards = (stockLayerToFlip?: Layer) => {
     alert('Please, set a target layer before applying the "Flip Stock" action.')
     return
   }
-
-  const jumpHeight = 29
-  // const stockLayers = getAllStockLayers(thisComp)
 
   let firstSelectedLayer = null
 
@@ -316,82 +340,15 @@ export const flipStockCards = (stockLayerToFlip?: Layer) => {
     }
   }
 
-  // property consts
-  const flipCardPos = getLayerProp(firstSelectedLayer, posPropPath)
-  const targetLayerPos = getLayerProp(targetLayer, posPropPath).value
-  const layerFlip = getLayerProp(firstSelectedLayer, flipCardEssPropPath)
-  const currentPos = flipCardPos.value;
-  const lastZPos = getDeepestZ()
-
-  // key timing consts
   const keyTimePos1 = thisComp.time;
-  const keyTimePos2 = keyTimePos1 + frameDuration(6)
-  const keyTimePos3 = keyTimePos2 + frameDuration(5)
-  const keyFlip1 = keyTimePos1 + frameDuration(2)
-  const keyFlip2 = keyTimePos1 + frameDuration(17)
 
-  //actions
-
-  addMarkerToLayer(firstSelectedLayer, keyTimePos1, { title: "Flip Stock", label: 2 })
-
-  // FIRST POSITION KEYFRAME
-  setKeyframeToLayer(
-    flipCardPos,
-    keyTimePos1,
-    currentPos,
-    actionLabelColor,
-    { ease: true, easeIn: 75, easeOut: 75 }
-  )
-
-  const diffXPos = targetLayerPos[0] > currentPos[0]
-    ? targetLayerPos[0] - currentPos[0]
-    : currentPos[0] - targetLayerPos[0]
-
-  // SECOND POSITION KEYFRAME
-  const posSecondKey = [...currentPos]
-  posSecondKey[0] += diffXPos / 2
-  posSecondKey[1] -= jumpHeight
-  posSecondKey[2] = lastZPos - zAdjust
-  setKeyframeToLayer(
-    flipCardPos,
-    keyTimePos2,
-    posSecondKey,
-    actionLabelColor,
-    { ease: true, speedIn: 2640, speedOut: 2640, easeIn: 1.16, easeOut: 16 }
-  )
-
-  // THIRD POSITION KEYFRAME
-  const posThirdkey = [...posSecondKey]
-  posThirdkey[0] = getLayerProp(targetLayer, posPropPath).value[0]
-  posThirdkey[1] = currentPos[1]
-  setKeyframeToLayer(
-    flipCardPos,
-    keyTimePos3,
-    posThirdkey,
-    actionLabelColor,
-    { ease: true, easeIn: 75, easeOut: 75 }
-  )
-
-  // ESSENTIAL PROPERTIES FLIP KEYFRAMES
-  // if it is turned to front, only ignore and follow as is
-  if (layerFlip.value !== 100) {
-    setKeyframeToLayer(layerFlip, keyFlip1, 0, actionLabelColor)
-    setKeyframeToLayer(layerFlip, keyFlip2, 100, actionLabelColor)
+  if (!namedMarkerExists(firstSelectedLayer, "Flip Stock")) {
+    addMarkerToLayer(firstSelectedLayer, keyTimePos1, { title: "Flip Stock", label: 2 })
   }
+
+  applyStockExpressions(thisComp)
 
   // applySfx(thisComp, thisComp.time, "flip-stock_sfx_01.wav", keyLabel.yellow)
-  const nextLayer = getNextStockCard(thisComp, firstSelectedLayer, anticipationLabelColor)
-
-  if (nextLayer) {
-    const stockLayersBelow = getAllStockLayersBelow(thisComp, firstSelectedLayer)
-    const firstLayerXPosValue = getLayerProp(firstSelectedLayer, posPropPath).value[0]
-    const secondLayerXPosValue = getLayerProp(nextLayer, posPropPath).value[0]
-    const distanceXPosLayers = firstLayerXPosValue - secondLayerXPosValue
-
-    moveNextCards(keyTimePos1, stockLayersBelow, distanceXPosLayers)
-  }
-
-
 }
 
 // ============================== CARDS MODIFIERS
@@ -594,6 +551,11 @@ export const resetCardsAnimation = (presetMatchName: string) => {
         posProp.expression = ""
         zPosProp.expression = ""
         scaleProp.expression = ""
+
+        try {
+          const flipCardProp = getLayerProp(layer, flipCardEssPropPath)
+          flipCardProp.expression = ""
+        } catch (_) { }
 
       } catch (e) {
         $.writeln("Erro ao acessar propriedades da layer: " + layer.name)

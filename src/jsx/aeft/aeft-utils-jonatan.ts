@@ -102,6 +102,20 @@ export const getLayerProp = (camada: any, properties: string[]) => {
   return myLayerProps
 }
 
+export const setExpressionSafely = (prop: any, expression: string) => {
+  if (!prop) return
+
+  try {
+    prop.expression = ""
+  } catch (_) { }
+
+  prop.expression = expression
+
+  try {
+    prop.expressionEnabled = true
+  } catch (_) { }
+}
+
 export const addMarkerToLayer = (myLayer: Layer, markerTime: number, markerProps: MarkerProps) => {
 
   const { markerName, markerLabel, markerDuration } = {

@@ -1,5 +1,5 @@
 import { getItemByName, getActiveComp } from "./aeft-utils";
-import { fxExistsByMatchName, getLayerProp } from "./aeft-utils-jonatan";
+import { fxExistsByMatchName, getLayerProp, setExpressionSafely } from "./aeft-utils-jonatan";
 import { posPropPath, scalePropPath, anchorPropPath, textPropPath, progressBarEPPath } from "./actions";
 import { deselectAllSelectedLayers } from "./aeft-utils-jonatan";
 import { expProgressBar } from "../utils/expressions";
@@ -81,15 +81,15 @@ export const addProgressBar = (presetPath: string) => {
   const textAnchor = getLayerProp(textLayer, anchorPropPath);
   const textSrcTxt = getLayerProp(textLayer, textPropPath);
 
-  textAnchor.expression = `
+  setExpressionSafely(textAnchor, `
     const {left,top,width,height} = sourceRectAtTime();
     [left + width / 2, top + height / 2];
-  `
+  `)
 
-  textSrcTxt.expression = `
+  setExpressionSafely(textSrcTxt, `
     const percent = thisComp.layer("${progressBarLayer.name}").essentialProperty("Bar Control").value;
     \`\${Math.round(percent)}%\`
-  `
+  `)
 
   const currentProps = progressBarProps[compRes] || {
     pos: [thisComp.width / 2, thisComp.height / 2],
@@ -99,7 +99,7 @@ export const addProgressBar = (presetPath: string) => {
   barPos.setValue(currentProps.pos);
   barScale.setValue(currentProps.scale);
 
-  getLayerProp(progressBarLayer, progressBarEPPath).expression = expProgressBar;
+  setExpressionSafely(getLayerProp(progressBarLayer, progressBarEPPath), expProgressBar);
 
 
 }

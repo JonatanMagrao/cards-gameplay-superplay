@@ -14,13 +14,11 @@ try {
         const bounceFrequency = control("Bounce Frequency").value;
         const bounceDecay = control("Bounce Decay").value;
         const zDepthOffset = control("Z Depth Offset").value;
+        const zStep = 0.05;
 
         const targetLayer = control("Target Layer");
         const targetOffset = control("Target Offset").value;
         const targetOffsetAngle = control("Target Offset Angle").value;
-
-        const behindTarget = control("Behind Target").value;
-        const zOffset = behindTarget === 1 ? 0.02 : -0.02;
 
         const jumpTime = framesToTime(jumpDurationFrames);
         const endTime = jumpMarkerTime + jumpTime;
@@ -28,6 +26,30 @@ try {
         const rad = degreesToRadians(targetOffsetAngle - 90);
         const offsetX = Math.cos(rad) * targetOffset;
         const offsetY = Math.sin(rad) * targetOffset;
+
+        const getActionOrderAt = function(actionTime) {
+            let order = 0;
+            const tolerance = thisComp.frameDuration / 10;
+
+            for (let i = 1; i <= thisComp.numLayers; i++) {
+                const layer = thisComp.layer(i);
+                if (layer.marker.numKeys < 1) continue;
+
+                for (let j = 1; j <= layer.marker.numKeys; j++) {
+                    const marker = layer.marker.key(j);
+                    const isTargetAction = marker.comment === "Jump" || marker.comment === "Flip Stock";
+                    if (!isTargetAction) continue;
+
+                    const isEarlier = marker.time < actionTime;
+                    const isSameTimeBeforeLayer = Math.abs(marker.time - actionTime) <= tolerance && layer.index <= thisLayer.index;
+                    if (isEarlier || isSameTimeBeforeLayer) order++;
+                }
+            }
+
+            return Math.max(order, 1);
+        };
+
+        const zOffset = -(getActionOrderAt(jumpMarkerTime) * zStep);
 
         if (time < jumpMarkerTime) {
             value; 
@@ -137,6 +159,196 @@ try {
             } else {
                 targetRot + giroFinal;
             }
+        }
+    }
+} catch (err) {
+    value;
+}
+`
+
+export const expStockPos = `
+try {
+    const stockTag = "[STOCK]";
+    const targetTag = "[TARGET]";
+    const flipStockComment = "Flip Stock";
+    const jumpComment = "Jump";
+    const zStep = 0.05;
+    const jumpHeight = 29;
+    const midFrames = 6;
+    const endFrames = 11;
+    const shiftDelayBaseFrames = 2;
+    const shiftDurationFrames = 11;
+    const sampleTimeOffset = thisComp.frameDuration / 2;
+
+    const hasTag = function(layer, tag) {
+        return layer.name.indexOf(tag) !== -1;
+    };
+
+    const findMarkerTime = function(layer, comment) {
+        if (layer.marker.numKeys < 1) return null;
+
+        for (let i = 1; i <= layer.marker.numKeys; i++) {
+            const marker = layer.marker.key(i);
+            if (marker.comment === comment) return marker.time;
+        }
+
+        return null;
+    };
+
+    const findTargetLayer = function() {
+        for (let i = 1; i <= thisComp.numLayers; i++) {
+            const layer = thisComp.layer(i);
+            if (hasTag(layer, targetTag)) return layer;
+        }
+
+        return null;
+    };
+
+    const findNextStockLayer = function(baseLayer) {
+        for (let i = baseLayer.index + 1; i <= thisComp.numLayers; i++) {
+            const layer = thisComp.layer(i);
+            if (hasTag(layer, stockTag)) return layer;
+        }
+
+        return null;
+    };
+
+    const getStockOrderBelow = function(baseLayer, targetLayer) {
+        let order = 0;
+        for (let i = baseLayer.index + 1; i <= targetLayer.index; i++) {
+            const layer = thisComp.layer(i);
+            if (hasTag(layer, stockTag)) order++;
+        }
+
+        return order;
+    };
+
+    const getShiftProgress = function(eventTime, currentTime, order) {
+        const startTime = eventTime + framesToTime(shiftDelayBaseFrames + order);
+        const endTime = startTime + framesToTime(shiftDurationFrames);
+
+        if (currentTime < startTime) return 0;
+        if (currentTime >= endTime) return 1;
+
+        return ease(currentTime, startTime, endTime, 0, 1);
+    };
+
+    const getEventDistance = function(eventLayer, eventTime) {
+        const nextStockLayer = findNextStockLayer(eventLayer);
+        if (nextStockLayer === null) return 0;
+
+        const sampleTime = Math.max(0, eventTime - sampleTimeOffset);
+        const eventPos = eventLayer.transform.position.valueAtTime(sampleTime);
+        const nextPos = nextStockLayer.transform.position.valueAtTime(sampleTime);
+
+        return eventPos[0] - nextPos[0];
+    };
+
+    const getShiftOffsetAt = function(currentTime) {
+        let offsetX = 0;
+
+        for (let i = 1; i < thisLayer.index; i++) {
+            const layer = thisComp.layer(i);
+            if (!hasTag(layer, stockTag)) continue;
+
+            const eventTime = findMarkerTime(layer, flipStockComment);
+            if (eventTime === null || eventTime > currentTime) continue;
+
+            const order = getStockOrderBelow(layer, thisLayer);
+            if (order < 1) continue;
+
+            const distance = getEventDistance(layer, eventTime);
+            offsetX += distance * getShiftProgress(eventTime, currentTime, order);
+        }
+
+        return offsetX;
+    };
+
+    const getActionOrderAt = function(actionTime) {
+        let order = 0;
+        const tolerance = thisComp.frameDuration / 10;
+
+        for (let i = 1; i <= thisComp.numLayers; i++) {
+            const layer = thisComp.layer(i);
+            if (layer.marker.numKeys < 1) continue;
+
+            for (let j = 1; j <= layer.marker.numKeys; j++) {
+                const marker = layer.marker.key(j);
+                const isTargetAction = marker.comment === jumpComment || marker.comment === flipStockComment;
+                if (!isTargetAction) continue;
+
+                const isEarlier = marker.time < actionTime;
+                const isSameTimeBeforeLayer = Math.abs(marker.time - actionTime) <= tolerance && layer.index <= thisLayer.index;
+                if (isEarlier || isSameTimeBeforeLayer) order++;
+            }
+        }
+
+        return Math.max(order, 1);
+    };
+
+    const flipTime = findMarkerTime(thisLayer, flipStockComment);
+    const baseZ = value.length > 2 ? value[2] : 0;
+
+    if (flipTime === null || time < flipTime) {
+        [value[0] + getShiftOffsetAt(time), value[1], baseZ];
+    } else {
+        const targetLayer = findTargetLayer();
+        const shiftAtFlip = getShiftOffsetAt(flipTime);
+        const startPos = [value[0] + shiftAtFlip, value[1], baseZ];
+        const targetPos = targetLayer === null
+            ? startPos
+            : targetLayer.transform.position.valueAtTime(flipTime);
+
+        const targetX = targetPos[0];
+        const targetZ = targetPos.length > 2 ? targetPos[2] : baseZ;
+        const finalZ = targetZ - (getActionOrderAt(flipTime) * zStep);
+        const diffX = Math.abs(targetX - startPos[0]);
+
+        const midTime = flipTime + framesToTime(midFrames);
+        const endTime = flipTime + framesToTime(endFrames);
+        const midPos = [startPos[0] + (diffX / 2), startPos[1] - jumpHeight, finalZ];
+        const endPos = [targetX, startPos[1], finalZ];
+
+        if (time < midTime) {
+            ease(time, flipTime, midTime, startPos, midPos);
+        } else if (time < endTime) {
+            ease(time, midTime, endTime, midPos, endPos);
+        } else {
+            endPos;
+        }
+    }
+} catch (err) {
+    value;
+}
+`
+
+export const expStockFlip = `
+try {
+    const flipStockComment = "Flip Stock";
+    let flipTime = null;
+
+    if (thisLayer.marker.numKeys > 0) {
+        for (let i = 1; i <= thisLayer.marker.numKeys; i++) {
+            const marker = thisLayer.marker.key(i);
+            if (marker.comment === flipStockComment) {
+                flipTime = marker.time;
+                break;
+            }
+        }
+    }
+
+    if (flipTime === null || value === 100) {
+        value;
+    } else {
+        const firstKeyTime = flipTime + framesToTime(2);
+        const secondKeyTime = flipTime + framesToTime(17);
+
+        if (time < firstKeyTime) {
+            value;
+        } else if (time < secondKeyTime) {
+            linear(time, firstKeyTime, secondKeyTime, 0, 100);
+        } else {
+            100;
         }
     }
 } catch (err) {
