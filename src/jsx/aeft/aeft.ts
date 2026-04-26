@@ -14,7 +14,7 @@ import {
 } from "./actions";
 import { requireActiveComp } from "./aeft-utils";
 import { clearLayerExpressions, distributeLayers, forEachSelectedLayer } from "./aeft-utils-jonatan";
-import { applyCardsLayoutFromObject, getActiveCompLayoutData, CardsLayoutJson, getActiveCompResolution, saveCardsLayoutThumbnail } from "./game-levels-utils";
+import { applyCardsLayoutFromObject, getActiveCompLayoutData, CardsLayoutJson, getActiveCompResolution, saveCardsLayoutThumbnail, ApplyCardsLayoutOptions } from "./game-levels-utils";
 import { alertError } from "./errors";
 import { addProgressBar } from "./progressBar-utils";
 
@@ -53,13 +53,13 @@ export const getCompResolution = () => {
   return getActiveCompResolution();
 }
 
-export const handleApplyCardsLayout = (layoutData: CardsLayoutJson, filePath: string) => {
+export const handleApplyCardsLayout = (layoutData: CardsLayoutJson, filePath: string, options?: ApplyCardsLayoutOptions) => {
 
   importFilesAndCompsForCards(filePath, cardsFolderName)
 
   app.beginUndoGroup("Apply Cards Layout");
   try {
-    return applyCardsLayoutFromObject(layoutData);
+    return applyCardsLayoutFromObject(layoutData, options);
   } catch (e) {
     //@ts-ignore
     alert("Error in AE: " + e.toString());

@@ -405,6 +405,44 @@ const applyJumpSfx = (comp: CompItem, sfxTime: number, sfxFolderPath: string | u
   applySfx(comp, sfxTime, joinPath(sfxFolderPath, jumpSfxFileName), keyLabel.green);
 }
 
+const getLayerVisualCompPositionAtTime = (comp: CompItem, layer: Layer, time: number): [number, number, number] => {
+  const posProp = getLayerProp(layer, posPropPath) as Property;
+  const posValue = posProp.valueAtTime(time, false) as number[];
+  const localPosition: [number, number, number] = [
+    toNumber(posValue[0]),
+    toNumber(posValue[1]),
+    toNumber(posValue.length > 2 ? posValue[2] : 0),
+  ];
+
+  const originalTime = comp.time;
+
+  try {
+    comp.time = time;
+
+    const avLayer = layer as AVLayer;
+    if (!avLayer || typeof avLayer.sourcePointToComp !== "function") return localPosition;
+
+    const anchorProp = getLayerProp(layer, anchorPropPath) as Property;
+    const anchorValue = anchorProp.value as number[];
+    const compPoint = avLayer.sourcePointToComp([
+      toNumber(anchorValue[0]),
+      toNumber(anchorValue[1]),
+    ]);
+
+    return [
+      toNumber(compPoint[0], localPosition[0]),
+      toNumber(compPoint[1], localPosition[1]),
+      localPosition[2],
+    ];
+  } catch (_) {
+    return localPosition;
+  } finally {
+    try {
+      comp.time = originalTime;
+    } catch (_) { }
+  }
+}
+
 const markersRequireTarget = (markers: LayerMarkerMeta[]): boolean => {
   for (let i = 0; i < markers.length; i++) {
     const cardAction = getMarkerActionName(markers[i]);
@@ -450,7 +488,7 @@ const applyCoin = (camada: Layer, coinFilePath: string | undefined, coinTime: nu
   const fxPrecomp = fxPrecompRef.source as CompItem;
   const coinLayer = fxPrecomp.layers.add(importedItem)
 
-  const camadaPosValue = getLayerProp(camada, posPropPath).valueAtTime(coinTime, false)
+  const camadaPosValue = getLayerVisualCompPositionAtTime(thisComp, camada, coinTime)
   const coinLayerPos = getLayerProp(coinLayer, posPropPath)
 
   coinLayer.name = `${coinVfxLayerNamePrefix} - ${camada.name}`

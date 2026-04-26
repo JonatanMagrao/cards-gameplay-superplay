@@ -20,6 +20,16 @@ export type CardsLayoutJson = {
   cards: CardLayout[];
 };
 
+export type ApplyCardsLayoutOptions = {
+  parentToCenterNull?: boolean;
+};
+
+type CreateCardLayersOptions = {
+  parentLayer?: AVLayer | null;
+  sourceResolution?: [number, number];
+  centerOnParent?: boolean;
+};
+
 //@ts-ignore
 const _deckItemCache: Record<string, AVItem> = {};
 
@@ -55,9 +65,68 @@ export const roundToDecimals = (
   return Math.round(value * factor) / factor;
 };
 
+const getLayoutResolution = (layoutJson: CardsLayoutJson, comp: CompItem): [number, number] => {
+  if (layoutJson.resolution && layoutJson.resolution.length >= 2) {
+    return [layoutJson.resolution[0], layoutJson.resolution[1]];
+  }
+
+  return [comp.width, comp.height];
+};
+
+const getPositionForImport = (
+  position: [number, number] | [number, number, number],
+  options?: CreateCardLayersOptions
+): [number, number, number] => {
+  const zValue = position.length > 2 && typeof position[2] === "number" ? position[2] : 0;
+
+  if (options && options.centerOnParent && options.sourceResolution) {
+    return [
+      position[0] - (options.sourceResolution[0] / 2),
+      position[1] - (options.sourceResolution[1] / 2),
+      zValue
+    ];
+  }
+
+  return [position[0], position[1], zValue];
+};
+
+const createLayoutTransformControl = (
+  comp: CompItem,
+  sourceResolution: [number, number]
+): AVLayer => {
+  const controlLayer = comp.layers.addNull() as AVLayer;
+  controlLayer.name = `Layout Transform Control (${sourceResolution[0]}x${sourceResolution[1]})`;
+  controlLayer.label = 14;
+  controlLayer.threeDLayer = true;
+  controlLayer.shy = false;
+  controlLayer.locked = false;
+  controlLayer.enabled = true;
+  controlLayer.guideLayer = false;
+
+  const positionProp = getLayerProp(controlLayer, posPropPath) as Property;
+  positionProp.setValue([comp.width / 2, comp.height / 2, 0]);
+
+  return controlLayer;
+};
+
+const revealLayoutTransformControl = (comp: CompItem, controlLayer: AVLayer): void => {
+  controlLayer.locked = false;
+  controlLayer.shy = false;
+  controlLayer.enabled = true;
+  controlLayer.guideLayer = false;
+  controlLayer.moveToBeginning();
+
+  for (let i = 1; i <= comp.numLayers; i++) {
+    comp.layer(i).selected = false;
+  }
+
+  controlLayer.selected = true;
+};
+
 export const createCardLayersFromLayout = (
   cardsLayout: CardLayout[],
-  comp: CompItem
+  comp: CompItem,
+  options?: CreateCardLayersOptions
 ): void => {
   let previousLayer: AVLayer | null = null;
 
@@ -74,13 +143,16 @@ export const createCardLayersFromLayout = (
     const cardLayer = comp.layers.add(deckItem) as AVLayer;
 
     cardLayer.threeDLayer = true;
+    if (options && options.parentLayer) {
+      cardLayer.parent = options.parentLayer;
+    }
 
     // Transforms
     const posValue = getLayerProp(cardLayer, posPropPath)
     const scaleValue = getLayerProp(cardLayer, scalePropPath)
     const rotValue = getLayerProp(cardLayer, zRotPropPath)
 
-    posValue.setValue(cardLayout.position)
+    posValue.setValue(getPositionForImport(cardLayout.position, options))
     scaleValue.setValue(cardLayout.scale)
     rotValue.setValue(cardLayout.rotation)
 
@@ -135,14 +207,16 @@ export const createCardLayersFromLayout = (
   }
 };
 
-export const applyCardsLayoutFromObject = (layoutJson: CardsLayoutJson): string => {
+export const applyCardsLayoutFromObject = (layoutJson: CardsLayoutJson, options?: ApplyCardsLayoutOptions): string => {
   const comp = getActiveComp?.() as CompItem | null;
 
   if (!comp) return "No active composition found.";
   if (!layoutJson.cards) return "Invalid JSON: missing 'cards' array.";
+  const sourceResolution = getLayoutResolution(layoutJson, comp);
+  const parentToCenterNull = !!(options && options.parentToCenterNull);
 
   // Warn when the saved layout resolution differs from the active comp.
-  if (layoutJson.resolution) {
+  if (layoutJson.resolution && !parentToCenterNull) {
     const [w, h] = layoutJson.resolution;
     if (w !== comp.width || h !== comp.height) {
       alert(`Warning: Layout resolution (${w}x${h}) differs from Comp (${comp.width}x${comp.height}).`);
@@ -150,13 +224,25 @@ export const applyCardsLayoutFromObject = (layoutJson: CardsLayoutJson): string 
   }
 
   const compSnapshot = captureCompState(comp);
+  let parentLayer: AVLayer | null = null;
 
   try {
     resetDeckCache();
-    createCardLayersFromLayout(layoutJson.cards, comp);
+
+    if (parentToCenterNull) {
+      parentLayer = createLayoutTransformControl(comp, sourceResolution);
+    }
+
+    createCardLayersFromLayout(layoutJson.cards, comp, {
+      parentLayer,
+      sourceResolution,
+      centerOnParent: parentLayer !== null
+    });
   } finally {
     restoreCompState(comp, compSnapshot);
   }
+
+  if (parentLayer) revealLayoutTransformControl(comp, parentLayer);
 
   return "OK";
 };

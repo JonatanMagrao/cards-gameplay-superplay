@@ -173,6 +173,80 @@ const getLevelPreviewPath = (rootPath: string, levelFolder: string, preferredRes
   return null;
 };
 
+type LevelJsonPath = {
+  filePath: string;
+  isExactResolution: boolean;
+};
+
+const parseResolutionString = (value: string): [number, number] | null => {
+  const match = String(value || "").match(/(\d{2,5})x(\d{2,5})/i);
+  if (!match) return null;
+
+  const width = parseInt(match[1], 10);
+  const height = parseInt(match[2], 10);
+  if (!width || !height) return null;
+
+  return [width, height];
+};
+
+const getResolutionFallbackScore = (candidate: string, preferred: string): number => {
+  const candidateSize = parseResolutionString(candidate);
+  const preferredSize = parseResolutionString(preferred);
+
+  if (!candidateSize || !preferredSize) return Number.MAX_VALUE;
+
+  const candidateRatio = candidateSize[0] / candidateSize[1];
+  const preferredRatio = preferredSize[0] / preferredSize[1];
+  const ratioDistance = Math.abs(candidateRatio - preferredRatio) * 1000000;
+  const areaDistance = Math.abs((candidateSize[0] * candidateSize[1]) - (preferredSize[0] * preferredSize[1]));
+
+  return ratioDistance + areaDistance;
+};
+
+const getLevelJsonPath = (levelFolderPath: string, preferredResolution: string): LevelJsonPath | null => {
+  if (!levelFolderPath || !fs.existsSync(levelFolderPath)) return null;
+
+  if (preferredResolution) {
+    const exactPath = `${levelFolderPath}/${preferredResolution}.json`;
+    if (fs.existsSync(exactPath)) {
+      return { filePath: exactPath, isExactResolution: true };
+    }
+  }
+
+  try {
+    const entries = fs.readdirSync(levelFolderPath) as string[];
+    const jsonFiles: string[] = [];
+
+    for (let i = 0; i < entries.length; i++) {
+      const entryName = entries[i];
+      if (/\.json$/i.test(entryName)) jsonFiles.push(entryName);
+    }
+
+    if (!jsonFiles.length) return null;
+    jsonFiles.sort();
+
+    let selectedFile = jsonFiles[0];
+    let selectedScore = getResolutionFallbackScore(selectedFile, preferredResolution);
+
+    for (let i = 1; i < jsonFiles.length; i++) {
+      const score = getResolutionFallbackScore(jsonFiles[i], preferredResolution);
+      if (score < selectedScore) {
+        selectedFile = jsonFiles[i];
+        selectedScore = score;
+      }
+    }
+
+    return {
+      filePath: `${levelFolderPath}/${selectedFile}`,
+      isExactResolution: false
+    };
+  } catch (e) {
+    console.error(e);
+  }
+
+  return null;
+};
+
 type Props = {
   baseDirDefault?: string;
   title?: string;
@@ -298,17 +372,17 @@ export const LayoutsPanel: React.FC<Props> = ({
     if (!resolution) return alert("No active comp found.");
     setCompResolution(String(resolution));
 
-    const jsonPath = `${levelFolder}/${resolution}.json`;
-
-    if (!fs.existsSync(jsonPath)) {
-      return alert(`Layout Resolution not found: ${jsonPath.match(/\d{2,4}x\d{2,4}/gi)}`);
-    }
+    const layoutJsonPath = getLevelJsonPath(levelFolder, String(resolution));
+    if (!layoutJsonPath) return alert(`No layout JSON found in: ${levelFolder}`);
 
     try {
-      const raw = fs.readFileSync(jsonPath, "utf-8");
+      const raw = fs.readFileSync(layoutJsonPath.filePath, "utf-8");
       const layoutData = JSON.parse(raw);
+      const applyOptions = {
+        parentToCenterNull: !layoutJsonPath.isExactResolution
+      };
 
-      const res = await evalTS("handleApplyCardsLayout", layoutData, cardProject);
+      const res = await evalTS("handleApplyCardsLayout", layoutData, cardProject, applyOptions);
       if (res !== "OK" && res !== undefined) alert(`Error applying: ${res}`);
 
     } catch (e) {
@@ -635,6 +709,7 @@ export const LayoutsPanel: React.FC<Props> = ({
               className="layouts-combobox"
               onMouseLeave={() => {
                 if (levelMenuOpen) setLevelMenuOpen(false);
+                if (levelInputRef.current) levelInputRef.current.blur();
               }}
             >
               <div className={`layouts-combobox-control ${levelMenuOpen ? "is-open" : ""}`}>
@@ -646,6 +721,7 @@ export const LayoutsPanel: React.FC<Props> = ({
                     setQuery(e.target.value);
                     setLevelMenuOpen(true);
                   }}
+                  onMouseDown={() => setLevelMenuOpen(true)}
                   onFocus={() => setLevelMenuOpen(true)}
                   onBlur={() => {
                     setTimeout(() => setLevelMenuOpen(false), 120);
@@ -659,8 +735,12 @@ export const LayoutsPanel: React.FC<Props> = ({
                   title="Show layouts"
                   onMouseDown={event => {
                     event.preventDefault();
-                    setLevelMenuOpen(open => !open);
-                    if (levelInputRef.current) levelInputRef.current.focus();
+                    const nextOpen = !levelMenuOpen;
+                    setLevelMenuOpen(nextOpen);
+                    if (levelInputRef.current) {
+                      if (nextOpen) levelInputRef.current.focus();
+                      else levelInputRef.current.blur();
+                    }
                   }}
                 >
                   <img className="layouts-combobox-toggle-icon" src={ChevronIcon} alt="" />
@@ -683,7 +763,6 @@ export const LayoutsPanel: React.FC<Props> = ({
                       role="option"
                       aria-selected={selectedFolder === l}
                       data-folder={l}
-                      onMouseEnter={() => selectLevelFromMenu(l, false)}
                       onMouseDown={event => {
                         event.preventDefault();
                         selectLevelFromMenu(l, true);
