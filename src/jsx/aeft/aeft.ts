@@ -85,10 +85,10 @@ export const handleSetTableauLayer = () => {
   }
 }
 
-export const handleApplyJump = (presetPath: string, coinFilePath: string) => {
+export const handleApplyJump = (presetPath: string, coinFilePath: string, sfxFolderPath?: string) => {
   app.beginUndoGroup("Apply Jump")
   try {
-    applyJumpOnSelectedlayers(presetPath, coinFilePath)
+    applyJumpOnSelectedlayers(presetPath, coinFilePath, sfxFolderPath)
   } catch (e) {
     alertError(e, 93, "handleApplyJump", "aeft.ts")
   } finally {
@@ -96,10 +96,10 @@ export const handleApplyJump = (presetPath: string, coinFilePath: string) => {
   }
 }
 
-export const handleFlipStockCards = (expressionLibPath?: string) => {
+export const handleFlipStockCards = (expressionLibPath?: string, sfxFolderPath?: string) => {
   app.beginUndoGroup("Flip Stock Cards")
   try {
-    flipStockCards(undefined, expressionLibPath)
+    flipStockCards(undefined, expressionLibPath, sfxFolderPath)
   } catch (e) {
     alertError(e, 114, "handleFlipStockCards", "aeft.ts")
   } finally {
@@ -186,9 +186,14 @@ export const handleResetCardsAnimation = () => {
   app.endUndoGroup()
 }
 
-export const handleRestoreCardsAnimation = (presetPath: string, expressionLibPath?: string) => {
+export const handleRestoreCardsAnimation = (
+  presetPath: string,
+  expressionLibPath?: string,
+  coinFilePath?: string,
+  sfxFolderPath?: string
+) => {
   app.beginUndoGroup("Restore Cards Animation by Layout")
-  restoreCardsAnimation(presetPath, presetMatchName, expressionLibPath)
+  restoreCardsAnimation(presetPath, presetMatchName, expressionLibPath, coinFilePath, sfxFolderPath)
   app.endUndoGroup()
 }
 

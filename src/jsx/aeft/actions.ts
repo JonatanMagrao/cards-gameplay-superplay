@@ -21,7 +21,6 @@ import {
   fxExistsByMatchName,
   LayerMarkerMeta,
   getLayerMarkersMetadata,
-  getFootageByName,
   setExpressionSafely,
 } from "./aeft-utils-jonatan"
 
@@ -46,9 +45,13 @@ export const keyLabel = {
 } as const
 
 const cardFxMatchName = "Pseudo/cards_gameplay_superplay"
-const sfxPrecompName = "SFX Precomp"
+const fxPrecompName = "FX Precomp"
+const legacySfxPrecompName = "SFX Precomp"
 const expressionLibName = "superplay-expression-lib.jsx"
 const cardsControlsLayerName = "Cards Controls"
+const coinVfxLayerNamePrefix = "Coin VFX"
+const jumpSfxFileName = "jump_sfx_01.wav"
+const flipStockSfxFileName = "flip-stock_sfx_01.wav"
 
 type CardsControlSlider = {
   name: string;
@@ -106,18 +109,32 @@ export const superplayCardEffect = [layerEffect, cardFxMatchName]
 
 //================================= TABLEAU JUMP ACTIONS
 
-const ensureSfxPrecomp = (): CompItem => {
-  let sfxPrecomp = getItemByName(sfxPrecompName) as CompItem
-  const thisComp = getActiveComp() as CompItem;
+const syncFxPrecompSettings = (fxPrecomp: CompItem, parentComp: CompItem) => {
+  try { (fxPrecomp as any).width = parentComp.width; } catch (_) { }
+  try { (fxPrecomp as any).height = parentComp.height; } catch (_) { }
+  try { fxPrecomp.pixelAspect = parentComp.pixelAspect; } catch (_) { }
+  try { fxPrecomp.duration = parentComp.duration; } catch (_) { }
+  try { fxPrecomp.frameRate = parentComp.frameRate; } catch (_) { }
+}
 
-  if (!sfxPrecomp) {
-    const { pixelAspect, duration, frameRate } = thisComp
-    //@ts-ignore
-    sfxPrecomp = app.project.items.addComp(sfxPrecompName, 100, 100, pixelAspect, duration, frameRate);
+const ensureFxPrecomp = (parentComp?: CompItem): CompItem => {
+  const thisComp = parentComp || getActiveComp() as CompItem;
+  let fxPrecomp = getItemByName(fxPrecompName) as CompItem
+
+  if (!fxPrecomp) {
+    fxPrecomp = getItemByName(legacySfxPrecompName) as CompItem
+    if (fxPrecomp) fxPrecomp.name = fxPrecompName;
   }
 
-  return sfxPrecomp
+  if (!fxPrecomp) {
+    const { width, height, pixelAspect, duration, frameRate } = thisComp
+    //@ts-ignore
+    fxPrecomp = app.project.items.addComp(fxPrecompName, width, height, pixelAspect, duration, frameRate);
+  } else {
+    syncFxPrecompSettings(fxPrecomp, thisComp);
+  }
 
+  return fxPrecomp
 }
 
 const findPrecompBySourceName = (comp: CompItem, sourceName: string): AVLayer | null => {
@@ -132,46 +149,157 @@ const findPrecompBySourceName = (comp: CompItem, sourceName: string): AVLayer | 
   return null;
 };
 
-const applySfx = (comp: CompItem, sfxTime: number, sfxName: string, labelColor: number) => {
-  const sfxPrecomp = ensureSfxPrecomp() as CompItem;
+const findPrecompBySourceItem = (comp: CompItem, sourceItem: CompItem): AVLayer | null => {
+  for (let i = 1; i <= comp.numLayers; i++) {
+    const layer = comp.layer(i) as AVLayer;
+    const src = (layer as any).source as any;
 
-  let sfxPrecompRef = findPrecompBySourceName(comp, sfxPrecompName);
+    if (src && src === sourceItem) {
+      return layer;
+    }
+  }
+  return null;
+};
 
-  if (!sfxPrecompRef) {
-    sfxPrecompRef = comp.layers.add(sfxPrecomp) as AVLayer;
-    sfxPrecompRef.label = keyLabel.brown;
-    sfxPrecompRef.startTime = 0;
-    sfxPrecompRef.selected = false
-    sfxPrecompRef.moveToEnd();
-    sfxPrecompRef.threeDLayer = true
-    sfxPrecompRef.locked = true
-  } else {
-    sfxPrecompRef.locked = false
-    sfxPrecompRef.moveToEnd()
-    sfxPrecompRef.locked = true
+const textContains = (textValue: string, searchValue: string): boolean => {
+  const text = String(textValue || "");
+  const search = String(searchValue || "");
+  if (search.length === 0) return true;
+  if (search.length > text.length) return false;
+
+  for (let i = 0; i <= text.length - search.length; i++) {
+    let matches = true;
+
+    for (let j = 0; j < search.length; j++) {
+      if (text.charAt(i + j) !== search.charAt(j)) {
+        matches = false;
+        break;
+      }
+    }
+
+    if (matches) return true;
   }
 
-  const sfxFile = getFootageByName(sfxName);
+  return false;
+}
+
+const getFileNameFromPath = (filePath: string): string => {
+  const pathText = String(filePath || "");
+  let lastSeparatorIndex = -1;
+
+  for (let i = 0; i < pathText.length; i++) {
+    const char = pathText.charAt(i);
+    if (char === "/" || char === "\\") lastSeparatorIndex = i;
+  }
+
+  return pathText.substring(lastSeparatorIndex + 1);
+}
+
+const joinPath = (folderPath: string | undefined, fileName: string): string => {
+  const folder = String(folderPath || "");
+  if (folder === "") return fileName;
+
+  const lastChar = folder.charAt(folder.length - 1);
+  return lastChar === "/" || lastChar === "\\"
+    ? `${folder}${fileName}`
+    : `${folder}/${fileName}`;
+}
+
+const ensureFootageItem = (filePath: string, missingLabel: string): FootageItem | null => {
+  const itemName = getFileNameFromPath(filePath);
+  const existingItem = findProjectItemByName(itemName, false) as FootageItem | null;
+
+  if (existingItem && existingItem instanceof FootageItem) return existingItem;
+
+  const file = new File(filePath);
+  if (!file.exists) {
+    alert(`${missingLabel} file not found:\n${filePath}`);
+    return null;
+  }
+
+  const importOptions = new ImportOptions(file);
+  const importedItem = app.project.importFile(importOptions) as FootageItem;
+  importedItem.name = itemName;
+
+  return importedItem;
+}
+
+const ensureFxPrecompLayer = (comp: CompItem): AVLayer => {
+  const fxPrecomp = ensureFxPrecomp(comp);
+  let fxPrecompRef = findPrecompBySourceItem(comp, fxPrecomp);
+
+  if (!fxPrecompRef) fxPrecompRef = findPrecompBySourceName(comp, fxPrecompName);
+  if (!fxPrecompRef) fxPrecompRef = findPrecompBySourceName(comp, legacySfxPrecompName);
+
+  if (!fxPrecompRef) {
+    fxPrecompRef = comp.layers.add(fxPrecomp) as AVLayer;
+  }
+
+  fxPrecompRef.locked = false;
+  fxPrecompRef.name = fxPrecompName;
+  fxPrecompRef.label = keyLabel.brown;
+  fxPrecompRef.enabled = true;
+  fxPrecompRef.guideLayer = false;
+  fxPrecompRef.shy = false;
+  fxPrecompRef.selected = false;
+  fxPrecompRef.startTime = 0;
+  try { fxPrecompRef.threeDLayer = false; } catch (_) { }
+  fxPrecompRef.moveToBeginning();
+  fxPrecompRef.locked = true;
+
+  return fxPrecompRef;
+}
+
+const applySfx = (comp: CompItem, sfxTime: number, sfxFilePath: string, labelColor: number) => {
+  const fxPrecompRef = ensureFxPrecompLayer(comp);
+
+  const sfxFile = ensureFootageItem(sfxFilePath, "SFX");
   if (!sfxFile) {
-    alert(`Sound file "${sfxName}" not found in project.`);
     return;
   }
 
-  const sfxLayerItem = sfxPrecompRef.source.layers.add(sfxFile)
+  const sfxLayerItem = (fxPrecompRef.source as CompItem).layers.add(sfxFile)
   sfxLayerItem.startTime = sfxTime
   sfxLayerItem.label = labelColor
+  sfxLayerItem.name = getFileNameFromPath(sfxFilePath)
 
 };
 
-const clearSfxPrecompLayers = () => {
-  const sfxPrecomp = getItemByName("SFX Precomp") as CompItem;
+const clearCompLayers = (comp: CompItem | null) => {
+  if (!comp) return;
 
-  if (!sfxPrecomp) return;
-
-  for (let i = sfxPrecomp.numLayers; i > 0; i--) {
-    sfxPrecomp.layer(i).remove();
+  for (let i = comp.numLayers; i > 0; i--) {
+    comp.layer(i).remove();
   }
 };
+
+const clearFxPrecompLayers = () => {
+  const fxPrecomp = getItemByName(fxPrecompName) as CompItem;
+  const legacySfxPrecomp = getItemByName(legacySfxPrecompName) as CompItem;
+
+  clearCompLayers(fxPrecomp);
+  if (legacySfxPrecomp && legacySfxPrecomp !== fxPrecomp) clearCompLayers(legacySfxPrecomp);
+};
+
+const getLayerSourceName = (layer: Layer): string => {
+  try {
+    const source = (layer as any).source as any;
+    return source && source.name ? source.name : "";
+  } catch (_) {
+    return "";
+  }
+}
+
+const isCoinVfxLayer = (layer: Layer): boolean => {
+  return textContains(layer.name, coinVfxLayerNamePrefix) || textContains(getLayerSourceName(layer), "coin_plus-");
+}
+
+const clearCoinVfxLayers = (comp: CompItem) => {
+  for (let i = comp.numLayers; i >= 1; i--) {
+    const layer = comp.layer(i);
+    if (isCoinVfxLayer(layer)) layer.remove();
+  }
+}
 
 export const jumpPos = (camada: Layer) => {
   const posProp = getLayerProp(camada, posPropPath)
@@ -198,30 +326,29 @@ export const setJumpTargetLayer = (camada: Layer, targetLayer: Layer) => {
     .setValue(targetLayer.index)
 }
 
-const applyCoin = (camada: Layer, coinFilePath: string) => {
+const applyCoin = (camada: Layer, coinFilePath: string | undefined, coinTime: number) => {
+  if (!coinFilePath) return;
 
   const thisComp = getActiveComp()
-  const coinFile = new File(coinFilePath)
+  const importedItem = ensureFootageItem(coinFilePath, "Coin VFX") as AVItem
+  if (!importedItem) return;
 
-  if (!coinFile.exists) {
-    alert(`Coin file not found:\n${coinFilePath}`)
-    return
-  }
+  const fxPrecompRef = ensureFxPrecompLayer(thisComp);
+  const fxPrecomp = fxPrecompRef.source as CompItem;
+  const coinLayer = fxPrecomp.layers.add(importedItem)
 
-  const importOptions = new ImportOptions(coinFile)
-  const importedItem = app.project.importFile(importOptions) as AVItem
-  const coinLayer = thisComp.layers.add(importedItem)
-
-  const camadaPosValue = getLayerProp(camada, posPropPath).valueAtTime(thisComp.time, false)
+  const camadaPosValue = getLayerProp(camada, posPropPath).valueAtTime(coinTime, false)
   const coinLayerPos = getLayerProp(coinLayer, posPropPath)
 
-  coinLayer.startTime = thisComp.time
-  coinLayer.threeDLayer = true
-  coinLayerPos.setValue(camadaPosValue)
+  coinLayer.name = `${coinVfxLayerNamePrefix} - ${camada.name}`
+  coinLayer.startTime = coinTime
+  coinLayer.label = keyLabel.fuschia
+  coinLayer.threeDLayer = false
+  coinLayerPos.setValue([camadaPosValue[0], camadaPosValue[1]])
 
 }
 
-export const applyJumpOnSelectedlayers = (presetPath: string, coinFilePath: string) => {
+export const applyJumpOnSelectedlayers = (presetPath: string, coinFilePath: string, sfxFolderPath?: string) => {
 
   const targetLayer = getTargetLayer() as Layer
   const thisComp = getActiveComp();
@@ -243,7 +370,7 @@ export const applyJumpOnSelectedlayers = (presetPath: string, coinFilePath: stri
       //@ts-ignore
       camada.threeDLayer = true
 
-      applyCoin(camada, coinFilePath)
+      applyCoin(camada, coinFilePath, thisTime)
 
       jumpPos(camada)
       jumpScale(camada)
@@ -252,7 +379,7 @@ export const applyJumpOnSelectedlayers = (presetPath: string, coinFilePath: stri
       addMarkerToLayer(camada, thisTime, { title: "Jump", label: keyLabel.green })
       setJumpTargetLayer(camada, targetLayer)
 
-      // applySfx(thisComp, thisTime, "jump_sfx_01.wav", keyLabel.green)
+      applySfx(thisComp, thisTime, joinPath(sfxFolderPath, jumpSfxFileName), keyLabel.green)
     })
 
   } catch (e) {
@@ -573,7 +700,7 @@ const getLayerMarkerKeyIndexByComment = (layer: Layer, markerComment: string): n
   return null;
 }
 
-export const flipStockCards = (stockLayerToFlip?: Layer, expressionLibPath?: string) => {
+export const flipStockCards = (stockLayerToFlip?: Layer, expressionLibPath?: string, sfxFolderPath?: string) => {
 
   // main consts
   const thisComp = getActiveComp();
@@ -610,7 +737,7 @@ export const flipStockCards = (stockLayerToFlip?: Layer, expressionLibPath?: str
 
   applyStockExpressions(thisComp, expressionLibPath, firstSelectedLayer)
 
-  // applySfx(thisComp, thisComp.time, "flip-stock_sfx_01.wav", keyLabel.yellow)
+  applySfx(thisComp, markerTime, joinPath(sfxFolderPath, flipStockSfxFileName), keyLabel.yellow)
 }
 
 // ============================== CARDS MODIFIERS
@@ -804,7 +931,8 @@ export const resetCardsAnimation = (presetMatchName: string) => {
       ? thisComp.selectedLayers
       : findCardLayers()
 
-    for (let layer of cardsList) {
+    for (let i = 0; i < cardsList.length; i++) {
+      const layer = cardsList[i]
       try {
         const zPosProp = getLayerProp(layer, zRotPropPath)
         const posProp = getLayerProp(layer, posPropPath)
@@ -832,18 +960,27 @@ export const resetCardsAnimation = (presetMatchName: string) => {
 
     }
 
-    // clearSfxPrecompLayers()
+    clearFxPrecompLayers()
+    clearCoinVfxLayers(thisComp)
 
   } catch (e) {
     alertError(e, 591, "resetCardsAnimation", "actions.ts")
   }
 }
 
-export const restoreCardsAnimation = (presetPath: string, presetMatchName: string, expressionLibPath?: string) => {
-
-  // clearSfxPrecompLayers()
+export const restoreCardsAnimation = (
+  presetPath: string,
+  presetMatchName: string,
+  expressionLibPath?: string,
+  coinFilePath?: string,
+  sfxFolderPath?: string
+) => {
 
   const thisComp = getActiveComp()
+
+  clearFxPrecompLayers()
+  clearCoinVfxLayers(thisComp)
+
   const cardsLayers = findCardLayers()
 
   const markers: LayerMarkerMeta[] = []
@@ -854,7 +991,9 @@ export const restoreCardsAnimation = (presetPath: string, presetMatchName: strin
 
     // only layers cards that have markers
     if (layerMarkers.length > 0) {
-      markers.push(...layerMarkers)
+      for (let j = 0; j < layerMarkers.length; j++) {
+        markers.push(layerMarkers[j])
+      }
     }
 
   }
@@ -864,8 +1003,23 @@ export const restoreCardsAnimation = (presetPath: string, presetMatchName: strin
   const yellowFlipMarkers = filterLayerMarkersByLabelAndComment(markers, keyLabel.yellow, "Flip")
   const yellowFlipStockMarkers = filterLayerMarkersByLabelAndComment(markers, keyLabel.yellow, "Flip Stock")
 
-  const cardsMarkers = [...greenJumpMarkers, ...yellowFlipMarkers, ...yellowFlipStockMarkers]
-  cardsMarkers.sort((a, b) => a.time - b.time)
+  const cardsMarkers: LayerMarkerMeta[] = []
+
+  for (let i = 0; i < greenJumpMarkers.length; i++) {
+    cardsMarkers.push(greenJumpMarkers[i])
+  }
+
+  for (let i = 0; i < yellowFlipMarkers.length; i++) {
+    cardsMarkers.push(yellowFlipMarkers[i])
+  }
+
+  for (let i = 0; i < yellowFlipStockMarkers.length; i++) {
+    cardsMarkers.push(yellowFlipStockMarkers[i])
+  }
+
+  cardsMarkers.sort(function (a, b) {
+    return a.time - b.time
+  })
 
   // aqui vem a aplicação
   const targetLayer = getTargetLayer() as Layer
@@ -880,9 +1034,15 @@ export const restoreCardsAnimation = (presetPath: string, presetMatchName: strin
     }
   }
 
-  deselectAllSelectedLayers(cardsMarkers)
+  const cardMarkerLayers: Layer[] = []
+  for (let i = 0; i < cardsMarkers.length; i++) {
+    cardMarkerLayers.push(cardsMarkers[i].layer)
+  }
 
-  for (let card of cardsMarkers) {
+  deselectAllSelectedLayers(cardMarkerLayers)
+
+  for (let i = 0; i < cardsMarkers.length; i++) {
+    const card = cardsMarkers[i]
     const cardAction = card.title || getMarkerCommentTitle(card.comment)
 
     if (cardAction === "Jump") {
@@ -894,16 +1054,16 @@ export const restoreCardsAnimation = (presetPath: string, presetMatchName: strin
       jumpScale(card.layer)
       jumpRotation(card.layer)
       setJumpTargetLayer(card.layer, targetLayer)
+      applyCoin(card.layer, coinFilePath, card.time)
+      applySfx(thisComp, card.time, joinPath(sfxFolderPath, jumpSfxFileName), keyLabel.green)
 
       card.layer.selected = false
-
-      // applySfx(thisComp, card.time, "jump_sfx_01.wav", keyLabel.green)
 
     } else if (cardAction === "Flip") {
       flipCard(card.time, card.layer)
     } else if (cardAction === "Flip Stock") {
       thisComp.time = card.time
-      flipStockCards(card.layer, expressionLibPath)
+      flipStockCards(card.layer, expressionLibPath, sfxFolderPath)
     }
   }
 

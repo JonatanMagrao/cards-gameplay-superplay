@@ -22,14 +22,15 @@ export const ActionsPanel: React.FC<Props> = ({
   const progressBarPresetPath = `${assets}/${progressBarPreset}`;
   const expressionLibPath = `${assets}/${expressionLibRelPath}`;
   const cardProject = `${assets}/${projectRelPath}`;
+  const sfxFolderPath = `${assets}/sfx`;
   
   // NOVO: Montando o caminho do arquivo de moeda baseado no que foi selecionado
   const coinPath = `${assets}/coins-vfx/coin_plus-${coinValue}.mov`;
 
   // NOVO: Passando os dois caminhos pro seu ExtendScript
-  const applyJump = async () => await evalTS("handleApplyJump", cardPresetPath, coinPath);
+  const applyJump = async () => await evalTS("handleApplyJump", cardPresetPath, coinPath, sfxFolderPath);
   
-  const flipStockCards = async () => await evalTS("handleFlipStockCards", expressionLibPath);
+  const flipStockCards = async () => await evalTS("handleFlipStockCards", expressionLibPath, sfxFolderPath);
   const applyFlipCard = async () => await evalTS("handleFlipCards");
 
   const handleSetTargetLayer = async () => await evalTS("handleSetTargetLayer");
@@ -39,7 +40,7 @@ export const ActionsPanel: React.FC<Props> = ({
 
   const resetCardsAnimation = async () => await evalTS("handleResetCardsAnimation");
   const restoreCardsAnimation = async () =>
-    await evalTS("handleRestoreCardsAnimation", cardPresetPath, expressionLibPath);
+    await evalTS("handleRestoreCardsAnimation", cardPresetPath, expressionLibPath, coinPath, sfxFolderPath);
 
   const handleImportFilesAndComps = async () =>
     await evalTS("handleImportFilesAndComps", cardProject);

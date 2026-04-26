@@ -253,7 +253,8 @@ export const getPropertyKeyframesMetadata = (layerProp: Property) => {
 
 export const filterLayerMarkersByLabelAndComment = (markerData: any, markerLabel: number, markerComment: string) => {
   const filteredMarkers = []
-  for (let marker of markerData) {
+  for (let i = 0; i < markerData.length; i++) {
+    const marker = markerData[i]
     const markerTitle = marker.title || getMarkerCommentTitle(marker.comment)
 
     if (marker.label === markerLabel && markerTitle === markerComment) {
