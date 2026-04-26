@@ -22,6 +22,33 @@ const cardsFolderName = "Disney Solitaire Cards"
 const presetMatchName = "Pseudo/cards_gameplay_superplay"
 // const precompRenderer = "ADBE Calder"
 
+const getFileNameFromPath = (filePath: string): string => {
+  let startIndex = 0;
+
+  for (let i = filePath.length - 1; i >= 0; i--) {
+    const character = filePath.charAt(i);
+    if (character === "/" || character === "\\") {
+      startIndex = i + 1;
+      break;
+    }
+  }
+
+  return filePath.substring(startIndex);
+}
+
+const getDimensionValue = (dimension: Dimension | null, propertyName: string, index: number, fallback: number): number => {
+  if (!dimension) return fallback;
+
+  //@ts-ignore
+  const namedValue = dimension[propertyName];
+  if (typeof namedValue === "number" && namedValue > 0) return namedValue;
+
+  const indexedValue = dimension[index];
+  if (typeof indexedValue === "number" && indexedValue > 0) return indexedValue;
+
+  return fallback;
+}
+
 export const getCompResolution = () => {
   return getActiveCompResolution();
 }
@@ -60,6 +87,68 @@ export const handleSaveCardsLayoutThumbnail = (layoutData: CardsLayoutJson, thum
     return "Thumbnail export failed: " + e.toString();
   }
 };
+
+export const handleOpenLayoutPreview = (imagePath: string) => {
+  try {
+    const imageFile = new File(imagePath);
+    if (!imageFile.exists) return "Preview image not found: " + imagePath;
+    const previewImage = ScriptUI.newImage(imageFile.fsName);
+    const imageWidth = getDimensionValue(previewImage.size, "width", 0, 512);
+    const imageHeight = getDimensionValue(previewImage.size, "height", 1, 512);
+    const largestImageSide = Math.max(imageWidth, imageHeight);
+    const initialScale = largestImageSide > 0 ? 720 / largestImageSide : 1;
+    const initialWidth = Math.max(360, Math.round(imageWidth * initialScale));
+    const initialHeight = Math.max(240, Math.round(imageHeight * initialScale));
+
+    const dialog = new Window(
+      "dialog",
+      "Layout Preview - " + getFileNameFromPath(imagePath),
+      undefined,
+      { resizeable: true }
+    );
+
+    dialog.orientation = "column";
+    dialog.alignChildren = ["fill", "fill"];
+    dialog.margins = 10;
+    dialog.spacing = 0;
+
+    const previewCanvas = dialog.add("group");
+    previewCanvas.alignment = ["fill", "fill"];
+    previewCanvas.preferredSize = [initialWidth, initialHeight];
+    previewCanvas.minimumSize = [240, 160];
+
+    previewCanvas.onDraw = function () {
+      const canvasWidth = getDimensionValue(previewCanvas.size, "width", 0, initialWidth);
+      const canvasHeight = getDimensionValue(previewCanvas.size, "height", 1, initialHeight);
+      const scaleX = canvasWidth / imageWidth;
+      const scaleY = canvasHeight / imageHeight;
+      const drawScale = Math.min(scaleX, scaleY);
+      const drawWidth = Math.max(1, Math.round(imageWidth * drawScale));
+      const drawHeight = Math.max(1, Math.round(imageHeight * drawScale));
+      const drawX = Math.round((canvasWidth - drawWidth) / 2);
+      const drawY = Math.round((canvasHeight - drawHeight) / 2);
+
+      previewCanvas.graphics.drawImage(previewImage, drawX, drawY, drawWidth, drawHeight);
+    };
+
+    const redrawPreview = function () {
+      try {
+        dialog.layout.resize();
+      } catch (_) { }
+    };
+
+    dialog.onResize = redrawPreview;
+    dialog.onResizing = redrawPreview;
+
+    dialog.center();
+    dialog.show();
+
+    return "OK";
+  } catch (e) {
+    //@ts-ignore
+    return "Could not open preview: " + e.toString();
+  }
+}
 
 export const handleSetTargetLayer = () => {
   app.beginUndoGroup("Set Target Layer")

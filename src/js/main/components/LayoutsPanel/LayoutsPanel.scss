@@ -40,7 +40,137 @@
   display: block;
 }
 
+.layouts-preview.is-clickable {
+  cursor: pointer;
+}
+
+.layouts-preview.is-clickable:hover {
+  border-color: #61dafb;
+}
+
 /* Wrapper dos botões à direita */
+.layouts-combobox {
+  position: relative;
+  width: 100%;
+  z-index: 20;
+}
+
+.layouts-combobox-control {
+  width: 100%;
+  min-height: 30px;
+  border: 1px solid #3a3f4b;
+  border-radius: 6px;
+  background: #171a20;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  overflow: hidden;
+}
+
+.layouts-combobox-control:focus-within,
+.layouts-combobox-control.is-open {
+  outline: none;
+  border-color: #61dafb;
+}
+
+.layouts-combobox-input {
+  width: 100%;
+  min-width: 0;
+  min-height: 28px;
+  padding: 0.25rem 0.5rem;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: #ffffff;
+  -webkit-text-fill-color: #ffffff;
+  font-size: 0.72rem;
+}
+
+.layouts-combobox-input::placeholder {
+  color: #d9dde7;
+  -webkit-text-fill-color: #d9dde7;
+  opacity: 1;
+}
+
+.layouts-combobox-toggle {
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+  border: 0;
+  border-left: 1px solid #3a3f4b;
+  border-radius: 0;
+  background: #242832;
+  color: #d9dde7;
+  -webkit-text-fill-color: #d9dde7;
+  cursor: pointer;
+}
+
+.layouts-combobox-toggle:hover {
+  background: #2f3542;
+  color: #ffffff;
+  -webkit-text-fill-color: #ffffff;
+}
+
+.layouts-combobox-toggle-icon {
+  width: 16px;
+  height: 16px;
+  display: block;
+  margin: 0 auto;
+  pointer-events: none;
+}
+
+.layouts-combobox-control.is-open .layouts-combobox-toggle-icon {
+  transform: rotate(180deg);
+}
+
+.layouts-combobox-menu {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  max-height: 148px;
+  overflow-y: auto;
+  border: 1px solid #3d4350;
+  border-radius: 6px;
+  background: #171a20;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35);
+  z-index: 1000;
+}
+
+.layouts-combobox-option {
+  width: 100%;
+  min-height: 24px;
+  padding: 0.25rem 0.45rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #d9dde7;
+  -webkit-text-fill-color: #d9dde7;
+  display: block;
+  font-size: 0.72rem;
+  line-height: 1.2;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.layouts-combobox-option:hover,
+.layouts-combobox-option:focus,
+.layouts-combobox-option.is-selected {
+  outline: none;
+  background: #2e4652;
+  color: #ffffff;
+  -webkit-text-fill-color: #ffffff;
+}
+
+.layouts-combobox-empty {
+  padding: 0.45rem;
+  color: #707887;
+  -webkit-text-fill-color: #707887;
+  font-size: 0.72rem;
+}
+
 .save-target-row {
   display: flex;
   flex-direction: row;

@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fs, path, os } from "../../../lib/cep/node";
 import { evalTS } from "../../../lib/utils/bolt";
+import ChevronIcon from "../../../assets/icons/chevron.svg";
 import "./LayoutsPanel.scss";
 
 // --- CONFIGURAÇÃO DE PERSISTÊNCIA ---
@@ -192,7 +193,11 @@ export const LayoutsPanel: React.FC<Props> = ({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [compResolution, setCompResolution] = useState("");
   const [layoutPreviewSrc, setLayoutPreviewSrc] = useState<string | null>(null);
+  const [layoutPreviewPath, setLayoutPreviewPath] = useState("");
   const [thumbnailVersion, setThumbnailVersion] = useState(0);
+  const [levelMenuOpen, setLevelMenuOpen] = useState(false);
+  const levelInputRef = useRef<HTMLInputElement | null>(null);
+  const levelMenuRef = useRef<HTMLDivElement | null>(null);
 
   // --- INIT ---
   useEffect(() => {
@@ -256,11 +261,26 @@ export const LayoutsPanel: React.FC<Props> = ({
     const objectUrl = previewPath ? getImageObjectUrl(previewPath) : null;
 
     setLayoutPreviewSrc(objectUrl);
+    setLayoutPreviewPath(previewPath || "");
 
     return () => {
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [baseDir, persistentSavePath, selectedFolder, compResolution, thumbnailVersion]);
+
+  useEffect(() => {
+    const menu = levelMenuRef.current;
+    if (!levelMenuOpen || !menu || !selectedFolder) return;
+
+    const buttons = menu.getElementsByTagName("button");
+    for (let i = 0; i < buttons.length; i++) {
+      const button = buttons[i];
+      if (button.getAttribute("data-folder") === selectedFolder) {
+        button.scrollIntoView({ block: "nearest" });
+        break;
+      }
+    }
+  }, [filtered, levelMenuOpen, selectedFolder]);
 
 
   // -------------------------
@@ -295,7 +315,7 @@ export const LayoutsPanel: React.FC<Props> = ({
       alert("Error reading JSON file.");
       console.error(e);
     }
-  }, [baseDir, selectedFolder, persistentSavePath]);
+  }, [baseDir, cardProject, selectedFolder, persistentSavePath]);
 
 
   // -------------------------
@@ -446,6 +466,101 @@ export const LayoutsPanel: React.FC<Props> = ({
     require("child_process").exec(cmd);
   };
 
+  const handleOpenLayoutPreview = useCallback(async () => {
+    if (!layoutPreviewPath) return;
+
+    const result = await evalTS("handleOpenLayoutPreview", layoutPreviewPath);
+    if (result && result !== "OK") alert(String(result));
+  }, [layoutPreviewPath]);
+
+  const selectedLevelLabel = selectedFolder ? selectedFolder.replace("lvl_", "") : "";
+
+  const moveSelectedLevel = useCallback((offset: number) => {
+    if (!filtered.length || offset === 0) return;
+
+    let currentIndex = -1;
+    for (let i = 0; i < filtered.length; i++) {
+      if (filtered[i] === selectedFolder) {
+        currentIndex = i;
+        break;
+      }
+    }
+
+    const lastIndex = filtered.length - 1;
+    const nextIndex = currentIndex < 0
+      ? 0
+      : Math.max(0, Math.min(lastIndex, currentIndex + offset));
+
+    setLevelMenuOpen(true);
+    setSelectedFolder(filtered[nextIndex]);
+  }, [filtered, selectedFolder]);
+
+  const handleLevelComboboxKeyDown = useCallback((event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setLevelMenuOpen(false);
+      setQuery("");
+      return;
+    }
+
+    if (event.key === "Enter") {
+      event.preventDefault();
+      setLevelMenuOpen(false);
+      setQuery("");
+      return;
+    }
+
+    if (!filtered.length) return;
+
+    let currentIndex = -1;
+    for (let i = 0; i < filtered.length; i++) {
+      if (filtered[i] === selectedFolder) {
+        currentIndex = i;
+        break;
+      }
+    }
+
+    let nextIndex = currentIndex;
+    const lastIndex = filtered.length - 1;
+
+    if (event.key === "ArrowDown") {
+      if (!levelMenuOpen) nextIndex = currentIndex < 0 ? 0 : currentIndex;
+      else nextIndex = currentIndex < 0 ? 0 : Math.min(lastIndex, currentIndex + 1);
+    } else if (event.key === "ArrowUp") {
+      if (!levelMenuOpen) nextIndex = currentIndex < 0 ? 0 : currentIndex;
+      else nextIndex = currentIndex < 0 ? 0 : Math.max(0, currentIndex - 1);
+    } else if (event.key === "Home") {
+      nextIndex = 0;
+    } else if (event.key === "End") {
+      nextIndex = lastIndex;
+    } else if (event.key === "PageDown") {
+      nextIndex = currentIndex < 0 ? 0 : Math.min(lastIndex, currentIndex + 5);
+    } else if (event.key === "PageUp") {
+      nextIndex = currentIndex < 0 ? 0 : Math.max(0, currentIndex - 5);
+    } else {
+      return;
+    }
+
+    event.preventDefault();
+    setLevelMenuOpen(true);
+    setSelectedFolder(filtered[nextIndex]);
+  }, [filtered, levelMenuOpen, selectedFolder]);
+
+  const handleLevelMenuWheel = useCallback((event: React.WheelEvent<HTMLDivElement>) => {
+    if (!filtered.length || event.deltaY === 0) return;
+
+    event.preventDefault();
+    moveSelectedLevel(event.deltaY > 0 ? 1 : -1);
+  }, [filtered.length, moveSelectedLevel]);
+
+  const selectLevelFromMenu = useCallback((folder: string, closeMenu: boolean) => {
+    setSelectedFolder(folder);
+    if (closeMenu) {
+      setQuery("");
+      setLevelMenuOpen(false);
+    }
+  }, []);
+
   return (
     <section className="panel-section layouts-section">
       <div className="layouts-section-header" style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -504,7 +619,11 @@ export const LayoutsPanel: React.FC<Props> = ({
       <div className="layouts-grid">
         <div className="layouts-card">
           <div className="layouts-card-header"><span className="layouts-card-title">Apply</span></div>
-          <div className="layouts-preview">
+          <div
+            className={`layouts-preview ${layoutPreviewSrc ? "is-clickable" : ""}`}
+            onClick={layoutPreviewSrc ? handleOpenLayoutPreview : undefined}
+            title={layoutPreviewSrc ? "Open preview" : undefined}
+          >
             {layoutPreviewSrc ? (
               <img src={layoutPreviewSrc} alt="Selected layout preview" />
             ) : (
@@ -512,10 +631,72 @@ export const LayoutsPanel: React.FC<Props> = ({
             )}
           </div>
           <div className="layouts-apply-row">
-            <input className="field-input" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search..." />
-            <select className="field-input" value={selectedFolder} onChange={e => setSelectedFolder(e.target.value)}>
-              {filtered.length ? filtered.map(l => <option key={l} value={l}>{l.replace("lvl_", "")}</option>) : <option value="">None</option>}
-            </select>
+            <div
+              className="layouts-combobox"
+              onMouseLeave={() => {
+                if (levelMenuOpen) setLevelMenuOpen(false);
+              }}
+            >
+              <div className={`layouts-combobox-control ${levelMenuOpen ? "is-open" : ""}`}>
+                <input
+                  ref={levelInputRef}
+                  className="layouts-combobox-input"
+                  value={query}
+                  onChange={e => {
+                    setQuery(e.target.value);
+                    setLevelMenuOpen(true);
+                  }}
+                  onFocus={() => setLevelMenuOpen(true)}
+                  onBlur={() => {
+                    setTimeout(() => setLevelMenuOpen(false), 120);
+                  }}
+                  onKeyDown={handleLevelComboboxKeyDown}
+                  placeholder={selectedLevelLabel || "Search..."}
+                />
+                <button
+                  type="button"
+                  className="layouts-combobox-toggle"
+                  title="Show layouts"
+                  onMouseDown={event => {
+                    event.preventDefault();
+                    setLevelMenuOpen(open => !open);
+                    if (levelInputRef.current) levelInputRef.current.focus();
+                  }}
+                >
+                  <img className="layouts-combobox-toggle-icon" src={ChevronIcon} alt="" />
+                </button>
+              </div>
+
+              {levelMenuOpen && (
+                <div
+                  ref={levelMenuRef}
+                  className="layouts-combobox-menu"
+                  role="listbox"
+                  aria-label="Layouts"
+                  onWheel={handleLevelMenuWheel}
+                >
+                  {filtered.length ? filtered.map(l => (
+                    <button
+                      key={l}
+                      type="button"
+                      className={`layouts-combobox-option ${selectedFolder === l ? "is-selected" : ""}`}
+                      role="option"
+                      aria-selected={selectedFolder === l}
+                      data-folder={l}
+                      onMouseEnter={() => selectLevelFromMenu(l, false)}
+                      onMouseDown={event => {
+                        event.preventDefault();
+                        selectLevelFromMenu(l, true);
+                      }}
+                    >
+                      {l.replace("lvl_", "")}
+                    </button>
+                  )) : (
+                    <div className="layouts-combobox-empty">None</div>
+                  )}
+                </div>
+              )}
+            </div>
             <button className="layouts-btn-primary" onClick={handleApply} disabled={!selectedFolder}>Apply</button>
           </div>
         </div>
