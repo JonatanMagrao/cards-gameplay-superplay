@@ -5,12 +5,14 @@ type Props = {
   cardsPreset?: string; 
   projectRelPath?: string; 
   progressBarPreset?: string; 
+  expressionLibRelPath?: string;
   coinValue: string; // NOVO: Recebendo a moeda escolhida
 };
 
 export const ActionsPanel: React.FC<Props> = ({
   cardsPreset = "presets/cards_gameplay_superplay.ffx",
   progressBarPreset = "presets/cards_gameplay_progressbar.ffx",
+  expressionLibRelPath = "expressions/superplay-expression-lib.jsx",
   projectRelPath = "disney_solitaire_cards.aepx",
   coinValue, // Extraindo das props
 }) => {
@@ -18,6 +20,7 @@ export const ActionsPanel: React.FC<Props> = ({
 
   const cardPresetPath = `${assets}/${cardsPreset}`;
   const progressBarPresetPath = `${assets}/${progressBarPreset}`;
+  const expressionLibPath = `${assets}/${expressionLibRelPath}`;
   const cardProject = `${assets}/${projectRelPath}`;
   
   // NOVO: Montando o caminho do arquivo de moeda baseado no que foi selecionado
@@ -26,7 +29,7 @@ export const ActionsPanel: React.FC<Props> = ({
   // NOVO: Passando os dois caminhos pro seu ExtendScript
   const applyJump = async () => await evalTS("handleApplyJump", cardPresetPath, coinPath);
   
-  const flipStockCards = async () => await evalTS("handleFlipStockCards");
+  const flipStockCards = async () => await evalTS("handleFlipStockCards", expressionLibPath);
   const applyFlipCard = async () => await evalTS("handleFlipCards");
 
   const handleSetTargetLayer = async () => await evalTS("handleSetTargetLayer");
@@ -36,7 +39,7 @@ export const ActionsPanel: React.FC<Props> = ({
 
   const resetCardsAnimation = async () => await evalTS("handleResetCardsAnimation");
   const restoreCardsAnimation = async () =>
-    await evalTS("handleRestoreCardsAnimation", cardPresetPath);
+    await evalTS("handleRestoreCardsAnimation", cardPresetPath, expressionLibPath);
 
   const handleImportFilesAndComps = async () =>
     await evalTS("handleImportFilesAndComps", cardProject);

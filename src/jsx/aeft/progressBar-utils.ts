@@ -1,6 +1,6 @@
 import { getItemByName, getActiveComp } from "./aeft-utils";
 import { fxExistsByMatchName, getLayerProp, setExpressionSafely } from "./aeft-utils-jonatan";
-import { posPropPath, scalePropPath, anchorPropPath, textPropPath, progressBarEPPath } from "./actions";
+import { posPropPath, scalePropPath, anchorPropPath, textPropPath, progressBarEPPath, progressCardsControlsSliders, warnCardsControlsFallbacks } from "./actions";
 import { deselectAllSelectedLayers } from "./aeft-utils-jonatan";
 import { expProgressBar } from "../utils/expressions";
 import { keyLabel } from "./actions";
@@ -66,6 +66,8 @@ export const addProgressBar = (presetPath: string) => {
     alert("No active composition found.\nPlease select a composition.");
     return
   };
+
+  warnCardsControlsFallbacks(thisComp, progressCardsControlsSliders);
 
   const compRes = `${thisComp.width}x${thisComp.height}`
 

@@ -1,6 +1,10 @@
 import { getActiveComp, forEachLayer, findProjectItemByName } from "./aeft-utils";
 import { getLayerProp, getKeyIndexAtTime } from "./aeft-utils-jonatan";
 
+export const getMarkerCommentTitle = (comment: string): string => {
+  return String(comment || "").split(/\r\n|\n|\r/)[0];
+}
+
 export const importFilesAndCompsForCards = (filePath: string, cardsFolderName: string) => {
 
   const projectFolder = findProjectItemByName("Disney Solitaire Cards", false)
@@ -172,7 +176,7 @@ export const namedMarkerExists = (layer: Layer, markerComment: string) => {
 
   for (let i = 1; i <= markerProp.numKeys; i++) {
     const mv = markerProp.keyValue(i);
-    const comment = String(mv.comment || "").toLowerCase();
+    const comment = getMarkerCommentTitle(mv.comment).toLowerCase();
 
     if (comment === target) {
       return true;
@@ -250,7 +254,9 @@ export const getPropertyKeyframesMetadata = (layerProp: Property) => {
 export const filterLayerMarkersByLabelAndComment = (markerData: any, markerLabel: number, markerComment: string) => {
   const filteredMarkers = []
   for (let marker of markerData) {
-    if (marker.label === markerLabel && marker.comment === markerComment) {
+    const markerTitle = marker.title || getMarkerCommentTitle(marker.comment)
+
+    if (marker.label === markerLabel && markerTitle === markerComment) {
       filteredMarkers.push(marker)
     }
   }

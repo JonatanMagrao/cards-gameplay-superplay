@@ -96,10 +96,10 @@ export const handleApplyJump = (presetPath: string, coinFilePath: string) => {
   }
 }
 
-export const handleFlipStockCards = () => {
+export const handleFlipStockCards = (expressionLibPath?: string) => {
   app.beginUndoGroup("Flip Stock Cards")
   try {
-    flipStockCards()
+    flipStockCards(undefined, expressionLibPath)
   } catch (e) {
     alertError(e, 114, "handleFlipStockCards", "aeft.ts")
   } finally {
@@ -186,9 +186,9 @@ export const handleResetCardsAnimation = () => {
   app.endUndoGroup()
 }
 
-export const handleRestoreCardsAnimation = (presetPath: string) => {
+export const handleRestoreCardsAnimation = (presetPath: string, expressionLibPath?: string) => {
   app.beginUndoGroup("Restore Cards Animation by Layout")
-  restoreCardsAnimation(presetPath, presetMatchName)
+  restoreCardsAnimation(presetPath, presetMatchName, expressionLibPath)
   app.endUndoGroup()
 }
 
