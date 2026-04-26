@@ -17,6 +17,29 @@
   align-items: stretch;
 }
 
+.layouts-preview {
+  width: 100%;
+  height: 112px;
+  margin-bottom: 0.5rem;
+  border: 1px solid #3d4350;
+  border-radius: 6px;
+  background: #171a20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  color: #707887;
+  -webkit-text-fill-color: #707887;
+  font-size: 0.72rem;
+}
+
+.layouts-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
 /* Wrapper dos botões à direita */
 .save-target-row {
   display: flex;

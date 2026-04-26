@@ -7,6 +7,8 @@ import "./LayoutsPanel.scss";
 const HOME_DIR = os.homedir();
 const CONFIG_FILE_NAME = ".cards-layout-config.json";
 const CONFIG_PATH = path.join(HOME_DIR, CONFIG_FILE_NAME);
+const THUMBNAIL_MAX_SIDE = 512;
+const THUMBNAIL_JPEG_QUALITY = 0.82;
 
 // Helpers
 const loadConfig = () => {
@@ -42,6 +44,134 @@ const normalizeLevelFolderNameUI = (levelId: string): string => {
   return name ? `lvl_${num}-${name}` : `lvl_${num}`;
 };
 
+const getImageObjectUrl = (imagePath: string): string | null => {
+  if (!imagePath || !fs.existsSync(imagePath)) return null;
+
+  try {
+    const mimeType = /\.jpe?g$/i.test(imagePath) ? "image/jpeg" : "image/png";
+    const buffer = fs.readFileSync(imagePath) as Buffer;
+    const uint8Array = new Uint8Array(buffer);
+    const blob = new Blob([uint8Array], { type: mimeType });
+    return URL.createObjectURL(blob);
+  } catch (e) {
+    console.error(e);
+    return null;
+  }
+};
+
+const deleteFileIfExists = (filePath: string) => {
+  try {
+    if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  } catch (e) {
+    console.error(e);
+  }
+};
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+const waitForReadableFile = async (filePath: string, timeoutMs: number = 5000): Promise<boolean> => {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      if (filePath && fs.existsSync(filePath)) {
+        const stat = fs.statSync(filePath);
+        if (stat && stat.size > 0) return true;
+      }
+    } catch (_) { }
+
+    await sleep(150);
+  }
+
+  return false;
+};
+
+const convertImageToJpeg = (
+  sourcePath: string,
+  targetPath: string,
+  maxSide: number,
+  quality: number
+): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    const sourceUrl = getImageObjectUrl(sourcePath);
+    if (!sourceUrl) {
+      reject(new Error("Could not load thumbnail source."));
+      return;
+    }
+
+    const img = new Image();
+
+    img.onload = () => {
+      try {
+        const largestSide = Math.max(img.width, img.height);
+        const scale = largestSide > maxSide ? maxSide / largestSide : 1;
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(img.width * scale));
+        canvas.height = Math.max(1, Math.round(img.height * scale));
+
+        const ctx = canvas.getContext("2d");
+        if (!ctx) throw new Error("Could not create thumbnail canvas.");
+
+        ctx.fillStyle = "#171a20";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+        const dataUrl = canvas.toDataURL("image/jpeg", quality);
+        const base64 = dataUrl.replace(/^data:image\/jpeg;base64,/, "");
+        fs.writeFileSync(targetPath, Buffer.from(base64, "base64"));
+        URL.revokeObjectURL(sourceUrl);
+        resolve();
+      } catch (e) {
+        URL.revokeObjectURL(sourceUrl);
+        reject(e);
+      }
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(sourceUrl);
+      reject(new Error("Could not decode thumbnail source."));
+    };
+
+    img.src = sourceUrl;
+  });
+};
+
+const getLevelPreviewPath = (rootPath: string, levelFolder: string, preferredResolution: string): string | null => {
+  if (!rootPath || !levelFolder) return null;
+
+  const levelFolderPath = `${rootPath.replace(/\\/g, "/")}/${levelFolder}`;
+  if (!fs.existsSync(levelFolderPath)) return null;
+
+  if (preferredResolution) {
+    const preferredJpgPath = `${levelFolderPath}/${preferredResolution}.jpg`;
+    const preferredJpegPath = `${levelFolderPath}/${preferredResolution}.jpeg`;
+    const preferredPngPath = `${levelFolderPath}/${preferredResolution}.png`;
+
+    if (fs.existsSync(preferredJpgPath)) return preferredJpgPath;
+    if (fs.existsSync(preferredJpegPath)) return preferredJpegPath;
+    if (fs.existsSync(preferredPngPath)) return preferredPngPath;
+  }
+
+  try {
+    const entries = fs.readdirSync(levelFolderPath) as string[];
+    entries.sort();
+
+    for (let i = 0; i < entries.length; i++) {
+      const entryName = entries[i];
+      if (/\.jpe?g$/i.test(entryName)) return `${levelFolderPath}/${entryName}`;
+    }
+
+    for (let i = 0; i < entries.length; i++) {
+      const entryName = entries[i];
+      if (/\.png$/i.test(entryName)) return `${levelFolderPath}/${entryName}`;
+    }
+  } catch (e) {
+    console.error(e);
+  }
+
+  return null;
+};
+
 type Props = {
   baseDirDefault?: string;
   title?: string;
@@ -60,6 +190,9 @@ export const LayoutsPanel: React.FC<Props> = ({
   const [selectedFolder, setSelectedFolder] = useState("");
   const [saveLevelId, setSaveLevelId] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [compResolution, setCompResolution] = useState("");
+  const [layoutPreviewSrc, setLayoutPreviewSrc] = useState<string | null>(null);
+  const [thumbnailVersion, setThumbnailVersion] = useState(0);
 
   // --- INIT ---
   useEffect(() => {
@@ -68,6 +201,18 @@ export const LayoutsPanel: React.FC<Props> = ({
       setPersistentSavePath(config.savePath);
       setBaseDir(config.savePath);
     }
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    evalTS("getCompResolution").then((resolution) => {
+      if (isMounted && resolution) setCompResolution(String(resolution));
+    });
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // --- REFRESH ---
@@ -105,6 +250,18 @@ export const LayoutsPanel: React.FC<Props> = ({
     else if (selectedFolder && !filtered.includes(selectedFolder)) setSelectedFolder(filtered[0] ?? "");
   }, [filtered, selectedFolder]);
 
+  useEffect(() => {
+    const rootPath = (persistentSavePath || baseDir || "").replace(/\\/g, "/");
+    const previewPath = getLevelPreviewPath(rootPath, selectedFolder, compResolution);
+    const objectUrl = previewPath ? getImageObjectUrl(previewPath) : null;
+
+    setLayoutPreviewSrc(objectUrl);
+
+    return () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [baseDir, persistentSavePath, selectedFolder, compResolution, thumbnailVersion]);
+
 
   // -------------------------
   // APPLY
@@ -119,6 +276,7 @@ export const LayoutsPanel: React.FC<Props> = ({
 
     const resolution = await evalTS("getCompResolution");
     if (!resolution) return alert("No active comp found.");
+    setCompResolution(String(resolution));
 
     const jsonPath = `${levelFolder}/${resolution}.json`;
 
@@ -187,6 +345,9 @@ export const LayoutsPanel: React.FC<Props> = ({
     const levelFolderPath = `${targetFolder}/${levelFolderName}`;
     const fileName = `${layoutData.resolution[0]}x${layoutData.resolution[1]}.json`;
     const finalFilePath = `${levelFolderPath}/${fileName}`;
+    const thumbnailPath = `${levelFolderPath}/${fileName.replace(".json", ".jpg")}`;
+    const legacyThumbnailPath = `${levelFolderPath}/${fileName.replace(".json", ".png")}`;
+    const tempThumbnailPath = `${levelFolderPath}/${fileName.replace(".json", ".preview-temp.png")}`;
 
     // 4. Cria pasta
     if (!fs.existsSync(levelFolderPath)) {
@@ -206,7 +367,42 @@ export const LayoutsPanel: React.FC<Props> = ({
     // 6. Salvar
     try {
       fs.writeFileSync(finalFilePath, JSON.stringify(layoutData, null, 2), "utf-8");
-      alert(`Saved!\nLevel: ${levelFolderName.replace("lvl_", "")}\nResolution: ${fileName.replace(".json", "")}`);
+      deleteFileIfExists(tempThumbnailPath);
+
+      const thumbnailResult = await evalTS(
+        "handleSaveCardsLayoutThumbnail",
+        layoutData,
+        tempThumbnailPath,
+        THUMBNAIL_MAX_SIDE
+      );
+
+      if (thumbnailResult && thumbnailResult !== "OK") {
+        deleteFileIfExists(tempThumbnailPath);
+        alert(`Saved, but thumbnail export failed:\n${thumbnailResult}`);
+      } else {
+        try {
+          const thumbnailReady = await waitForReadableFile(tempThumbnailPath);
+          if (!thumbnailReady) throw new Error("Temporary thumbnail was not created in time.");
+
+          await convertImageToJpeg(
+            tempThumbnailPath,
+            thumbnailPath,
+            THUMBNAIL_MAX_SIDE,
+            THUMBNAIL_JPEG_QUALITY
+          );
+          deleteFileIfExists(tempThumbnailPath);
+          deleteFileIfExists(legacyThumbnailPath);
+          alert(`Saved!\nLevel: ${levelFolderName.replace("lvl_", "")}\nResolution: ${fileName.replace(".json", "")}`);
+        } catch (thumbnailError) {
+          deleteFileIfExists(tempThumbnailPath);
+          alert(`Saved, but thumbnail conversion failed:\n${thumbnailError}`);
+        }
+      }
+
+      setCompResolution(`${layoutData.resolution[0]}x${layoutData.resolution[1]}`);
+      setSelectedFolder(levelFolderName);
+      setQuery("");
+      setThumbnailVersion(v => v + 1);
       refreshLevels();
     } catch (e) {
       alert(`Write error: ${e}`);
@@ -308,6 +504,13 @@ export const LayoutsPanel: React.FC<Props> = ({
       <div className="layouts-grid">
         <div className="layouts-card">
           <div className="layouts-card-header"><span className="layouts-card-title">Apply</span></div>
+          <div className="layouts-preview">
+            {layoutPreviewSrc ? (
+              <img src={layoutPreviewSrc} alt="Selected layout preview" />
+            ) : (
+              <span>No preview</span>
+            )}
+          </div>
           <div className="layouts-apply-row">
             <input className="field-input" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search..." />
             <select className="field-input" value={selectedFolder} onChange={e => setSelectedFolder(e.target.value)}>

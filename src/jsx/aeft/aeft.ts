@@ -14,7 +14,7 @@ import {
 } from "./actions";
 import { requireActiveComp } from "./aeft-utils";
 import { clearLayerExpressions, distributeLayers, forEachSelectedLayer } from "./aeft-utils-jonatan";
-import { applyCardsLayoutFromObject, getActiveCompLayoutData, CardsLayoutJson, getActiveCompResolution, } from "./game-levels-utils";
+import { applyCardsLayoutFromObject, getActiveCompLayoutData, CardsLayoutJson, getActiveCompResolution, saveCardsLayoutThumbnail } from "./game-levels-utils";
 import { alertError } from "./errors";
 import { addProgressBar } from "./progressBar-utils";
 
@@ -49,6 +49,15 @@ export const handleSaveCardsLayout = (levelId: string) => {
   } catch (e) {
     //@ts-ignore
     return JSON.stringify({ error: e.toString() });
+  }
+};
+
+export const handleSaveCardsLayoutThumbnail = (layoutData: CardsLayoutJson, thumbnailPath: string, maxSide?: number) => {
+  try {
+    return saveCardsLayoutThumbnail(layoutData, thumbnailPath, maxSide);
+  } catch (e) {
+    //@ts-ignore
+    return "Thumbnail export failed: " + e.toString();
   }
 };
 

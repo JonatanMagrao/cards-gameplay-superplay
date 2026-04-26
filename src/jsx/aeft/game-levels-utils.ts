@@ -256,6 +256,98 @@ export const getActiveCompLayoutData = (levelId: string): string => {
   return JSON.stringify(layoutJson);
 };
 
+const getThumbnailSize = (sourceWidth: number, sourceHeight: number, maxSide: number): [number, number, number] => {
+  const safeMaxSide = Math.max(1, Math.floor(Number(maxSide) || 512));
+  const largestSide = Math.max(sourceWidth, sourceHeight);
+  const scale = largestSide > safeMaxSide ? safeMaxSide / largestSide : 1;
+  const thumbnailWidth = Math.max(1, Math.round(sourceWidth * scale));
+  const thumbnailHeight = Math.max(1, Math.round(sourceHeight * scale));
+
+  return [thumbnailWidth, thumbnailHeight, scale];
+}
+
+export const saveCardsLayoutThumbnail = (layoutJson: CardsLayoutJson, thumbnailPath: string, maxSide: number = 512): string => {
+  if (!layoutJson || !layoutJson.cards) return "Invalid layout data.";
+  if (!thumbnailPath) return "Invalid thumbnail path.";
+
+  const activeComp = getActiveComp?.() as CompItem | null;
+  const resolution = layoutJson.resolution || [0, 0];
+  const compWidth = Number(resolution[0]) || (activeComp ? activeComp.width : 1080);
+  const compHeight = Number(resolution[1]) || (activeComp ? activeComp.height : 1080);
+  const compPixelAspect = activeComp ? activeComp.pixelAspect : 1;
+  const compDuration = activeComp ? activeComp.duration : 1;
+  const compFrameRate = activeComp ? activeComp.frameRate : 30;
+  const thumbnailFile = new File(thumbnailPath);
+  const thumbnailSize = getThumbnailSize(compWidth, compHeight, maxSide);
+  const thumbnailWidth = thumbnailSize[0];
+  const thumbnailHeight = thumbnailSize[1];
+  const thumbnailScale = thumbnailSize[2];
+  let sourceComp: CompItem | null = null;
+  let outputComp: CompItem | null = null;
+
+  try {
+    if (thumbnailFile.parent && !thumbnailFile.parent.exists) {
+      return "Thumbnail folder does not exist.";
+    }
+
+    sourceComp = app.project.items.addComp(
+      "__Cards_Layout_Thumbnail_Source__",
+      compWidth,
+      compHeight,
+      compPixelAspect,
+      compDuration,
+      compFrameRate
+    );
+
+    outputComp = app.project.items.addComp(
+      "__Cards_Layout_Thumbnail_Output__",
+      thumbnailWidth,
+      thumbnailHeight,
+      compPixelAspect,
+      compDuration,
+      compFrameRate
+    );
+
+    try {
+      if (activeComp) {
+        sourceComp.bgColor = activeComp.bgColor;
+        outputComp.bgColor = activeComp.bgColor;
+      }
+    } catch (_) { }
+
+    resetDeckCache();
+    createCardLayersFromLayout(layoutJson.cards, sourceComp);
+    sourceComp.time = 0;
+
+    const sourceLayer = outputComp.layers.add(sourceComp) as AVLayer;
+    const sourceLayerScale = getLayerProp(sourceLayer, scalePropPath);
+    const sourceLayerPos = getLayerProp(sourceLayer, posPropPath);
+
+    sourceLayerScale.setValue([thumbnailScale * 100, thumbnailScale * 100]);
+    sourceLayerPos.setValue([thumbnailWidth / 2, thumbnailHeight / 2]);
+
+    outputComp.time = 0;
+    outputComp.saveFrameToPng(0, thumbnailFile);
+
+    return "OK";
+  } catch (e) {
+    //@ts-ignore
+    return "Thumbnail export failed: " + e.toString();
+  } finally {
+    if (outputComp) {
+      try {
+        outputComp.remove();
+      } catch (_) { }
+    }
+
+    if (sourceComp) {
+      try {
+        sourceComp.remove();
+      } catch (_) { }
+    }
+  }
+};
+
 export const getActiveCompResolution = (): string => {
   const comp = getActiveComp?.() as CompItem | null;
   if (!comp) return "";
