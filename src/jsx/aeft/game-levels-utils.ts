@@ -1,7 +1,6 @@
-import { findProjectItemByName, getActiveComp } from "./aeft-utils";
-import { getLayerMarkersMetadata } from "./aeft-utils-jonatan";
+import { captureCompState, findAvItemByName, getActiveComp, restoreCompState } from "./aeft-utils";
+import { getLayerMarkersMetadata, getLayerProp, getPropertyBaseValueAtTime } from "./aeft-utils-jonatan";
 import { posPropPath, scalePropPath, zRotPropPath } from "./actions";
-import { getLayerProp } from "./aeft-utils-jonatan";
 
 export type CardLayout = {
   deckName: string;
@@ -22,18 +21,18 @@ export type CardsLayoutJson = {
 };
 
 //@ts-ignore
-const _deckItemCache: Record<string, ProjectItem> = {};
+const _deckItemCache: Record<string, AVItem> = {};
 
 export const resetDeckCache = (): void => {
   for (const k in _deckItemCache) delete _deckItemCache[k];
 };
 
 //@ts-ignore
-export const getDeckItem = (deckName: string): ProjectItem | null => {
+export const getDeckItem = (deckName: string): AVItem | null => {
   const cached = _deckItemCache[deckName];
   if (cached) return cached;
 
-  const deckItem = findProjectItemByName(deckName);
+  const deckItem = findAvItemByName(deckName, false);
   if (deckItem) _deckItemCache[deckName] = deckItem;
 
   return deckItem ?? null;
@@ -45,7 +44,7 @@ export const roundToDecimals = (
 ): number | number[] => {
   const factor = Math.pow(10, decimals);
 
-  // CORREÇÃO AQUI: Removemos .map() e Array.isArray()
+  // Keep this ExtendScript-safe by avoiding modern array helpers.
   if (value instanceof Array) {
     const rounded: number[] = [];
     for (let i = 0; i < value.length; i++) {
@@ -127,7 +126,7 @@ export const createCardLayersFromLayout = (
         if (cardTurned) cardTurned.setValue(cardLayout.isTurned ? 0 : 100);
       }
     } catch (e) {
-      // Ignora se não tiver override
+      // Ignore layers without essential property overrides.
     }
 
     // Stacking
@@ -142,7 +141,7 @@ export const applyCardsLayoutFromObject = (layoutJson: CardsLayoutJson): string 
   if (!comp) return "No active composition found.";
   if (!layoutJson.cards) return "Invalid JSON: missing 'cards' array.";
 
-  // Opcional: checar resolução
+  // Warn when the saved layout resolution differs from the active comp.
   if (layoutJson.resolution) {
     const [w, h] = layoutJson.resolution;
     if (w !== comp.width || h !== comp.height) {
@@ -150,8 +149,15 @@ export const applyCardsLayoutFromObject = (layoutJson: CardsLayoutJson): string 
     }
   }
 
-  resetDeckCache();
-  createCardLayersFromLayout(layoutJson.cards, comp);
+  const compSnapshot = captureCompState(comp);
+
+  try {
+    resetDeckCache();
+    createCardLayersFromLayout(layoutJson.cards, comp);
+  } finally {
+    restoreCompState(comp, compSnapshot);
+  }
+
   return "OK";
 };
 
@@ -168,15 +174,19 @@ export const collectCardLayersFromComp = (comp: CompItem): AVLayer[] => {
   return matched;
 };
 
-export const extractCardsLayoutFromLayers = (layers: AVLayer[], decimals: number = 3): CardLayout[] => {
+export const extractCardsLayoutFromLayers = (layers: AVLayer[], decimals: number = 3, sampleTime: number = 0): CardLayout[] => {
   const cardsLayout: CardLayout[] = [];
 
   for (let i = 0; i < layers.length; i++) {
     const layer = layers[i];
 
-    const position = roundToDecimals((layer.property("Position") as Property).value as number[], decimals) as number[];
-    const scale = roundToDecimals((layer.property("Scale") as Property).value as number[], decimals) as number[];
-    const rotation = roundToDecimals((layer.property("Rotation") as Property).value as number, decimals) as number;
+    const positionProp = getLayerProp(layer, posPropPath) as Property;
+    const scaleProp = getLayerProp(layer, scalePropPath) as Property;
+    const rotationProp = getLayerProp(layer, zRotPropPath) as Property;
+
+    const position = roundToDecimals(getPropertyBaseValueAtTime(positionProp, sampleTime) as number[], decimals) as number[];
+    const scale = roundToDecimals(getPropertyBaseValueAtTime(scaleProp, sampleTime) as number[], decimals) as number[];
+    const rotation = roundToDecimals(getPropertyBaseValueAtTime(rotationProp, sampleTime) as number, decimals) as number;
 
     let isTurned = false;
     let cardFaceIndex = 0;
@@ -186,8 +196,8 @@ export const extractCardsLayoutFromLayers = (layers: AVLayer[], decimals: number
       const flipCard = (overrides as any).property("Flip Card") as Property;
       const cardOption = (overrides as any).property("Card Option") as Property;
 
-      if (flipCard) isTurned = flipCard.value === 0;
-      if (cardOption) cardFaceIndex = Number(cardOption.value) || 0;
+      if (flipCard) isTurned = Number(getPropertyBaseValueAtTime(flipCard, sampleTime)) === 0;
+      if (cardOption) cardFaceIndex = Number(getPropertyBaseValueAtTime(cardOption, sampleTime)) || 0;
     } catch (_) { }
 
     const markersRaw = getLayerMarkersMetadata(layer) as any[];
@@ -240,7 +250,7 @@ export const getActiveCompLayoutData = (levelId: string): string => {
   const layoutJson: CardsLayoutJson = {
     level: String(levelId),
     resolution: [comp.width, comp.height],
-    cards: extractCardsLayoutFromLayers(cardLayers, 3),
+    cards: extractCardsLayoutFromLayers(cardLayers, 3, comp.time),
   };
 
   return JSON.stringify(layoutJson);

@@ -232,6 +232,45 @@ try {
 }
 `
 
+export const expFlipCard = `
+try {
+    const getMarkerTitle = function(marker) {
+        return String(marker.comment || "").split(/\\r\\n|\\n|\\r/)[0];
+    };
+
+    let activeFlipTime = null;
+
+    if (thisLayer.marker.numKeys > 0) {
+        for (let i = 1; i <= thisLayer.marker.numKeys; i++) {
+            const marker = thisLayer.marker.key(i);
+            if (getMarkerTitle(marker) === "Flip" && marker.time <= time) {
+                if (activeFlipTime === null || marker.time > activeFlipTime) {
+                    activeFlipTime = marker.time;
+                }
+            }
+        }
+    }
+
+    if (activeFlipTime === null) {
+        value;
+    } else {
+        const startTime = activeFlipTime;
+        const endTime = startTime + framesToTime(15);
+
+        if (time < startTime) {
+            value;
+        } else if (time >= endTime) {
+            100;
+        } else {
+            const progress = (time - startTime) / Math.max(endTime - startTime, 0.001);
+            linear(progress, 0, 1, 0, 100);
+        }
+    }
+} catch (err) {
+    value;
+}
+`
+
 export const expStockPos = `
 try {
     const sp = footage("superplay-expression-lib.jsx").sourceData;
@@ -313,11 +352,13 @@ const generateStepMotion = (comp, currentTime, triggers, increment, curve, frame
 
 const refLayer = effect("Comp Ref")("Layer");
 let targetComp = thisComp;
+let timeInTarget = time;
 
 if (refLayer != undefined) {
     try {
         if (refLayer.source.numLayers === undefined) throw 0;
         targetComp = refLayer.source;
+        timeInTarget = time - refLayer.startTime;
     } catch (e) {
         const quotes = [
             "In Precomps We Trust.",
@@ -351,6 +392,6 @@ const endPercent = effect("End Percent")("Slider").value;
 const times = findTriggerMoments(targetComp, searchRules);
 const stepSize = times.length > 0 ? (endPercent - startPercent) / times.length : 0;
 
-generateStepMotion(targetComp, time, times, stepSize, barProgressValue, delayInFrames, startPercent, endPercent);
+generateStepMotion(targetComp, timeInTarget, times, stepSize, barProgressValue, delayInFrames, startPercent, endPercent);
 
 `

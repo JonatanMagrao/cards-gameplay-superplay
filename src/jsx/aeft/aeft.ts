@@ -12,7 +12,7 @@ import {
   resetCardsAnimation,
   restoreCardsAnimation
 } from "./actions";
-import { getActiveComp } from "./aeft-utils";
+import { requireActiveComp } from "./aeft-utils";
 import { clearLayerExpressions, distributeLayers, forEachSelectedLayer } from "./aeft-utils-jonatan";
 import { applyCardsLayoutFromObject, getActiveCompLayoutData, CardsLayoutJson, getActiveCompResolution, } from "./game-levels-utils";
 import { alertError } from "./errors";
@@ -152,7 +152,10 @@ export const handleDistributeLayers = (xStep: number, yStep: number, reverse: bo
 }
 
 export const getCompSize = () => {
-  const { width, height } = getActiveComp();
+  const comp = requireActiveComp("Get Comp Size");
+  if (!comp) return [0, 0]
+
+  const { width, height } = comp;
   return [width, height]
 }
 
@@ -212,7 +215,9 @@ export const handleClearLayerExpressions = () => {
   app.beginUndoGroup("Clear Layer Expressions")
   try {
 
-    const thisComp = app.project.activeItem as CompItem
+    const thisComp = requireActiveComp("Clear Layer Expressions")
+    if (!thisComp) return
+
     forEachSelectedLayer(thisComp, layer => {
       clearLayerExpressions(layer)
     })

@@ -1,18 +1,17 @@
 import { alertError } from "./errors"
-import { expPos, expRot, expScale, expStockFlip, expStockPos } from "../utils/expressions"
-import { findProjectItemByName, getActiveComp, forEachLayer, getItemByName } from "./aeft-utils"
+import { expFlipCard, expPos, expRot, expScale, expStockFlip, expStockPos } from "../utils/expressions"
+import { captureCompState, findCompItemByName, findFootageItemByName, getActiveComp, forEachLayer, getItemByName, requireActiveComp, restoreCompState } from "./aeft-utils"
 import {
-  setKeyframeToLayer,
   getTargetLayer,
   targetExist,
   namedMarkerExists,
   findCardLayers,
   removePropertyKeyframesByLabel,
   filterLayerMarkersByLabelAndComment,
-  getMarkerCommentTitle
+  getMarkerCommentTitle,
+  getLayerCardTag
 } from "./cards-utils"
 import {
-  frameDuration,
   getLayerProp,
   addMarkerToLayer,
   selectAllSelectedLayers,
@@ -112,6 +111,19 @@ export const superplayCardEffect = [layerEffect, cardFxMatchName]
 
 //================================= TABLEAU JUMP ACTIONS
 
+const removeCardTagsFromLayerName = (layerName: string): string => {
+  let cleanName = String(layerName || "");
+  const tagsList = ["TARGET", "STOCK", "TABLEAU"];
+
+  for (let i = 0; i < tagsList.length; i++) {
+    const tagName = tagsList[i];
+    const tagPattern = new RegExp("\\s*\\[" + tagName + "\\]");
+    cleanName = cleanName.replace(tagPattern, "");
+  }
+
+  return cleanName;
+}
+
 const syncFxPrecompSettings = (fxPrecomp: CompItem, parentComp: CompItem) => {
   try { (fxPrecomp as any).width = parentComp.width; } catch (_) { }
   try { (fxPrecomp as any).height = parentComp.height; } catch (_) { }
@@ -122,10 +134,10 @@ const syncFxPrecompSettings = (fxPrecomp: CompItem, parentComp: CompItem) => {
 
 const ensureFxPrecomp = (parentComp?: CompItem): CompItem => {
   const thisComp = parentComp || getActiveComp() as CompItem;
-  let fxPrecomp = getItemByName(fxPrecompName) as CompItem
+  let fxPrecomp = findCompItemByName(fxPrecompName, false) as CompItem
 
   if (!fxPrecomp) {
-    fxPrecomp = getItemByName(legacySfxPrecompName) as CompItem
+    fxPrecomp = findCompItemByName(legacySfxPrecompName, false) as CompItem
     if (fxPrecomp) fxPrecomp.name = fxPrecompName;
   }
 
@@ -243,7 +255,7 @@ const getJumpSfxFileNameForSequence = (sfxFolderPath: string | undefined, sequen
 
 const ensureFootageItem = (filePath: string, missingLabel: string): FootageItem | null => {
   const itemName = getFileNameFromPath(filePath);
-  const existingItem = findProjectItemByName(itemName, false) as FootageItem | null;
+  const existingItem = findFootageItemByName(itemName, false);
 
   if (existingItem && existingItem instanceof FootageItem) return existingItem;
 
@@ -310,8 +322,8 @@ const clearCompLayers = (comp: CompItem | null) => {
 };
 
 const clearFxPrecompLayers = () => {
-  const fxPrecomp = getItemByName(fxPrecompName) as CompItem;
-  const legacySfxPrecomp = getItemByName(legacySfxPrecompName) as CompItem;
+  const fxPrecomp = findCompItemByName(fxPrecompName, false) as CompItem;
+  const legacySfxPrecomp = findCompItemByName(legacySfxPrecompName, false) as CompItem;
 
   clearCompLayers(fxPrecomp);
   if (legacySfxPrecomp && legacySfxPrecomp !== fxPrecomp) clearCompLayers(legacySfxPrecomp);
@@ -395,6 +407,15 @@ const applyJumpSfx = (comp: CompItem, sfxTime: number, sfxFolderPath: string | u
   applySfx(comp, sfxTime, joinPath(sfxFolderPath, jumpSfxFileName), keyLabel.green);
 }
 
+const markersRequireTarget = (markers: LayerMarkerMeta[]): boolean => {
+  for (let i = 0; i < markers.length; i++) {
+    const cardAction = getMarkerActionName(markers[i]);
+    if (cardAction === "Jump" || cardAction === "Flip Stock") return true;
+  }
+
+  return false;
+}
+
 export const jumpPos = (camada: Layer) => {
   const posProp = getLayerProp(camada, posPropPath)
   setExpressionSafely(posProp, expPos)
@@ -444,14 +465,18 @@ const applyCoin = (camada: Layer, coinFilePath: string | undefined, coinTime: nu
 
 export const applyJumpOnSelectedlayers = (presetPath: string, coinFilePath: string, sfxFolderPath?: string) => {
 
+  const thisComp = requireActiveComp("Apply Jump");
+  if (!thisComp) return;
+
   const targetLayer = getTargetLayer() as Layer
-  const thisComp = getActiveComp();
   const thisTime = thisComp.time
 
   if (!targetLayer) {
-    alert('Please, set a target layer before applying the "Jump" action.')
+    alert('Please set a target layer before applying the "Jump" action.')
     return
   }
+
+  const compSnapshot = captureCompState(thisComp)
 
   try {
     warnCardsControlsFallbacks(thisComp, jumpCardsControlsSliders)
@@ -486,13 +511,15 @@ export const applyJumpOnSelectedlayers = (presetPath: string, coinFilePath: stri
 
   } catch (e) {
     alertError(e, 208, "applyJumpOnSelectedlayers", "actions.ts")
+  } finally {
+    restoreCompState(thisComp, compSnapshot)
   }
 }
 
 // ============================== STOCK CARD ACTIONS
 
 const ensureExpressionLibProjectItem = (expressionLibPath?: string): FootageItem | null => {
-  const existingItem = findProjectItemByName(expressionLibName, false) as FootageItem | null;
+  const existingItem = findFootageItemByName(expressionLibName, false);
 
   if (existingItem) {
     if (expressionLibPath) {
@@ -805,11 +832,13 @@ const getLayerMarkerKeyIndexByComment = (layer: Layer, markerComment: string): n
 export const flipStockCards = (stockLayerToFlip?: Layer, expressionLibPath?: string, sfxFolderPath?: string) => {
 
   // main consts
-  const thisComp = getActiveComp();
+  const thisComp = requireActiveComp("Flip Stock");
+  if (!thisComp) return;
+
   const targetLayer = getTargetLayer()
 
   if (!targetLayer) {
-    alert('Please, set a target layer before applying the "Flip Stock" action.')
+    alert('Please set a target layer before applying the "Flip Stock" action.')
     return
   }
 
@@ -819,7 +848,7 @@ export const flipStockCards = (stockLayerToFlip?: Layer, expressionLibPath?: str
     firstSelectedLayer = stockLayerToFlip
   } else {
     if (!thisComp || !thisComp.selectedLayers || thisComp.selectedLayers.length === 0) {
-      alert("Please, select the Stock Card");
+      alert("Please select the Stock Card");
       return
     } else {
       firstSelectedLayer = thisComp.selectedLayers[0];
@@ -832,25 +861,33 @@ export const flipStockCards = (stockLayerToFlip?: Layer, expressionLibPath?: str
     ? keyTimePos1
     : (firstSelectedLayer.property(markerPropPath) as Property).keyTime(flipStockMarkerKeyIndex);
 
-  addMarkerToLayer(firstSelectedLayer, markerTime, {
-    title: "Flip Stock",
-    label: 2,
-  })
+  const compSnapshot = captureCompState(thisComp)
 
-  applyStockExpressions(thisComp, expressionLibPath, firstSelectedLayer)
+  try {
+    addMarkerToLayer(firstSelectedLayer, markerTime, {
+      title: "Flip Stock",
+      label: 2,
+    })
 
-  applySfx(thisComp, markerTime, joinPath(sfxFolderPath, flipStockSfxFileName), keyLabel.yellow)
+    applyStockExpressions(thisComp, expressionLibPath, firstSelectedLayer)
+
+    applySfx(thisComp, markerTime, joinPath(sfxFolderPath, flipStockSfxFileName), keyLabel.yellow)
+  } finally {
+    restoreCompState(thisComp, compSnapshot)
+  }
 }
 
 // ============================== CARDS MODIFIERS
 
 export const setTargetLayer = () => {
 
-  const thisComp = getActiveComp();
+  const thisComp = requireActiveComp("Set Target");
+  if (!thisComp) return;
+
   const targetLayer = thisComp.selectedLayers[0] as unknown as AVLayer
 
   if (!targetLayer) {
-    alert("Please, select one layer to be the target.")
+    alert("Please select one layer to be the target.")
     return
   };
 
@@ -863,11 +900,7 @@ export const setTargetLayer = () => {
     targetLayer.threeDLayer = true
     targetLayer.label = 1
 
-    const tagsList = ["TARGET", "STOCK", "TABLEAU"]
-    const pattern = tagsList.join("|")
-    const removeOldPattern = new RegExp(`\\s*\\[(${pattern})\\].*`, "g")
-
-    targetLayer.name = targetLayer.name.replace(removeOldPattern, "")
+    targetLayer.name = removeCardTagsFromLayerName(targetLayer.name)
     targetLayer.name = `${targetLayer.name} [TARGET]`
   } catch (e) {
     alertError(e, 341, "setTargetLayer", "actions.ts")
@@ -877,10 +910,8 @@ export const setTargetLayer = () => {
 
 export const setCardType = (cardTypeName: string, layerLabel: number) => {
 
-  const thisComp = getActiveComp();
-  const tagsList = ["TARGET", "STOCK", "TABLEAU"]
-  const pattern = tagsList.join("|")
-  const removeOldPattern = new RegExp(`\\s*\\[(${pattern})\\].*`, "g")
+  const thisComp = requireActiveComp("Set Card Type");
+  if (!thisComp) return;
 
   try {
     forEachSelectedLayer(thisComp, camada => {
@@ -889,7 +920,7 @@ export const setCardType = (cardTypeName: string, layerLabel: number) => {
       layer.threeDLayer = true
       layer.label = layerLabel
 
-      layer.name = layer.name.replace(removeOldPattern, "")
+      layer.name = removeCardTagsFromLayerName(layer.name)
       layer.name = `${layer.name} [${cardTypeName.toUpperCase()}]`
 
     })
@@ -901,30 +932,32 @@ export const setCardType = (cardTypeName: string, layerLabel: number) => {
 
 export const applyFlipCardOnSelectedlayers = () => {
 
-  const thisComp = getActiveComp();
+  const thisComp = requireActiveComp("Flip Cards");
+  if (!thisComp) return;
 
   forEachLayer(thisComp, camada => {
     if (camada.selected) {
 
-      flipCard(thisComp.time, camada)
       addMarkerToLayer(camada, thisComp.time, { title: "Flip", label: 2 })
+      flipCard(thisComp.time, camada)
 
     }
   })
 
 }
 
-export const flipCard = (time: number, layer: Layer) => {
-  const essentialProperties = getLayerProp(layer, flipCardEssPropPath) as any
-  const firstKeyTime = time
-  const secondKeyTime = firstKeyTime + frameDuration(15)
-
-  setKeyframeToLayer(essentialProperties, firstKeyTime, 0, anticipationLabelColor)
-  setKeyframeToLayer(essentialProperties, secondKeyTime, 100, anticipationLabelColor)
+export const flipCard = (_time: number, layer: Layer) => {
+  const essentialProperties = getLayerProp(layer, flipCardEssPropPath)
+  essentialProperties.expression = ""
+  removePropertyKeyframesByLabel(essentialProperties, actionLabelColor)
+  removePropertyKeyframesByLabel(essentialProperties, anticipationLabelColor)
+  setExpressionSafely(essentialProperties, expFlipCard)
 }
 
 export const turnCards = () => {
-  const thisComp = getActiveComp()
+  const thisComp = requireActiveComp("Turn Cards");
+  if (!thisComp) return;
+
   forEachLayer(thisComp, camada => {
     if (camada.selected) {
       const essentialProperties = getLayerProp(camada, flipCardEssPropPath)
@@ -936,8 +969,15 @@ export const turnCards = () => {
 
 export const duplicateCards = (numCopies: number, adjustPos: number[]) => {
 
-  const thisComp = getActiveComp();
+  const thisComp = requireActiveComp("Duplicate Cards");
+  if (!thisComp) return;
+
   const camada = thisComp.selectedLayers[0]
+  if (!camada) {
+    alert("Please select one card layer before duplicating.")
+    return
+  }
+
   const mainPos = getLayerProp(camada, posPropPath).value
 
   let lastDuplicated = camada
@@ -957,46 +997,48 @@ export const duplicateCards = (numCopies: number, adjustPos: number[]) => {
 }
 
 export const changeCard = (deckName: string, card: number, cardName: string) => {
-  const thisComp = getActiveComp();
+  const thisComp = requireActiveComp("Change Card");
+  if (!thisComp) return;
 
   const cardsSet = getItemByName(deckName) as any
-  const camadas = thisComp.selectedLayers
-
-  // deseleciona as camadas selecionadas para utilizar o replaceSource em cada uma delas
-  deselectAllSelectedLayers(camadas)
-
-  for (let k = 0; k < camadas.length; k++) {
-    const camada = camadas[k] as any
-
-    camada.replaceSource(cardsSet, false)
-    const cardOption = getLayerProp(camada, cardOptionEPPath)
-    cardOption.setValue(card)
-
-    const tagsList = ["TARGET", "STOCK", "TABLEAU"]
-    const pattern = tagsList.join("|")
-    const tagPattern = new RegExp(`\\[(${pattern})\\]`, "g")
-
-    const zoneMatch = tagPattern.exec(camada.name);
-    const existingZoneTag = zoneMatch ? zoneMatch[1] : null;
-
-    camada.name = existingZoneTag ? `${cardName} [${existingZoneTag}]` : cardName;
-
+  if (!cardsSet) {
+    alert(`Project item "${deckName}" was not found.`)
+    return
   }
 
-  // reseleciona as camadas selecionadas para utilizar o replaceSource em cada uma delas
-  selectAllSelectedLayers(camadas)
+  const camadas = thisComp.selectedLayers
+  const compSnapshot = captureCompState(thisComp)
+
+  try {
+    // Temporarily deselect selected layers so replaceSource can run cleanly on each one.
+    deselectAllSelectedLayers(camadas)
+
+    for (let k = 0; k < camadas.length; k++) {
+      const camada = camadas[k] as any
+
+      camada.replaceSource(cardsSet, false)
+      const cardOption = getLayerProp(camada, cardOptionEPPath)
+      cardOption.setValue(card)
+
+      const existingZoneTag = getLayerCardTag(camada.name);
+
+      camada.name = existingZoneTag ? `${cardName} [${existingZoneTag}]` : cardName;
+
+    }
+
+    // Keep legacy behavior inside the action; the comp snapshot restores the final selection.
+    selectAllSelectedLayers(camadas)
+  } finally {
+    restoreCompState(thisComp, compSnapshot)
+  }
 
 }
 
 export const addCardToPrecomp = (deckName: string, card: number, cardName: string) => {
 
   try {
-    const thisComp = getActiveComp()
-
-    if (!thisComp) {
-      alert("No active composition found.\nPlease open a composition to add the card.");
-      return
-    }
+    const thisComp = requireActiveComp("Add Card")
+    if (!thisComp) return
 
     if (card === 15) {
       const plusCardSource = getItemByName("Plus_Card") as CompItem
@@ -1024,46 +1066,54 @@ export const addCardToPrecomp = (deckName: string, card: number, cardName: strin
 }
 
 export const resetCardsAnimation = (presetMatchName: string) => {
-  // 1. O Try Externo protege contra falhas globais (ex: findCardLayers quebra)
+  // Outer try protects against global failures, such as findCardLayers throwing.
   try {
-    const thisComp = app.project.activeItem as CompItem
-    const selectedLayers = thisComp.selectedLayers
+    const thisComp = requireActiveComp("Reset Cards Animation")
+    if (!thisComp) return
 
-    const cardsList: Layer[] = selectedLayers.length > 0
-      ? thisComp.selectedLayers
-      : findCardLayers()
+    const compSnapshot = captureCompState(thisComp)
 
-    for (let i = 0; i < cardsList.length; i++) {
-      const layer = cardsList[i]
-      try {
-        const zPosProp = getLayerProp(layer, zRotPropPath)
-        const posProp = getLayerProp(layer, posPropPath)
-        const scaleProp = getLayerProp(layer, scalePropPath)
+    try {
+      const selectedLayers = thisComp.selectedLayers
 
-        posProp.expression = ""
-        zPosProp.expression = ""
-        scaleProp.expression = ""
+      const cardsList: Layer[] = selectedLayers.length > 0
+        ? thisComp.selectedLayers
+        : findCardLayers()
 
-        removePropertyKeyframesByLabel(posProp, actionLabelColor)
-        removePropertyKeyframesByLabel(posProp, anticipationLabelColor)
-        removePropertyKeyframesByLabel(zPosProp, actionLabelColor)
-        removePropertyKeyframesByLabel(scaleProp, actionLabelColor)
-
+      for (let i = 0; i < cardsList.length; i++) {
+        const layer = cardsList[i]
         try {
-          const flipCardProp = getLayerProp(layer, flipCardEssPropPath)
-          flipCardProp.expression = ""
-          removePropertyKeyframesByLabel(flipCardProp, actionLabelColor)
-          removePropertyKeyframesByLabel(flipCardProp, anticipationLabelColor)
-        } catch (_) { }
+          const zPosProp = getLayerProp(layer, zRotPropPath)
+          const posProp = getLayerProp(layer, posPropPath)
+          const scaleProp = getLayerProp(layer, scalePropPath)
 
-      } catch (e) {
-        $.writeln("Erro ao acessar propriedades da layer: " + layer.name)
+          posProp.expression = ""
+          zPosProp.expression = ""
+          scaleProp.expression = ""
+
+          removePropertyKeyframesByLabel(posProp, actionLabelColor)
+          removePropertyKeyframesByLabel(posProp, anticipationLabelColor)
+          removePropertyKeyframesByLabel(zPosProp, actionLabelColor)
+          removePropertyKeyframesByLabel(scaleProp, actionLabelColor)
+
+          try {
+            const flipCardProp = getLayerProp(layer, flipCardEssPropPath)
+            flipCardProp.expression = ""
+            removePropertyKeyframesByLabel(flipCardProp, actionLabelColor)
+            removePropertyKeyframesByLabel(flipCardProp, anticipationLabelColor)
+          } catch (_) { }
+
+        } catch (e) {
+          $.writeln("Could not access layer properties: " + layer.name)
+        }
+
       }
 
+      clearFxPrecompLayers()
+      clearCoinVfxLayers(thisComp)
+    } finally {
+      restoreCompState(thisComp, compSnapshot)
     }
-
-    clearFxPrecompLayers()
-    clearCoinVfxLayers(thisComp)
 
   } catch (e) {
     alertError(e, 591, "resetCardsAnimation", "actions.ts")
@@ -1078,10 +1128,8 @@ export const restoreCardsAnimation = (
   sfxFolderPath?: string
 ) => {
 
-  const thisComp = getActiveComp()
-
-  clearFxPrecompLayers()
-  clearCoinVfxLayers(thisComp)
+  const thisComp = requireActiveComp("Restore Cards Animation")
+  if (!thisComp) return
 
   const cardsLayers = findCardLayers()
 
@@ -1099,8 +1147,6 @@ export const restoreCardsAnimation = (
     }
 
   }
-  // retorna todos os dados de marcadores
-
   const greenJumpMarkers = filterLayerMarkersByLabelAndComment(markers, keyLabel.green, "Jump")
   const yellowFlipMarkers = filterLayerMarkersByLabelAndComment(markers, keyLabel.yellow, "Flip")
   const yellowFlipStockMarkers = filterLayerMarkersByLabelAndComment(markers, keyLabel.yellow, "Flip Stock")
@@ -1121,13 +1167,22 @@ export const restoreCardsAnimation = (
 
   cardsMarkers.sort(compareLayerMarkersByTime)
 
-  // aqui vem a aplicação
   const targetLayer = getTargetLayer() as Layer
-  const currentTime = thisComp.time
-  thisComp.time = 0
+  const compSnapshot = captureCompState(thisComp)
+
+  if (markersRequireTarget(cardsMarkers) && !targetLayer) {
+    alert('Please set a target layer before restoring "Jump" or "Flip Stock" actions.')
+    return
+  }
+
+  try {
+    clearFxPrecompLayers()
+    clearCoinVfxLayers(thisComp)
+
+    thisComp.time = 0
 
   for (let i = 0; i < cardsMarkers.length; i++) {
-    const cardAction = cardsMarkers[i].title || getMarkerCommentTitle(cardsMarkers[i].comment)
+    const cardAction = getMarkerActionName(cardsMarkers[i])
     if (cardAction === "Flip Stock") {
       ensureStockSpacingX(thisComp, 0, cardsMarkers[i].layer)
       break
@@ -1145,7 +1200,7 @@ export const restoreCardsAnimation = (
 
   for (let i = 0; i < cardsMarkers.length; i++) {
     const card = cardsMarkers[i]
-    const cardAction = card.title || getMarkerCommentTitle(card.comment)
+    const cardAction = getMarkerActionName(card)
 
     if (cardAction === "Jump") {
 
@@ -1171,7 +1226,9 @@ export const restoreCardsAnimation = (
     }
   }
 
-  thisComp.time = currentTime
+  } finally {
+    restoreCompState(thisComp, compSnapshot)
+  }
 
 }
 

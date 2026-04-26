@@ -1,7 +1,6 @@
-import { getItemByName, getActiveComp } from "./aeft-utils";
-import { fxExistsByMatchName, getLayerProp, setExpressionSafely } from "./aeft-utils-jonatan";
+import { captureCompState, findCompItemByName, requireActiveComp, restoreCompState } from "./aeft-utils";
+import { getLayerProp, setExpressionSafely } from "./aeft-utils-jonatan";
 import { posPropPath, scalePropPath, anchorPropPath, textPropPath, progressBarEPPath, progressCardsControlsSliders, warnCardsControlsFallbacks } from "./actions";
-import { deselectAllSelectedLayers } from "./aeft-utils-jonatan";
 import { expProgressBar } from "../utils/expressions";
 import { keyLabel } from "./actions";
 
@@ -35,15 +34,7 @@ const progressBarProps: Record<string, ProgressBarProp> = {
   }
 }
 
-const progressBarText = (parentLayer: Layer) => {
-
-  const thisComp = getActiveComp();
-
-  if (!thisComp) {
-    alert("No active composition found.\nPlease select a composition.");
-    return
-  };
-
+const progressBarText = (thisComp: CompItem, parentLayer: Layer) => {
   const textLayer = thisComp.layers.addText("Progress Percentage")
   textLayer.guideLayer = true;
   textLayer.parent = parentLayer
@@ -60,48 +51,55 @@ const progressBarText = (parentLayer: Layer) => {
 }
 
 export const addProgressBar = (presetPath: string) => {
-  const thisComp = getActiveComp();
+  const thisComp = requireActiveComp("Add Progress Bar");
 
-  if (!thisComp) {
-    alert("No active composition found.\nPlease select a composition.");
-    return
-  };
+  if (!thisComp) return;
 
   warnCardsControlsFallbacks(thisComp, progressCardsControlsSliders);
 
   const compRes = `${thisComp.width}x${thisComp.height}`
 
-  const progressBar = getItemByName("Progress_Bar") as CompItem
-  progressBar.label = keyLabel.orange
-  const progressBarLayer = thisComp.layers.add(progressBar)
-  const barPos = getLayerProp(progressBarLayer, posPropPath);
-  const barScale = getLayerProp(progressBarLayer, scalePropPath);
+  const progressBar = findCompItemByName("Progress_Bar", false) as CompItem
+  if (!progressBar) {
+    alert('Project item "Progress_Bar" was not found.\nPlease import the card project assets before adding the progress bar.')
+    return
+  }
 
-  progressBarLayer.applyPreset(new File(presetPath))
+  const compSnapshot = captureCompState(thisComp)
 
-  const textLayer = progressBarText(progressBarLayer)
-  const textAnchor = getLayerProp(textLayer, anchorPropPath);
-  const textSrcTxt = getLayerProp(textLayer, textPropPath);
+  try {
+    progressBar.label = keyLabel.orange
+    const progressBarLayer = thisComp.layers.add(progressBar)
+    const barPos = getLayerProp(progressBarLayer, posPropPath);
+    const barScale = getLayerProp(progressBarLayer, scalePropPath);
 
-  setExpressionSafely(textAnchor, `
-    const {left,top,width,height} = sourceRectAtTime();
-    [left + width / 2, top + height / 2];
-  `)
+    progressBarLayer.applyPreset(new File(presetPath))
 
-  setExpressionSafely(textSrcTxt, `
-    const percent = thisComp.layer("${progressBarLayer.name}").essentialProperty("Bar Control").value;
-    \`\${Math.round(percent)}%\`
-  `)
+    const textLayer = progressBarText(thisComp, progressBarLayer)
+    const textAnchor = getLayerProp(textLayer, anchorPropPath);
+    const textSrcTxt = getLayerProp(textLayer, textPropPath);
 
-  const currentProps = progressBarProps[compRes] || {
-    pos: [thisComp.width / 2, thisComp.height / 2],
-    scale: [100, 100]
-  };
+    setExpressionSafely(textAnchor, `
+      const {left,top,width,height} = sourceRectAtTime();
+      [left + width / 2, top + height / 2];
+    `)
 
-  barPos.setValue(currentProps.pos);
-  barScale.setValue(currentProps.scale);
+    setExpressionSafely(textSrcTxt, `
+      const percent = thisComp.layer("${progressBarLayer.name}").essentialProperty("Bar Control").value;
+      \`\${Math.round(percent)}%\`
+    `)
 
-  setExpressionSafely(getLayerProp(progressBarLayer, progressBarEPPath), expProgressBar);
+    const currentProps = progressBarProps[compRes] || {
+      pos: [thisComp.width / 2, thisComp.height / 2],
+      scale: [100, 100]
+    };
 
+    barPos.setValue(currentProps.pos);
+    barScale.setValue(currentProps.scale);
+
+    setExpressionSafely(getLayerProp(progressBarLayer, progressBarEPPath), expProgressBar);
+  } finally {
+    restoreCompState(thisComp, compSnapshot)
+  }
 
 }

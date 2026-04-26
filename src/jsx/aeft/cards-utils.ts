@@ -1,13 +1,28 @@
-import { getActiveComp, forEachLayer, findProjectItemByName } from "./aeft-utils";
+import { getActiveComp, forEachLayer, findFolderItemByName } from "./aeft-utils";
 import { getLayerProp, getKeyIndexAtTime } from "./aeft-utils-jonatan";
+import { getMarkerCommentTitle } from "./markers";
 
-export const getMarkerCommentTitle = (comment: string): string => {
-  return String(comment || "").split(/\r\n|\n|\r/)[0];
+export { getMarkerCommentTitle } from "./markers";
+
+const cardLayerTags: string[] = ["TARGET", "STOCK", "TABLEAU"]
+
+export const layerNameHasTag = (layerName: string, tagName: string): boolean => {
+  const tagPattern = new RegExp("\\[" + tagName + "\\]")
+  return tagPattern.test(String(layerName || ""))
+}
+
+export const getLayerCardTag = (layerName: string): string | null => {
+  for (let i = 0; i < cardLayerTags.length; i++) {
+    const tagName = cardLayerTags[i]
+    if (layerNameHasTag(layerName, tagName)) return tagName
+  }
+
+  return null
 }
 
 export const importFilesAndCompsForCards = (filePath: string, cardsFolderName: string) => {
 
-  const projectFolder = findProjectItemByName("Disney Solitaire Cards", false)
+  const projectFolder = findFolderItemByName("Disney Solitaire Cards", false)
   if (projectFolder) {
     return
   }
@@ -20,11 +35,10 @@ export const importFilesAndCompsForCards = (filePath: string, cardsFolderName: s
 
 export const targetExist = () => {
   const thisComp = getActiveComp()
-  const targetTag = new RegExp("\\s*\\[TARGET\\]", "g")
 
   for (let i = 1; i <= thisComp.numLayers; i++) {
     const camada = thisComp.layer(i)
-    if (targetTag.test(camada.name)) {
+    if (layerNameHasTag(camada.name, "TARGET")) {
       return true
     }
   }
@@ -42,8 +56,7 @@ export const getTargetLayer = () => {
   const thisComp = getActiveComp();
   for (let i = 1; i <= thisComp.numLayers; i++) {
     const layer = thisComp.layer(i);
-    const regExp = new RegExp("TARGET", "g")
-    if (layer.name.match(regExp)) {
+    if (layerNameHasTag(layer.name, "TARGET")) {
       return layer
     }
   }
@@ -55,15 +68,7 @@ const getGameCardsLayers = () => {
   const layerCards: Layer[] = []
 
   forEachLayer(thisComp, camada => {
-    const targetRegExp = new RegExp("\\[TARGET\\]", "g")
-    const stockRegExp = new RegExp("\\[STOCK\\]", "g")
-    const tableauRegExp = new RegExp("\\[TABLEAU\\]", "g")
-
-    const isTarget = targetRegExp.test(camada.name)
-    const isStock = stockRegExp.test(camada.name)
-    const isTableau = tableauRegExp.test(camada.name)
-
-    if (isTarget || isStock || isTableau) {
+    if (getLayerCardTag(camada.name) !== null) {
       layerCards.push(camada)
     }
   })
@@ -191,10 +196,7 @@ export const findCardLayers = () => {
   const cardsList: Layer[] = []
 
   forEachLayer(thisComp, camada => {
-    const tagsList = ["TARGET", "STOCK", "TABLEAU"]
-    const pattern = tagsList.join("|")
-    const tagPattern = new RegExp(`\\[(${pattern})\\]`, "g")
-    if (tagPattern.exec(camada.name)) {
+    if (getLayerCardTag(camada.name) !== null) {
       cardsList.push(camada)
     }
   })
