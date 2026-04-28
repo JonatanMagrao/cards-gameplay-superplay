@@ -55,6 +55,8 @@ const LAYOUT_ORIGIN_MARKER_TIME = 0;
 const LAYOUT_ORIGIN_MARKER_LABEL = keyLabel.orange;
 const CARD_LAYER_NAME_PATTERN = /\[(TABLEAU|TARGET|STOCK)\]/;
 const LEGACY_LAYOUT_TRANSFORM_CONTROL_LAYER_NAME = "Layout Transform Control";
+const THUMBNAIL_BACKGROUND_LAYER_NAME = "__Cards_Layout_Thumbnail_Background__";
+const THUMBNAIL_BACKGROUND_COLOR: [number, number, number] = [131 / 255, 131 / 255, 131 / 255];
 
 //@ts-ignore
 const _deckItemCache: Record<string, AVItem> = {};
@@ -700,11 +702,20 @@ export const saveCardsLayoutThumbnail = (layoutJson: CardsLayoutJson, thumbnailP
     );
 
     try {
-      if (activeComp) {
-        sourceComp.bgColor = activeComp.bgColor;
-        outputComp.bgColor = activeComp.bgColor;
-      }
+      sourceComp.bgColor = THUMBNAIL_BACKGROUND_COLOR;
+      outputComp.bgColor = THUMBNAIL_BACKGROUND_COLOR;
     } catch (_) { }
+
+    const backgroundLayer = sourceComp.layers.addSolid(
+      THUMBNAIL_BACKGROUND_COLOR,
+      THUMBNAIL_BACKGROUND_LAYER_NAME,
+      compWidth,
+      compHeight,
+      compPixelAspect,
+      compDuration
+    ) as AVLayer;
+    backgroundLayer.moveToEnd();
+    backgroundLayer.locked = true;
 
     resetDeckCache();
     createCardLayersFromLayout(layoutJson.cards, sourceComp);
