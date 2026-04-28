@@ -11,7 +11,9 @@ import {
   addCardToPrecomp,
   resetCardsAnimation,
   restoreCardsAnimation,
-  cardsControlPresetFileName
+  cardsControlPresetFileName,
+  groupCardsToControl,
+  clearCardsLevel
 } from "./actions";
 import { requireActiveComp } from "./aeft-utils";
 import { clearLayerExpressions, distributeLayers, forEachSelectedLayer } from "./aeft-utils-jonatan";
@@ -265,6 +267,28 @@ export const handleDuplicateCards = (numCopies: number, adjustPos: number[], con
     duplicateCards(numCopies, adjustPos, controlPresetPath)
   } catch (e) {
     alertError(e, 147, "handleDuplicateCards", "aeft.ts")
+  } finally {
+    app.endUndoGroup()
+  }
+}
+
+export const handleGroupCards = () => {
+  app.beginUndoGroup("Group Cards")
+  try {
+    groupCardsToControl()
+  } catch (e) {
+    alertError(e, 153, "handleGroupCards", "aeft.ts")
+  } finally {
+    app.endUndoGroup()
+  }
+}
+
+export const handleClearCardsLevel = () => {
+  app.beginUndoGroup("Clear Level")
+  try {
+    clearCardsLevel()
+  } catch (e) {
+    alertError(e, 155, "handleClearCardsLevel", "aeft.ts")
   } finally {
     app.endUndoGroup()
   }

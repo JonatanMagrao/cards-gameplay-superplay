@@ -22,6 +22,7 @@ import {
   getLayerMarkersMetadata,
   setExpressionSafely,
 } from "./aeft-utils-jonatan"
+import { parseMarkerComment } from "./markers"
 
 
 export const keyLabel = {
@@ -51,6 +52,8 @@ const legacySfxPrecompName = "SFX Precomp"
 const expressionLibName = "superplay-expression-lib.jsx"
 const cardsControlsLayerName = "Cards Controls"
 const cardsControlFxDisplayName = "Cards Gameplay Control"
+const cardsGroupControlLayerName = "Cards Group Control"
+const cardsLayoutOriginSchema = "cards-gameplay.layout-origin.v1"
 const coinVfxLayerNamePrefix = "Coin VFX"
 const jumpSfxFilePrefix = "jump_sfx_"
 const jumpSfxFileExtension = ".wav"
@@ -741,6 +744,184 @@ export const ensureCardsControlsLayer = (comp: CompItem, presetPath?: string): A
   }
 
   return controlsLayer;
+}
+
+const collectCardLayersFromComp = (comp: CompItem): AVLayer[] => {
+  const cardsLayers: AVLayer[] = [];
+
+  for (let i = 1; i <= comp.numLayers; i++) {
+    const layer = comp.layer(i) as AVLayer;
+    if (layer && getLayerCardTag(layer.name) !== null) cardsLayers.push(layer);
+  }
+
+  return cardsLayers;
+}
+
+const getCardsGroupControlLayer = (comp: CompItem): AVLayer | null => {
+  return findLayerByNameInComp(comp, cardsGroupControlLayerName) as AVLayer | null;
+}
+
+const ensureCardsGroupControlLayer = (comp: CompItem): AVLayer => {
+  let groupLayer = getCardsGroupControlLayer(comp);
+  const shouldInitializeTransform = !groupLayer;
+
+  if (!groupLayer) {
+    groupLayer = comp.layers.addNull() as AVLayer;
+  }
+
+  groupLayer.locked = false;
+  groupLayer.name = cardsGroupControlLayerName;
+  groupLayer.label = keyLabel.blue;
+  groupLayer.guideLayer = true;
+  groupLayer.shy = false;
+  groupLayer.enabled = true;
+  groupLayer.threeDLayer = true;
+
+  if (shouldInitializeTransform) {
+    try {
+      getLayerProp(groupLayer, posPropPath).setValue([comp.width / 2, comp.height / 2, 0]);
+      getLayerProp(groupLayer, scalePropPath).setValue([100, 100, 100]);
+      getLayerProp(groupLayer, zRotPropPath).setValue(0);
+    } catch (_) { }
+  }
+
+  groupLayer.moveToBeginning();
+  groupLayer.selected = false;
+  return groupLayer;
+}
+
+const setLayerParentSafely = (layer: AVLayer, parentLayer: AVLayer | null): void => {
+  const wasLocked = layer.locked;
+  layer.locked = false;
+
+  try {
+    layer.parent = parentLayer;
+  } catch (_) { }
+
+  layer.locked = wasLocked;
+}
+
+const removeLayerSafely = (layer: Layer | null): void => {
+  if (!layer) return;
+
+  try {
+    layer.locked = false;
+  } catch (_) { }
+
+  try {
+    layer.remove();
+  } catch (_) { }
+}
+
+const removeCompLayersByPredicate = (comp: CompItem, predicate: (layer: Layer) => boolean): void => {
+  for (let i = comp.numLayers; i >= 1; i--) {
+    const layer = comp.layer(i);
+    if (predicate(layer)) removeLayerSafely(layer);
+  }
+}
+
+const removeLayerByName = (comp: CompItem, layerName: string): void => {
+  removeCompLayersByPredicate(comp, layer => layer.name === layerName);
+}
+
+const removeLayersByNameOrSourceName = (comp: CompItem, layerName: string): void => {
+  removeCompLayersByPredicate(comp, layer => {
+    return layer.name === layerName || getLayerSourceName(layer) === layerName;
+  });
+}
+
+const getCompMarkerProperty = (comp: CompItem): Property | null => {
+  try {
+    const markerProperty = (comp as any).markerProperty as Property;
+    if (markerProperty) return markerProperty;
+  } catch (_) { }
+
+  try {
+    const markerProperty = (comp as any).property("ADBE Marker") as Property;
+    if (markerProperty) return markerProperty;
+  } catch (_) { }
+
+  return null;
+}
+
+const isCardsLayoutOriginMarkerComment = (comment: string): boolean => {
+  const parsedComment = parseMarkerComment(comment || "");
+  if (!parsedComment.data) return false;
+
+  try {
+    const parsedData = JSON.parse(parsedComment.data);
+    return !!(parsedData && parsedData.schema === cardsLayoutOriginSchema);
+  } catch (_) { }
+
+  return false;
+}
+
+const clearCardsLayoutOriginMarkers = (comp: CompItem): void => {
+  const markerProperty = getCompMarkerProperty(comp) as any;
+  if (!markerProperty) return;
+
+  for (let i = markerProperty.numKeys; i >= 1; i--) {
+    const markerValue = markerProperty.keyValue(i) as MarkerValue;
+    if (isCardsLayoutOriginMarkerComment(markerValue.comment)) {
+      markerProperty.removeKey(i);
+    }
+  }
+}
+
+export const groupCardsToControl = () => {
+  const thisComp = requireActiveComp("Group Cards");
+  if (!thisComp) return;
+
+  const cardsLayers = collectCardLayersFromComp(thisComp);
+  if (cardsLayers.length === 0) {
+    alert("No card layers found in the active composition.");
+    return;
+  }
+
+  const compSnapshot = captureCompState(thisComp);
+
+  try {
+    const groupLayer = ensureCardsGroupControlLayer(thisComp);
+
+    for (let i = 0; i < cardsLayers.length; i++) {
+      const cardLayer = cardsLayers[i];
+      if (cardLayer === groupLayer || cardLayer.parent === groupLayer) continue;
+      setLayerParentSafely(cardLayer, groupLayer);
+    }
+
+    groupLayer.moveToBeginning();
+  } finally {
+    restoreCompState(thisComp, compSnapshot);
+  }
+}
+
+export const clearCardsLevel = () => {
+  const thisComp = requireActiveComp("Clear Level");
+  if (!thisComp) return;
+
+  if (!confirm("Clear all cards and gameplay control layers from this composition?")) {
+    return;
+  }
+
+  const compSnapshot = captureCompState(thisComp);
+
+  try {
+    const cardsLayers = collectCardLayersFromComp(thisComp);
+    for (let i = cardsLayers.length - 1; i >= 0; i--) {
+      removeLayerSafely(cardsLayers[i]);
+    }
+
+    removeLayerByName(thisComp, cardsGroupControlLayerName);
+    removeLayerByName(thisComp, cardsControlsLayerName);
+    removeLayersByNameOrSourceName(thisComp, expressionLibName);
+    removeLayersByNameOrSourceName(thisComp, fxPrecompName);
+    removeLayersByNameOrSourceName(thisComp, legacySfxPrecompName);
+    clearCoinVfxLayers(thisComp);
+    clearFxPrecompLayers();
+    clearCardsLayoutOriginMarkers(thisComp);
+  } finally {
+    restoreCompState(thisComp, compSnapshot);
+  }
 }
 
 const toNumber = (value: any, fallback = 0): number => {

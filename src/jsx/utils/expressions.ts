@@ -58,6 +58,13 @@ try {
             const targetLayer = control("Target Layer");
             const targetOffset = control("Target Offset").value;
             const targetOffsetAngle = control("Target Offset Angle").value;
+            const scaleSampleTime = Math.max(0, jumpMarkerTime - framesToTime(5));
+            const layerScaleAtJump = transform.scale.valueAtTime(scaleSampleTime);
+            const scaleX = Math.abs(parseFloat(layerScaleAtJump[0]));
+            const scaleY = Math.abs(parseFloat(layerScaleAtJump[1]));
+            const averageScale = isNaN(scaleX)
+                ? 20
+                : (scaleX + (isNaN(scaleY) ? scaleX : scaleY)) / 2;
 
             const jumpTime = framesToTime(jumpDurationFrames);
             const endTime = jumpMarkerTime + jumpTime;
@@ -104,8 +111,14 @@ try {
                 const currentX = linear(progress, 0, 1, startPos[0], targetPos[0]);
                 const currentY = linear(progress, 0, 1, startPos[1], targetPos[1]);
 
+                const baseArcHeight = jumpHeight * averageScale;
+                const horizontalTravel = Math.abs(targetPos[0] - startPos[0]);
+                const verticalDrop = Math.max(0, targetPos[1] - startPos[1]);
+                const verticalBoost = Math.max(0, verticalDrop - baseArcHeight) * 0.25;
+                const horizontalBoost = Math.max(0, horizontalTravel - baseArcHeight) * 0.1;
+                const arcHeight = baseArcHeight + verticalBoost + horizontalBoost;
                 const baseArc = Math.sin(progress * Math.PI);
-                const adjustedArc = Math.pow(baseArc, jumpCurveShape) * jumpHeight;
+                const adjustedArc = Math.pow(baseArc, jumpCurveShape) * arcHeight;
 
                 [currentX, currentY - adjustedArc, targetPos[2] + zOffset + zDepthOffset];
 

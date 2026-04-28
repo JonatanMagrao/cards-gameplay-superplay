@@ -2,9 +2,9 @@ import React from "react";
 import { csi, evalTS } from "../../../lib/utils/bolt";
 
 type Props = {
-  cardsPreset?: string; 
-  projectRelPath?: string; 
-  progressBarPreset?: string; 
+  cardsPreset?: string;
+  projectRelPath?: string;
+  progressBarPreset?: string;
   expressionLibRelPath?: string;
   coinValue: string; // NOVO: Recebendo a moeda escolhida
 };
@@ -23,13 +23,13 @@ export const ActionsPanel: React.FC<Props> = ({
   const expressionLibPath = `${assets}/${expressionLibRelPath}`;
   const cardProject = `${assets}/${projectRelPath}`;
   const sfxFolderPath = `${assets}/sfx`;
-  
+
   // NOVO: Montando o caminho do arquivo de moeda baseado no que foi selecionado
   const coinPath = `${assets}/coins-vfx/coin_plus-${coinValue}.mov`;
 
   // NOVO: Passando os dois caminhos pro seu ExtendScript
   const applyJump = async () => await evalTS("handleApplyJump", cardPresetPath, coinPath, sfxFolderPath);
-  
+
   const flipStockCards = async () => await evalTS("handleFlipStockCards", expressionLibPath, sfxFolderPath);
   const applyFlipCard = async () => await evalTS("handleFlipCards");
 
@@ -48,8 +48,14 @@ export const ActionsPanel: React.FC<Props> = ({
   const handleAddProgressBar = async () =>
     await evalTS("handleAddProgressBar", progressBarPresetPath);
 
-  const handleClearExpressions = async () => 
+  const handleClearExpressions = async () =>
     await evalTS("handleClearLayerExpressions");
+
+  const handleGroupCards = async () =>
+    await evalTS("handleGroupCards");
+
+  const handleClearCardsLevel = async () =>
+    await evalTS("handleClearCardsLevel");
 
   return (
     <section className="panel-section">
@@ -126,6 +132,24 @@ export const ActionsPanel: React.FC<Props> = ({
           Restore
         </button>
 
+        <button
+          onClick={handleGroupCards}
+          style={{ border: "1px solid #677DE0" }}
+          title={"Create a centered null and parent all card layers"}
+        >
+          Group Cards
+        </button>
+
+        <button
+          onClick={handleClearCardsLevel}
+          style={{ border: "1px solid #677DE0" }}
+          title={"Remove cards and gameplay control layers from this comp"}
+        >
+          Clear Level
+        </button>
+      </div>
+
+      <div className="button-row">
         <button
           onClick={handleAddProgressBar}
           style={{ border: "1px solid #E8920D" }}
