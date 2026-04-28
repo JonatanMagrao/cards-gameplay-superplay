@@ -44,10 +44,13 @@ export const keyLabel = {
 } as const
 
 const cardFxMatchName = "Pseudo/cards_gameplay_superplay"
+export const cardsControlFxMatchName = "Pseudo/cards_gameplay_control"
+export const cardsControlPresetFileName = "cards-gameplay-control.ffx"
 const fxPrecompName = "FX Precomp"
 const legacySfxPrecompName = "SFX Precomp"
 const expressionLibName = "superplay-expression-lib.jsx"
 const cardsControlsLayerName = "Cards Controls"
+const cardsControlFxDisplayName = "Cards Gameplay Control"
 const coinVfxLayerNamePrefix = "Coin VFX"
 const jumpSfxFilePrefix = "jump_sfx_"
 const jumpSfxFileExtension = ".wav"
@@ -57,19 +60,19 @@ const markerTimeTolerance = 0.0001
 
 type CardsControlSlider = {
   name: string;
-  fallback: string;
+  expected: string;
 }
 
 const cardsControlsSliders: CardsControlSlider[] = [
-  { name: "Global Z Step", fallback: "0.05" },
-  { name: "Stock Spacing X", fallback: "inferred from current stock spacing" },
-  { name: "Stock Arc Height", fallback: "29" },
-  { name: "Stock Move Mid Frames", fallback: "6" },
-  { name: "Stock Move End Frames", fallback: "11" },
-  { name: "Stock Shift Delay Frames", fallback: "2" },
-  { name: "Stock Shift Duration Frames", fallback: "11" },
-  { name: "Stock Flip Start Frames", fallback: "2" },
-  { name: "Stock Flip End Frames", fallback: "17" },
+  { name: "Global Z Step", expected: "0.05" },
+  { name: "Stock Spacing X", expected: "inferred from current stock spacing" },
+  { name: "Stock Arc Height", expected: "29" },
+  { name: "Stock Move Mid Frames", expected: "6" },
+  { name: "Stock Move End Frames", expected: "11" },
+  { name: "Stock Shift Delay Frames", expected: "2" },
+  { name: "Stock Shift Duration Frames", expected: "11" },
+  { name: "Stock Flip Start Frames", expected: "2" },
+  { name: "Stock Flip End Frames", expected: "17" },
 ] 
 
 const jumpCardsControlsSliders: string[] = ["Global Z Step"]
@@ -499,7 +502,12 @@ const applyCoin = (camada: Layer, coinFilePath: string | undefined, coinTime: nu
 
 }
 
-export const applyJumpOnSelectedlayers = (presetPath: string, coinFilePath: string, sfxFolderPath?: string) => {
+export const applyJumpOnSelectedlayers = (
+  presetPath: string,
+  coinFilePath: string,
+  sfxFolderPath?: string,
+  controlPresetPath?: string
+) => {
 
   const thisComp = requireActiveComp("Apply Jump");
   if (!thisComp) return;
@@ -515,6 +523,7 @@ export const applyJumpOnSelectedlayers = (presetPath: string, coinFilePath: stri
   const compSnapshot = captureCompState(thisComp)
 
   try {
+    ensureCardsControlsLayer(thisComp, controlPresetPath)
     warnCardsControlsFallbacks(thisComp, jumpCardsControlsSliders)
     let jumpSfxSequenceIndex = getNextJumpSfxSequenceIndexAtTime(thisTime)
     const selectedLayers: Layer[] = []
@@ -548,6 +557,7 @@ export const applyJumpOnSelectedlayers = (presetPath: string, coinFilePath: stri
   } catch (e) {
     alertError(e, 208, "applyJumpOnSelectedlayers", "actions.ts")
   } finally {
+    ensureCardsControlsLayer(thisComp, controlPresetPath)
     restoreCompState(thisComp, compSnapshot)
   }
 }
@@ -622,40 +632,115 @@ const findLayerByNameInComp = (comp: CompItem, layerName: string): Layer | null 
   return null;
 }
 
-const hasSliderControl = (layer: Layer, sliderName: string): boolean => {
-  return getSliderControlProp(layer, sliderName) !== null;
-}
-
-const getSliderControlProp = (layer: Layer, sliderName: string): Property | null => {
+const getEffectByNameOrMatchName = (
+  layer: Layer,
+  effectName: string,
+  effectMatchName?: string
+): PropertyGroup | null => {
   const effects = layer.property(layerEffect) as PropertyGroup;
   if (!effects) return null;
 
-  const effect = effects.property(sliderName) as PropertyGroup;
-  if (!effect) return null;
-
-  try {
-    const sliderProp = effect.property("Slider") as Property;
-    if (sliderProp) return sliderProp;
-  } catch (_) {
+  if (effectMatchName) {
+    try {
+      const effect = effects.property(effectMatchName) as PropertyGroup;
+      if (effect) return effect;
+    } catch (_) { }
   }
 
   try {
-    const sliderProp = effect.property("ADBE Slider Control-0001") as Property;
-    if (sliderProp) return sliderProp;
-  } catch (_) {
+    const effect = effects.property(effectName) as PropertyGroup;
+    if (effect) return effect;
+  } catch (_) { }
+
+  for (let i = 1; i <= effects.numProperties; i++) {
+    const effect = effects.property(i) as PropertyGroup;
+    if (!effect) continue;
+    if (effect.name === effectName || (effectMatchName && effect.matchName === effectMatchName)) {
+      return effect;
+    }
   }
 
   return null;
 }
 
-const getCardsControlSliderProp = (comp: CompItem, sliderName: string): { layer: Layer, prop: Property } | null => {
+const getCardsControlEffect = (layer: Layer): PropertyGroup | null => {
+  return getEffectByNameOrMatchName(layer, cardsControlFxDisplayName, cardsControlFxMatchName);
+}
+
+const getCardsControlEffectProp = (layer: Layer, propName: string): Property | null => {
+  const controlEffect = getCardsControlEffect(layer);
+  if (!controlEffect) return null;
+
+  try {
+    const prop = controlEffect.property(propName) as Property;
+    if (prop) return prop;
+  } catch (_) { }
+
+  return null;
+}
+
+const getCardsControlProp = (comp: CompItem, propName: string): { layer: Layer, prop: Property } | null => {
   const controlsLayer = findLayerByNameInComp(comp, cardsControlsLayerName);
   if (!controlsLayer) return null;
 
-  const sliderProp = getSliderControlProp(controlsLayer, sliderName);
-  if (!sliderProp) return null;
+  const pseudoProp = getCardsControlEffectProp(controlsLayer, propName);
+  if (pseudoProp) return { layer: controlsLayer, prop: pseudoProp };
 
-  return { layer: controlsLayer, prop: sliderProp };
+  return null;
+}
+
+const hasCardsControlProp = (layer: Layer, propName: string): boolean => {
+  return getCardsControlEffectProp(layer, propName) !== null;
+}
+
+const applyCardsControlPreset = (layer: Layer, presetPath?: string): void => {
+  if (!presetPath) return;
+
+  try {
+    const presetFile = new File(String(presetPath || ""));
+    if (!presetFile.exists) return;
+
+    layer.applyPreset(presetFile);
+  } catch (_) { }
+}
+
+const ensureCardsControlEffect = (layer: Layer, presetPath?: string): void => {
+  if (getCardsControlEffect(layer)) return;
+
+  applyCardsControlPreset(layer, presetPath);
+  if (getCardsControlEffect(layer)) return;
+
+  try {
+    const effects = layer.property(layerEffect) as PropertyGroup;
+    if (effects) effects.addProperty(cardsControlFxMatchName);
+  } catch (_) { }
+}
+
+export const ensureCardsControlsLayer = (comp: CompItem, presetPath?: string): AVLayer | null => {
+  let controlsLayer = findLayerByNameInComp(comp, cardsControlsLayerName) as AVLayer | null;
+
+  if (!controlsLayer) {
+    controlsLayer = comp.layers.addNull() as AVLayer;
+  }
+
+  controlsLayer.locked = false;
+
+  try {
+    controlsLayer.name = cardsControlsLayerName;
+    controlsLayer.label = keyLabel.cyan;
+    controlsLayer.guideLayer = true;
+    controlsLayer.shy = false;
+    controlsLayer.enabled = true;
+    controlsLayer.threeDLayer = false;
+    ensureCardsControlEffect(controlsLayer, presetPath);
+    controlsLayer.name = cardsControlsLayerName;
+    controlsLayer.moveToBeginning();
+    controlsLayer.selected = false;
+  } finally {
+    controlsLayer.locked = false;
+  }
+
+  return controlsLayer;
 }
 
 const toNumber = (value: any, fallback = 0): number => {
@@ -747,10 +832,10 @@ const inferStockSpacingX = (comp: CompItem, sampleTime = comp.time): number | nu
 }
 
 const ensureStockSpacingX = (comp: CompItem, sampleTime = comp.time, stockLayerToFlip?: Layer) => {
-  const slider = getCardsControlSliderProp(comp, "Stock Spacing X");
-  if (!slider) return;
+  const control = getCardsControlProp(comp, "Stock Spacing X");
+  if (!control) return;
 
-  const currentValue = toNumber(slider.prop.value, 0);
+  const currentValue = toNumber(control.prop.value, 0);
   if (Math.abs(currentValue) > 0.0001) return;
 
   const inferredSpacingX = stockLayerToFlip
@@ -762,17 +847,17 @@ const ensureStockSpacingX = (comp: CompItem, sampleTime = comp.time, stockLayerT
     return;
   }
 
-  const wasLocked = slider.layer.locked;
-  slider.layer.locked = false;
+  const wasLocked = control.layer.locked;
+  control.layer.locked = false;
 
   try {
-    slider.prop.setValue(inferredSpacingX);
+    control.prop.setValue(inferredSpacingX);
     $.writeln(`[Cards Gameplay] Stock Spacing X inferred: ${inferredSpacingX}`);
   } catch (err) {
     $.writeln(`[Cards Gameplay] Could not set Stock Spacing X: ${err}`);
   }
 
-  slider.layer.locked = wasLocked;
+  control.layer.locked = wasLocked;
 }
 
 const stringListContains = (items: string[], target: string): boolean => {
@@ -795,7 +880,7 @@ export const warnCardsControlsFallbacks = (comp: CompItem, sliderNames: string[]
 
   for (let i = 0; i < requestedSliders.length; i++) {
     const slider = requestedSliders[i];
-    if (!controlsLayer || !hasSliderControl(controlsLayer, slider.name)) {
+    if (!controlsLayer || !hasCardsControlProp(controlsLayer, slider.name)) {
       missingSliders.push(slider);
     }
   }
@@ -808,7 +893,7 @@ export const warnCardsControlsFallbacks = (comp: CompItem, sliderNames: string[]
   for (let i = 0; i < missingSliders.length; i++) {
     const slider = missingSliders[i];
     missingSliderNames.push(slider.name);
-    missingSliderLines.push(`- ${slider.name}: ${slider.fallback}`);
+    missingSliderLines.push(`- ${slider.name}: ${slider.expected}`);
   }
 
   const signature = `${comp.name}|${controlsLayer ? "controls-layer" : "no-controls-layer"}|${missingSliderNames.join("|")}`;
@@ -817,18 +902,24 @@ export const warnCardsControlsFallbacks = (comp: CompItem, sliderNames: string[]
   lastCardsControlsFallbackWarning = signature;
 
   const layerMessage = controlsLayer
-    ? `Missing slider(s) on "${cardsControlsLayerName}".`
+    ? `Missing control(s) on "${cardsControlsLayerName}" / "${cardsControlFxDisplayName}".`
     : `Layer "${cardsControlsLayerName}" was not found.`;
 
   alert([
     "[Cards Gameplay Warning]",
     layerMessage,
-    "Expressions will keep working with fallback values:",
+    "Please add or repair these pseudo effect controls:",
     missingSliderLines.join("\n"),
   ].join("\n"));
 }
 
-const applyStockExpressions = (comp: CompItem, expressionLibPath?: string, stockLayerToFlip?: Layer) => {
+const applyStockExpressions = (
+  comp: CompItem,
+  expressionLibPath?: string,
+  stockLayerToFlip?: Layer,
+  controlPresetPath?: string
+) => {
+  ensureCardsControlsLayer(comp, controlPresetPath);
   ensureExpressionLibLayer(comp, expressionLibPath);
   ensureStockSpacingX(comp, comp.time, stockLayerToFlip);
   warnCardsControlsFallbacks(comp, stockCardsControlsSliders);
@@ -865,7 +956,12 @@ const getLayerMarkerKeyIndexByComment = (layer: Layer, markerComment: string): n
   return null;
 }
 
-export const flipStockCards = (stockLayerToFlip?: Layer, expressionLibPath?: string, sfxFolderPath?: string) => {
+export const flipStockCards = (
+  stockLayerToFlip?: Layer,
+  expressionLibPath?: string,
+  sfxFolderPath?: string,
+  controlPresetPath?: string
+) => {
 
   // main consts
   const thisComp = requireActiveComp("Flip Stock");
@@ -905,10 +1001,11 @@ export const flipStockCards = (stockLayerToFlip?: Layer, expressionLibPath?: str
       label: 2,
     })
 
-    applyStockExpressions(thisComp, expressionLibPath, firstSelectedLayer)
+    applyStockExpressions(thisComp, expressionLibPath, firstSelectedLayer, controlPresetPath)
 
     applySfx(thisComp, markerTime, joinPath(sfxFolderPath, flipStockSfxFileName), keyLabel.yellow)
   } finally {
+    ensureCardsControlsLayer(thisComp, controlPresetPath)
     restoreCompState(thisComp, compSnapshot)
   }
 }
@@ -1003,7 +1100,7 @@ export const turnCards = () => {
   })
 }
 
-export const duplicateCards = (numCopies: number, adjustPos: number[]) => {
+export const duplicateCards = (numCopies: number, adjustPos: number[], controlPresetPath?: string) => {
 
   const thisComp = requireActiveComp("Duplicate Cards");
   if (!thisComp) return;
@@ -1030,6 +1127,7 @@ export const duplicateCards = (numCopies: number, adjustPos: number[]) => {
     lastDuplicated.selected = true
   }
 
+  ensureCardsControlsLayer(thisComp, controlPresetPath)
 }
 
 export const changeCard = (deckName: string, card: number, cardName: string) => {
@@ -1070,7 +1168,7 @@ export const changeCard = (deckName: string, card: number, cardName: string) => 
 
 }
 
-export const addCardToPrecomp = (deckName: string, card: number, cardName: string) => {
+export const addCardToPrecomp = (deckName: string, card: number, cardName: string, controlPresetPath?: string) => {
 
   try {
     const thisComp = requireActiveComp("Add Card")
@@ -1080,6 +1178,7 @@ export const addCardToPrecomp = (deckName: string, card: number, cardName: strin
       const plusCardSource = getItemByName("Plus_Card") as CompItem
       thisComp.layers.add(plusCardSource)
       thisComp.layer("Plus_Card").label = keyLabel.purple
+      ensureCardsControlsLayer(thisComp, controlPresetPath)
 
       return
     }
@@ -1095,6 +1194,7 @@ export const addCardToPrecomp = (deckName: string, card: number, cardName: strin
     cardLayer.name = cardName
     const cardOption = getLayerProp(cardLayer, cardOptionEPPath)
     cardOption.setValue(card)
+    ensureCardsControlsLayer(thisComp, controlPresetPath)
 
   } catch (e) {
     alertError(e, 558, "AddCardToPrecomp", "actions.ts")
@@ -1161,7 +1261,8 @@ export const restoreCardsAnimation = (
   presetMatchName: string,
   expressionLibPath?: string,
   coinFilePath?: string,
-  sfxFolderPath?: string
+  sfxFolderPath?: string,
+  controlPresetPath?: string
 ) => {
 
   const thisComp = requireActiveComp("Restore Cards Animation")
@@ -1212,6 +1313,7 @@ export const restoreCardsAnimation = (
   }
 
   try {
+    ensureCardsControlsLayer(thisComp, controlPresetPath)
     clearFxPrecompLayers()
     clearCoinVfxLayers(thisComp)
 
@@ -1257,12 +1359,13 @@ export const restoreCardsAnimation = (
       flipCard(card.time, card.layer)
     } else if (cardAction === "Flip Stock") {
       thisComp.time = card.time
-      flipStockCards(card.layer, expressionLibPath, sfxFolderPath)
+      flipStockCards(card.layer, expressionLibPath, sfxFolderPath, controlPresetPath)
       jumpSfxSequenceIndex = 1
     }
   }
 
   } finally {
+    ensureCardsControlsLayer(thisComp, controlPresetPath)
     restoreCompState(thisComp, compSnapshot)
   }
 

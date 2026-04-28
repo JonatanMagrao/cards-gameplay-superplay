@@ -1,6 +1,7 @@
 import { captureCompState, findAvItemByName, getActiveComp, restoreCompState } from "./aeft-utils";
 import { getLayerMarkersMetadata, getLayerProp, getPropertyBaseValueAtTime } from "./aeft-utils-jonatan";
-import { posPropPath, scalePropPath, zRotPropPath } from "./actions";
+import { ensureCardsControlsLayer, keyLabel, posPropPath, scalePropPath, zRotPropPath } from "./actions";
+import { buildMarkerComment, parseMarkerComment } from "./markers";
 
 export type CardLayout = {
   deckName: string;
@@ -22,6 +23,19 @@ export type CardsLayoutJson = {
 
 export type ApplyCardsLayoutOptions = {
   autoFitLayout?: boolean;
+  layoutOrigin?: CardsLayoutOriginMetadata;
+  controlPresetPath?: string;
+};
+
+export type CardsLayoutOriginMetadata = {
+  schema: string;
+  levelFolder: string;
+  sourceJson: string;
+  targetJson: string;
+  targetResolution: string;
+  appliedAsFallback: boolean;
+  rootPath?: string;
+  levelFolderPath?: string;
 };
 
 type LayoutBounds = {
@@ -35,6 +49,12 @@ const toFiniteNumber = (value: any, fallback = 0): number => {
   const numberValue = Number(value);
   return isNaN(numberValue) ? fallback : numberValue;
 };
+
+const LAYOUT_ORIGIN_SCHEMA = "cards-gameplay.layout-origin.v1";
+const LAYOUT_ORIGIN_MARKER_TIME = 0;
+const LAYOUT_ORIGIN_MARKER_LABEL = keyLabel.orange;
+const CARD_LAYER_NAME_PATTERN = /\[(TABLEAU|TARGET|STOCK)\]/;
+const LEGACY_LAYOUT_TRANSFORM_CONTROL_LAYER_NAME = "Layout Transform Control";
 
 //@ts-ignore
 const _deckItemCache: Record<string, AVItem> = {};
@@ -119,6 +139,117 @@ const cloneCardLayout = (cardLayout: CardLayout): CardLayout => {
     card: toFiniteNumber(cardLayout.card, 0),
     markers: cloneMarkers(cardLayout.markers)
   };
+};
+
+const cloneCardsLayout = (cardsLayout: CardLayout[]): CardLayout[] => {
+  const cloned: CardLayout[] = [];
+  for (let i = 0; i < cardsLayout.length; i++) cloned.push(cloneCardLayout(cardsLayout[i]));
+  return cloned;
+};
+
+const isCardsGameplayCardLayerName = (layerName: string): boolean => {
+  return CARD_LAYER_NAME_PATTERN.test(String(layerName || ""));
+};
+
+const isCardsGameplayImportedLayoutLayerName = (layerName: string): boolean => {
+  const normalizedLayerName = String(layerName || "");
+  return isCardsGameplayCardLayerName(normalizedLayerName)
+    || normalizedLayerName === LEGACY_LAYOUT_TRANSFORM_CONTROL_LAYER_NAME;
+};
+
+const stripLevelFolderPrefix = (levelFolder: string): string => {
+  return String(levelFolder || "").replace(/^lvl_/, "");
+};
+
+const isCardsLayoutOriginMetadata = (value: any): boolean => {
+  return !!(value
+    && value.schema === LAYOUT_ORIGIN_SCHEMA
+    && typeof value.levelFolder === "string"
+    && value.levelFolder !== "");
+};
+
+const normalizeCardsLayoutOriginMetadata = (origin: CardsLayoutOriginMetadata): CardsLayoutOriginMetadata => {
+  return {
+    schema: LAYOUT_ORIGIN_SCHEMA,
+    levelFolder: String(origin.levelFolder || ""),
+    sourceJson: String(origin.sourceJson || ""),
+    targetJson: String(origin.targetJson || ""),
+    targetResolution: String(origin.targetResolution || ""),
+    appliedAsFallback: !!origin.appliedAsFallback,
+    rootPath: origin.rootPath ? String(origin.rootPath) : "",
+    levelFolderPath: origin.levelFolderPath ? String(origin.levelFolderPath) : ""
+  };
+};
+
+const getCompMarkerProperty = (comp: CompItem): Property | null => {
+  try {
+    const markerProperty = (comp as any).markerProperty as Property;
+    if (markerProperty) return markerProperty;
+  } catch (_) { }
+
+  try {
+    const markerProperty = (comp as any).property("ADBE Marker") as Property;
+    if (markerProperty) return markerProperty;
+  } catch (_) { }
+
+  return null;
+};
+
+const parseCardsLayoutOriginMarkerComment = (comment: string): CardsLayoutOriginMetadata | null => {
+  const parsedComment = parseMarkerComment(comment || "");
+  if (!parsedComment.data) return null;
+
+  try {
+    const parsedData = JSON.parse(parsedComment.data);
+    if (!isCardsLayoutOriginMetadata(parsedData)) return null;
+    return normalizeCardsLayoutOriginMetadata(parsedData as CardsLayoutOriginMetadata);
+  } catch (_) { }
+
+  return null;
+};
+
+const getCardsLayoutOriginFromComp = (comp: CompItem): CardsLayoutOriginMetadata | null => {
+  const markerProperty = getCompMarkerProperty(comp) as any;
+  if (!markerProperty) return null;
+
+  let fallbackOrigin: CardsLayoutOriginMetadata | null = null;
+
+  for (let i = 1; i <= markerProperty.numKeys; i++) {
+    const markerValue = markerProperty.keyValue(i) as MarkerValue;
+    const origin = parseCardsLayoutOriginMarkerComment(markerValue.comment);
+    if (!origin) continue;
+
+    if (Math.abs(markerProperty.keyTime(i) - LAYOUT_ORIGIN_MARKER_TIME) < 0.0001) {
+      return origin;
+    }
+
+    if (!fallbackOrigin) fallbackOrigin = origin;
+  }
+
+  return fallbackOrigin;
+};
+
+const writeCardsLayoutOriginMarker = (comp: CompItem, origin: CardsLayoutOriginMetadata | undefined): void => {
+  if (!origin || !origin.levelFolder) return;
+
+  try {
+    const markerProperty = getCompMarkerProperty(comp) as any;
+    if (!markerProperty) return;
+
+    for (let i = markerProperty.numKeys; i >= 1; i--) {
+      const markerValue = markerProperty.keyValue(i) as MarkerValue;
+      if (parseCardsLayoutOriginMarkerComment(markerValue.comment)) {
+        markerProperty.removeKey(i);
+      }
+    }
+
+    const normalizedOrigin = normalizeCardsLayoutOriginMetadata(origin);
+    const title = "Layout: " + stripLevelFolderPrefix(normalizedOrigin.levelFolder);
+    const markerValue = new MarkerValue(buildMarkerComment(title, JSON.stringify(normalizedOrigin)));
+    markerValue.label = LAYOUT_ORIGIN_MARKER_LABEL;
+
+    markerProperty.setValueAtTime(LAYOUT_ORIGIN_MARKER_TIME, markerValue);
+  } catch (_) { }
 };
 
 const expandBounds = (bounds: LayoutBounds | null, cardBounds: LayoutBounds): LayoutBounds => {
@@ -228,14 +359,36 @@ const transformCardLayoutToFit = (
 
 const fitCardsLayoutToComp = (
   cardsLayout: CardLayout[],
-  comp: CompItem
+  comp: CompItem,
+  sourceResolution?: [number, number]
 ): CardLayout[] => {
-  const bounds = getCardsLayoutBounds(cardsLayout);
-  if (!bounds) {
-    const cloned: CardLayout[] = [];
-    for (let i = 0; i < cardsLayout.length; i++) cloned.push(cloneCardLayout(cardsLayout[i]));
-    return cloned;
+  const sourceWidth = sourceResolution ? toFiniteNumber(sourceResolution[0], 0) : 0;
+  const sourceHeight = sourceResolution ? toFiniteNumber(sourceResolution[1], 0) : 0;
+  const targetCenterX = comp.width / 2;
+  const targetCenterY = comp.height / 2;
+
+  if (sourceWidth > 0 && sourceHeight > 0) {
+    const fitScale = Math.min(comp.width / sourceWidth, comp.height / sourceHeight);
+
+    if (isNaN(fitScale) || fitScale <= 0) return cloneCardsLayout(cardsLayout);
+
+    const fittedByFrame: CardLayout[] = [];
+    for (let i = 0; i < cardsLayout.length; i++) {
+      fittedByFrame.push(transformCardLayoutToFit(
+        cardsLayout[i],
+        sourceWidth / 2,
+        sourceHeight / 2,
+        targetCenterX,
+        targetCenterY,
+        fitScale
+      ));
+    }
+
+    return fittedByFrame;
   }
+
+  const bounds = getCardsLayoutBounds(cardsLayout);
+  if (!bounds) return cloneCardsLayout(cardsLayout);
 
   const layoutWidth = Math.max(bounds.maxX - bounds.minX, 1);
   const layoutHeight = Math.max(bounds.maxY - bounds.minY, 1);
@@ -243,16 +396,10 @@ const fitCardsLayoutToComp = (
   const heightScale = comp.height / layoutHeight;
   const fitScale = Math.min(widthScale, heightScale);
 
-  if (isNaN(fitScale) || fitScale <= 0) {
-    const cloned: CardLayout[] = [];
-    for (let i = 0; i < cardsLayout.length; i++) cloned.push(cloneCardLayout(cardsLayout[i]));
-    return cloned;
-  }
+  if (isNaN(fitScale) || fitScale <= 0) return cloneCardsLayout(cardsLayout);
 
   const layoutCenterX = bounds.minX + (layoutWidth / 2);
   const layoutCenterY = bounds.minY + (layoutHeight / 2);
-  const targetCenterX = comp.width / 2;
-  const targetCenterY = comp.height / 2;
   const fitted: CardLayout[] = [];
 
   for (let i = 0; i < cardsLayout.length; i++) {
@@ -267,6 +414,17 @@ const fitCardsLayoutToComp = (
   }
 
   return fitted;
+};
+
+const removeCardsLayoutLayersFromComp = (comp: CompItem): void => {
+  for (let i = comp.numLayers; i >= 1; i--) {
+    const layer = comp.layer(i) as AVLayer | null;
+    if (!layer || !isCardsGameplayImportedLayoutLayerName(layer.name)) continue;
+
+    try {
+      layer.remove();
+    } catch (_) { }
+  }
 };
 
 export const createCardLayersFromLayout = (
@@ -369,11 +527,17 @@ export const applyCardsLayoutFromObject = (layoutJson: CardsLayoutJson, options?
 
   try {
     resetDeckCache();
+    if (getCardsLayoutOriginFromComp(comp)) {
+      removeCardsLayoutLayersFromComp(comp);
+    }
+
     const cardsLayout = autoFitLayout
-      ? fitCardsLayoutToComp(layoutJson.cards, comp)
+      ? fitCardsLayoutToComp(layoutJson.cards, comp, layoutJson.resolution)
       : layoutJson.cards;
 
     createCardLayersFromLayout(cardsLayout, comp);
+    ensureCardsControlsLayer(comp, options ? options.controlPresetPath : undefined);
+    writeCardsLayoutOriginMarker(comp, options ? options.layoutOrigin : undefined);
   } finally {
     restoreCompState(comp, compSnapshot);
   }
@@ -381,8 +545,15 @@ export const applyCardsLayoutFromObject = (layoutJson: CardsLayoutJson, options?
   return "OK";
 };
 
+export const getActiveCardsLayoutOrigin = (): CardsLayoutOriginMetadata | null => {
+  const comp = getActiveComp?.() as CompItem | null;
+  if (!comp) return null;
+
+  return getCardsLayoutOriginFromComp(comp);
+};
+
 export const isCardLayerByName = (layerName: string): boolean => {
-  return /\[(TABLEAU|TARGET|STOCK)\]/.test(layerName);
+  return isCardsGameplayCardLayerName(layerName);
 };
 
 export const collectCardLayersFromComp = (comp: CompItem): AVLayer[] => {

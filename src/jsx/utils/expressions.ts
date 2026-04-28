@@ -15,14 +15,25 @@ try {
         return null;
     };
 
-    const readCardsControlSlider = function(sliderName, fallbackValue) {
-        try {
-            const rawValue = thisComp.layer("Cards Controls").effect(sliderName)("Slider").value;
+    const readCardsControlNumber = function(controlName, fallbackValue) {
+        const readNumber = function(rawValue, localFallback) {
             const numberValue = parseFloat(rawValue);
-            return isNaN(numberValue) ? fallbackValue : numberValue;
+            return isNaN(numberValue) ? localFallback : numberValue;
+        };
+
+        try {
+            const rawValue = thisComp.layer("Cards Controls").effect("Pseudo/cards_gameplay_control")(controlName).value;
+            return readNumber(rawValue, fallbackValue);
         } catch (err) {
-            return fallbackValue;
         }
+
+        try {
+            const rawValue = thisComp.layer("Cards Controls").effect("Cards Gameplay Control")(controlName).value;
+            return readNumber(rawValue, fallbackValue);
+        } catch (err) {
+        }
+
+        return fallbackValue;
     };
 
     const jumpMarkerTime = findMarkerTime(thisLayer, "Jump");
@@ -42,7 +53,7 @@ try {
             const bounceFrequency = control("Bounce Frequency").value;
             const bounceDecay = control("Bounce Decay").value;
             const zDepthOffset = control("Z Depth Offset").value;
-            const zStep = readCardsControlSlider("Global Z Step", 0.05);
+            const zStep = readCardsControlNumber("Global Z Step", 0.05);
 
             const targetLayer = control("Target Layer");
             const targetOffset = control("Target Offset").value;

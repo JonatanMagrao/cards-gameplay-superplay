@@ -10,6 +10,7 @@ const CONFIG_FILE_NAME = ".cards-layout-config.json";
 const CONFIG_PATH = path.join(HOME_DIR, CONFIG_FILE_NAME);
 const THUMBNAIL_MAX_SIDE = 512;
 const THUMBNAIL_JPEG_QUALITY = 0.82;
+const LAYOUT_ORIGIN_SCHEMA = "cards-gameplay.layout-origin.v1";
 
 // Helpers
 const loadConfig = () => {
@@ -176,6 +177,54 @@ const getLevelPreviewPath = (rootPath: string, levelFolder: string, preferredRes
 type LevelJsonPath = {
   filePath: string;
   isExactResolution: boolean;
+};
+
+type CardsLayoutOriginMetadata = {
+  schema?: string;
+  levelFolder?: string;
+  sourceJson?: string;
+  targetJson?: string;
+  targetResolution?: string;
+  appliedAsFallback?: boolean;
+  rootPath?: string;
+  levelFolderPath?: string;
+};
+
+const normalizePath = (value: string): string => String(value || "").replace(/\\/g, "/");
+
+const getFileNameFromPath = (filePath: string): string => {
+  const normalized = normalizePath(filePath);
+  const parts = normalized.split("/");
+  return parts[parts.length - 1] || normalized;
+};
+
+const getLevelLabelFromFolderName = (levelFolder: string): string => {
+  return String(levelFolder || "").replace(/^lvl_/, "");
+};
+
+const getRootPathFromLevelFolderPath = (levelFolderPath: string): string => {
+  const normalized = normalizePath(levelFolderPath);
+  const lastSlash = normalized.lastIndexOf("/");
+  return lastSlash > -1 ? normalized.substring(0, lastSlash) : "";
+};
+
+const isLayoutOriginMetadata = (value: any): value is CardsLayoutOriginMetadata => {
+  return !!(
+    value &&
+    value.schema === LAYOUT_ORIGIN_SCHEMA &&
+    typeof value.levelFolder === "string" &&
+    value.levelFolder !== ""
+  );
+};
+
+const getLinkedLevelFolderPath = (origin: CardsLayoutOriginMetadata): string => {
+  const levelFolderPath = normalizePath(origin.levelFolderPath || "");
+  if (levelFolderPath) return levelFolderPath;
+
+  const rootPath = normalizePath(origin.rootPath || "");
+  if (rootPath && origin.levelFolder) return `${rootPath}/${origin.levelFolder}`;
+
+  return "";
 };
 
 const parseResolutionString = (value: string): [number, number] | null => {
@@ -392,8 +441,19 @@ export const LayoutsPanel: React.FC<Props> = ({
     try {
       const raw = fs.readFileSync(layoutJsonPath.filePath, "utf-8");
       const layoutData = JSON.parse(raw);
+      const targetResolution = String(resolution);
       const applyOptions = {
-        autoFitLayout: !layoutJsonPath.isExactResolution
+        autoFitLayout: !layoutJsonPath.isExactResolution,
+        layoutOrigin: {
+          schema: LAYOUT_ORIGIN_SCHEMA,
+          levelFolder: selectedFolder,
+          rootPath,
+          levelFolderPath: levelFolder,
+          sourceJson: getFileNameFromPath(layoutJsonPath.filePath),
+          targetJson: `${targetResolution}.json`,
+          targetResolution,
+          appliedAsFallback: !layoutJsonPath.isExactResolution
+        }
       };
 
       await reloadExtendScript();
@@ -411,30 +471,78 @@ export const LayoutsPanel: React.FC<Props> = ({
   // SAVE
   // -------------------------
   const handleSave = useCallback(async () => {
-    const lvlRaw = safeTrim(saveLevelId);
+    await reloadExtendScript();
+
+    let activeLayoutOrigin: CardsLayoutOriginMetadata | null = null;
+
+    try {
+      const origin = await evalTS("handleGetActiveCardsLayoutOrigin");
+      if (isLayoutOriginMetadata(origin)) activeLayoutOrigin = origin;
+    } catch (e) {
+      console.error(e);
+    }
+
+    const linkedLevelFolder = activeLayoutOrigin ? String(activeLayoutOrigin.levelFolder || "") : "";
+    const lvlRaw = linkedLevelFolder ? getLevelLabelFromFolderName(linkedLevelFolder) : safeTrim(saveLevelId);
     if (!lvlRaw) return alert("Type a level ID first (e.g. 001-Boss).");
 
-    let targetFolder = persistentSavePath;
-
-    // 1. Selecionar Pasta se não houver
-    if (!targetFolder) {
-      if (!window.cep) return alert("CEP API unavailable.");
+    const selectTargetRoot = (): string | null => {
+      if (!window.cep) {
+        alert("CEP API unavailable.");
+        return null;
+      }
       const result = window.cep.fs.showOpenDialogEx(false, true, "Select Save Folder", baseDir, []);
 
-      if (result.err !== 0 || !result.data || result.data.length === 0) return;
+      if (result.err !== 0 || !result.data || result.data.length === 0) return null;
 
-      targetFolder = result.data[0];
-      if (!targetFolder) {
+      let selectedTarget = result.data[0];
+      if (!selectedTarget) {
         alert("Operation cancelled.")
-        return
+        return null
       }
-      targetFolder = targetFolder.replace(/\\/g, "/");
+      selectedTarget = normalizePath(selectedTarget);
 
-      saveConfig({ savePath: targetFolder });
-      setPersistentSavePath(targetFolder);
-      setBaseDir(targetFolder);
+      saveConfig({ savePath: selectedTarget });
+      setPersistentSavePath(selectedTarget);
+      setBaseDir(selectedTarget);
+
+      return selectedTarget;
+    };
+
+    const levelFolderName = linkedLevelFolder || normalizeLevelFolderNameUI(lvlRaw);
+    let levelFolderPath = "";
+
+    // 1. Selecionar Pasta se não houver
+    if (activeLayoutOrigin && linkedLevelFolder) {
+      levelFolderPath = getLinkedLevelFolderPath(activeLayoutOrigin);
+
+      if (!levelFolderPath) {
+        let targetRoot = persistentSavePath ? normalizePath(persistentSavePath) : "";
+        if (!targetRoot) {
+          const selectedRoot = selectTargetRoot();
+          if (!selectedRoot) return;
+          targetRoot = selectedRoot;
+        }
+
+        levelFolderPath = `${targetRoot}/${levelFolderName}`;
+      } else {
+        levelFolderPath = normalizePath(levelFolderPath);
+        const linkedRootPath = getRootPathFromLevelFolderPath(levelFolderPath);
+        if (linkedRootPath && linkedRootPath !== normalizePath(persistentSavePath || baseDir || "")) {
+          saveConfig({ savePath: linkedRootPath });
+          setPersistentSavePath(linkedRootPath);
+          setBaseDir(linkedRootPath);
+        }
+      }
     } else {
-      targetFolder = targetFolder!.replace(/\\/g, "/");
+      let targetRoot = persistentSavePath ? normalizePath(persistentSavePath) : "";
+      if (!targetRoot) {
+        const selectedRoot = selectTargetRoot();
+        if (!selectedRoot) return;
+        targetRoot = selectedRoot;
+      }
+
+      levelFolderPath = `${targetRoot}/${levelFolderName}`;
     }
 
     // 2. Pegar dados do AE
@@ -449,9 +557,6 @@ export const LayoutsPanel: React.FC<Props> = ({
 
     if (layoutData.error) return alert(`Export Failed: ${layoutData.error}`);
 
-    // 3. Montar caminhos
-    const levelFolderName = normalizeLevelFolderNameUI(lvlRaw);
-    const levelFolderPath = `${targetFolder}/${levelFolderName}`;
     const fileName = `${layoutData.resolution[0]}x${layoutData.resolution[1]}.json`;
     const finalFilePath = `${levelFolderPath}/${fileName}`;
     const thumbnailPath = `${levelFolderPath}/${fileName.replace(".json", ".jpg")}`;
@@ -469,7 +574,8 @@ export const LayoutsPanel: React.FC<Props> = ({
 
     // 5. Overwrite
     if (fs.existsSync(finalFilePath)) {
-      const overwrite = confirm(`Level: ${levelFolderName.replace("lvl_", "")}\nResolution: ${fileName.replace(".json", "")}\nOverwrite?`);
+      const actionLabel = activeLayoutOrigin ? "Update linked layout?" : "Overwrite?";
+      const overwrite = confirm(`Level: ${levelFolderName.replace("lvl_", "")}\nResolution: ${fileName.replace(".json", "")}\n${actionLabel}`);
       if (!overwrite) return;
     }
 
@@ -487,7 +593,7 @@ export const LayoutsPanel: React.FC<Props> = ({
 
       if (thumbnailResult && thumbnailResult !== "OK") {
         deleteFileIfExists(tempThumbnailPath);
-        alert(`Saved, but thumbnail export failed:\n${thumbnailResult}`);
+        alert(`${activeLayoutOrigin ? "Updated" : "Saved"}, but thumbnail export failed:\n${thumbnailResult}`);
       } else {
         try {
           const thumbnailReady = await waitForReadableFile(tempThumbnailPath);
@@ -501,10 +607,10 @@ export const LayoutsPanel: React.FC<Props> = ({
           );
           deleteFileIfExists(tempThumbnailPath);
           deleteFileIfExists(legacyThumbnailPath);
-          alert(`Saved!\nLevel: ${levelFolderName.replace("lvl_", "")}\nResolution: ${fileName.replace(".json", "")}`);
+          alert(`${activeLayoutOrigin ? "Updated!" : "Saved!"}\nLevel: ${levelFolderName.replace("lvl_", "")}\nResolution: ${fileName.replace(".json", "")}`);
         } catch (thumbnailError) {
           deleteFileIfExists(tempThumbnailPath);
-          alert(`Saved, but thumbnail conversion failed:\n${thumbnailError}`);
+          alert(`${activeLayoutOrigin ? "Updated" : "Saved"}, but thumbnail conversion failed:\n${thumbnailError}`);
         }
       }
 

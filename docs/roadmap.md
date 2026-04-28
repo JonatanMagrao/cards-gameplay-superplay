@@ -1,6 +1,7 @@
 | feature                                                                                                                           | status |
 |-----------------------------------------------------------------------------------------------------------------------------------|--------|
-| consider edit button to saved layouts                                                                                             | ⬜      |
+| consider create a button do remove level from a comp                                                                              | ⬜      |
+| consider create a button to group all cards layers to a centralized null and another to release it                                | ⬜      |
 | change thumbnail background color to gray (same as after effects)                                                                 | ⬜      |
 | review the resources (aexp, assets), maybe not using it packaged with the extension, but use it from specific google drive folder | ⬜      |
 | continue from fase 3 of technical review                                                                                          | ⬜      |
@@ -14,3 +15,5 @@
 | understand rules from coin values (like the sort of sfx)                                                                          | ⬜      |
 | document layout save best practice: Z depth is supported, but save clean layouts before animation/keyframes/application           | ⬜      |
 | improve and update the card-animation-tutorials                                                                                   | ⬜      |
+| ------------------------------------------------------------------------------                                                    | ⬜      |
+| consider edit button to saved layouts                                                                                             | ✅      |

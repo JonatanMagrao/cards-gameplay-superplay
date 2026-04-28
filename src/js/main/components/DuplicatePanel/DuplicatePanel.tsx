@@ -11,11 +11,15 @@ const aeService = {
   distribute: (x: number, y: number, reverse: boolean) => 
     evalTS("handleDistributeLayers", x, y, reverse),
     
-  duplicate: (copies: number, pos: number[]) => 
-    evalTS("handleDuplicateCards", copies, pos),
+  duplicate: (copies: number, pos: number[], controlPresetPath?: string) =>
+    evalTS("handleDuplicateCards", copies, pos, controlPresetPath),
 };
 
-export const DuplicatePanel = () => {
+type DuplicatePanelProps = {
+  controlPresetPath?: string;
+};
+
+export const DuplicatePanel: React.FC<DuplicatePanelProps> = ({ controlPresetPath }) => {
   const [numCopies, setNumCopies] = useState("5");
   const [cardDistance, setCardDistance] = useState(["0", "0"]);
   const [isPrecisionMode, setPrecisionMode] = useState(false);
@@ -93,7 +97,7 @@ export const DuplicatePanel = () => {
     const x = Number(cardDistance[0].replace(",", ".") || "0");
     const y = Number(cardDistance[1].replace(",", ".") || "0");
     if (copies > 0 && Number.isFinite(x) && Number.isFinite(y)) {
-      await aeService.duplicate(copies, [x, y]);
+      await aeService.duplicate(copies, [x, y], controlPresetPath);
     }
   };
 

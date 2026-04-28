@@ -28,6 +28,7 @@ export const App = () => {
   const projectRelPath = "disney_solitaire_cards.aepx"
   const assets = `${csi.getSystemPath("extension")}/assets`;
   const cardProject = `${assets}/${projectRelPath}`;
+  const cardsControlPresetPath = `${assets}/presets/cards-gameplay-control.ffx`;
 
   useEffect(() => {
     if (window.cep) subscribeBackgroundColor(setBgColor);
@@ -83,7 +84,7 @@ export const App = () => {
 
               <ActionsPanel coinValue={coinValue} /> {/* <--- Passando o valor para o botão Jump usar */}
 
-              <DuplicatePanel />
+              <DuplicatePanel controlPresetPath={cardsControlPresetPath} />
             </>
           ) : (
             <LayoutsPanel baseDirDefault={getDefaultCardsLevelsDir()} cardProject={cardProject} />

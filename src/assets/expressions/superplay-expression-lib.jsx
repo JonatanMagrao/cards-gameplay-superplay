@@ -1,7 +1,9 @@
 {
-  version: "0.4.0",
+  version: "0.5.0",
 
   controlLayerName: "Cards Controls",
+  controlEffectName: "Cards Gameplay Control",
+  controlEffectMatchName: "Pseudo/cards_gameplay_control",
 
   clamp: function(v, minVal, maxVal) {
     return Math.min(Math.max(v, minVal), maxVal);
@@ -52,12 +54,27 @@
     return this.findMarker(dataLayer, "Superplay Data");
   },
 
-  controlSliderNumber: function(comp, sliderName, fallbackValue) {
+  controlEffect: function(comp) {
     var controlLayer = this.findLayerByName(comp, this.controlLayerName);
-    if (controlLayer === null) return fallbackValue;
+    if (controlLayer === null) return null;
 
     try {
-      var rawValue = controlLayer.effect(sliderName)("Slider").value;
+      return controlLayer.effect(this.controlEffectMatchName);
+    } catch (err) {}
+
+    try {
+      return controlLayer.effect(this.controlEffectName);
+    } catch (err2) {}
+
+    return null;
+  },
+
+  controlEffectNumber: function(comp, propertyName, fallbackValue) {
+    var control = this.controlEffect(comp);
+    if (control === null) return fallbackValue;
+
+    try {
+      var rawValue = control(propertyName).value;
       var numberValue = parseFloat(rawValue);
       return isNaN(numberValue) ? fallbackValue : numberValue;
     } catch (err) {
@@ -65,8 +82,12 @@
     }
   },
 
-  configNumber: function(comp, sliderName, legacyMarkerNames, fallbackValue) {
-    var controlValue = this.controlSliderNumber(comp, sliderName, null);
+  controlNumber: function(comp, controlName, fallbackValue) {
+    return this.controlEffectNumber(comp, controlName, fallbackValue);
+  },
+
+  configNumber: function(comp, controlName, legacyMarkerNames, fallbackValue) {
+    var controlValue = this.controlNumber(comp, controlName, null);
     if (controlValue !== null) return controlValue;
 
     if (legacyMarkerNames && legacyMarkerNames.length > 0) {
@@ -331,7 +352,7 @@
   },
 
   stockEventDistance: function(comp, eventLayer, eventTime) {
-    var configuredDistance = this.controlSliderNumber(comp, "Stock Spacing X", null);
+    var configuredDistance = this.controlNumber(comp, "Stock Spacing X", null);
     if (configuredDistance !== null && Math.abs(configuredDistance) > 0.0001) return configuredDistance;
 
     var dataMarker = this.findSuperplayDataMarker(comp);

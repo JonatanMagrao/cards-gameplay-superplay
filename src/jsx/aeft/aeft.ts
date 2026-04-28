@@ -10,17 +10,39 @@ import {
   flipStockCards,
   addCardToPrecomp,
   resetCardsAnimation,
-  restoreCardsAnimation
+  restoreCardsAnimation,
+  cardsControlPresetFileName
 } from "./actions";
 import { requireActiveComp } from "./aeft-utils";
 import { clearLayerExpressions, distributeLayers, forEachSelectedLayer } from "./aeft-utils-jonatan";
-import { applyCardsLayoutFromObject, getActiveCompLayoutData, CardsLayoutJson, getActiveCompResolution, saveCardsLayoutThumbnail, ApplyCardsLayoutOptions } from "./game-levels-utils";
+import { applyCardsLayoutFromObject, getActiveCardsLayoutOrigin, getActiveCompLayoutData, CardsLayoutJson, getActiveCompResolution, saveCardsLayoutThumbnail, ApplyCardsLayoutOptions } from "./game-levels-utils";
 import { alertError } from "./errors";
 import { addProgressBar } from "./progressBar-utils";
 
 const cardsFolderName = "Disney Solitaire Cards"
 const presetMatchName = "Pseudo/cards_gameplay_superplay"
 // const precompRenderer = "ADBE Calder"
+
+const getAssetPath = (sourcePath: string | undefined, relativePath: string): string => {
+  const normalizedSourcePath = String(sourcePath || "").replace(/\\/g, "/");
+  const assetsToken = "/assets/";
+  const assetsIndex = normalizedSourcePath.lastIndexOf(assetsToken);
+
+  if (assetsIndex >= 0) {
+    return normalizedSourcePath.substring(0, assetsIndex + assetsToken.length) + relativePath;
+  }
+
+  const slashIndex = normalizedSourcePath.lastIndexOf("/");
+  if (slashIndex >= 0) {
+    return normalizedSourcePath.substring(0, slashIndex + 1) + relativePath;
+  }
+
+  return relativePath;
+}
+
+const getCardsControlPresetPath = (sourcePath?: string): string => {
+  return getAssetPath(sourcePath, "presets/" + cardsControlPresetFileName);
+}
 
 const getFileNameFromPath = (filePath: string): string => {
   let startIndex = 0;
@@ -59,7 +81,9 @@ export const handleApplyCardsLayout = (layoutData: CardsLayoutJson, filePath: st
 
   app.beginUndoGroup("Apply Cards Layout");
   try {
-    return applyCardsLayoutFromObject(layoutData, options);
+    const applyOptions: ApplyCardsLayoutOptions = options || {};
+    applyOptions.controlPresetPath = getCardsControlPresetPath(filePath);
+    return applyCardsLayoutFromObject(layoutData, applyOptions);
   } catch (e) {
     //@ts-ignore
     alert("Error in AE: " + e.toString());
@@ -76,6 +100,14 @@ export const handleSaveCardsLayout = (levelId: string) => {
   } catch (e) {
     //@ts-ignore
     return JSON.stringify({ error: e.toString() });
+  }
+};
+
+export const handleGetActiveCardsLayoutOrigin = () => {
+  try {
+    return getActiveCardsLayoutOrigin();
+  } catch (_) {
+    return null;
   }
 };
 
@@ -186,7 +218,7 @@ export const handleSetTableauLayer = () => {
 export const handleApplyJump = (presetPath: string, coinFilePath: string, sfxFolderPath?: string) => {
   app.beginUndoGroup("Apply Jump")
   try {
-    applyJumpOnSelectedlayers(presetPath, coinFilePath, sfxFolderPath)
+    applyJumpOnSelectedlayers(presetPath, coinFilePath, sfxFolderPath, getCardsControlPresetPath(presetPath))
   } catch (e) {
     alertError(e, 93, "handleApplyJump", "aeft.ts")
   } finally {
@@ -197,7 +229,7 @@ export const handleApplyJump = (presetPath: string, coinFilePath: string, sfxFol
 export const handleFlipStockCards = (expressionLibPath?: string, sfxFolderPath?: string) => {
   app.beginUndoGroup("Flip Stock Cards")
   try {
-    flipStockCards(undefined, expressionLibPath, sfxFolderPath)
+    flipStockCards(undefined, expressionLibPath, sfxFolderPath, getCardsControlPresetPath(expressionLibPath))
   } catch (e) {
     alertError(e, 114, "handleFlipStockCards", "aeft.ts")
   } finally {
@@ -227,10 +259,10 @@ export const handleTurnCards = () => {
   }
 }
 
-export const handleDuplicateCards = (numCopies: number, adjustPos: number[]) => {
+export const handleDuplicateCards = (numCopies: number, adjustPos: number[], controlPresetPath?: string) => {
   app.beginUndoGroup("Duplicate Cards")
   try {
-    duplicateCards(numCopies, adjustPos)
+    duplicateCards(numCopies, adjustPos, controlPresetPath)
   } catch (e) {
     alertError(e, 147, "handleDuplicateCards", "aeft.ts")
   } finally {
@@ -273,7 +305,7 @@ export const handleAddCard = (deckName: string, card: number, cardName: string, 
 
   app.beginUndoGroup("Add Card to precomp")
   try {
-    addCardToPrecomp(deckName, card, cardName)
+    addCardToPrecomp(deckName, card, cardName, getCardsControlPresetPath(filePath))
   } catch (e) {
     alertError(e, 179, "handleAddCard", "aeft.ts")
   } finally {
@@ -294,7 +326,14 @@ export const handleRestoreCardsAnimation = (
   sfxFolderPath?: string
 ) => {
   app.beginUndoGroup("Restore Cards Animation by Layout")
-  restoreCardsAnimation(presetPath, presetMatchName, expressionLibPath, coinFilePath, sfxFolderPath)
+  restoreCardsAnimation(
+    presetPath,
+    presetMatchName,
+    expressionLibPath,
+    coinFilePath,
+    sfxFolderPath,
+    getCardsControlPresetPath(presetPath)
+  )
   app.endUndoGroup()
 }
 
