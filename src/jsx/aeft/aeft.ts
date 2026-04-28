@@ -249,8 +249,8 @@ export const handleDistributeLayers = (xStep: number, yStep: number, reverse: bo
   }
 }
 
-export const getCompSize = () => {
-  const comp = requireActiveComp("Get Comp Size");
+export const getCompSize = (showAlert = true) => {
+  const comp = requireActiveComp("Get Comp Size", showAlert);
   if (!comp) return [0, 0]
 
   const { width, height } = comp;

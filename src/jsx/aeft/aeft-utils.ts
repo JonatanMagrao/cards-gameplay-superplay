@@ -55,7 +55,7 @@ export const getActiveComp = () => {
   return app.project.activeItem as CompItem;
 };
 
-export const requireActiveComp = (actionName?: string): CompItem | null => {
+export const requireActiveComp = (actionName?: string, showAlert = true): CompItem | null => {
   if (app.project.activeItem instanceof CompItem === false) {
     try {
       if (app.activeViewer) app.activeViewer.setActive();
@@ -66,8 +66,11 @@ export const requireActiveComp = (actionName?: string): CompItem | null => {
     return app.project.activeItem as CompItem;
   }
 
-  const actionText = actionName ? ` for "${actionName}"` : "";
-  alert(`No active composition found${actionText}.\nPlease open or select a composition and try again.`);
+  if (showAlert) {
+    const actionText = actionName ? ` for "${actionName}"` : "";
+    alert(`No active composition found${actionText}.\nPlease open or select a composition and try again.`);
+  }
+
   return null;
 };
 

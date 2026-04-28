@@ -4,8 +4,8 @@ import "./DuplicatePanel.scss";
 
 // --- CAMADA DE SERVIÇO (API) ---
 const aeService = {
-  getCompSize: async () => {
-    const result = await evalTS("getCompSize");
+  getCompSize: async (showAlert = true) => {
+    const result = await evalTS("getCompSize", showAlert);
     return typeof result === 'string' ? JSON.parse(result) : result;
   },
   distribute: (x: number, y: number, reverse: boolean) => 
@@ -27,8 +27,8 @@ export const DuplicatePanel = () => {
     let isMounted = true;
     const fetchSize = async () => {
       try {
-        const size = await aeService.getCompSize();
-        if (isMounted && Array.isArray(size) && size.length >= 2) {
+        const size = await aeService.getCompSize(false);
+        if (isMounted && Array.isArray(size) && size.length >= 2 && size[0] > 0 && size[1] > 0) {
           setLimits({ x: size[0] / 2, y: size[1] / 2 });
         }
       } catch (e) { console.error(e); }
