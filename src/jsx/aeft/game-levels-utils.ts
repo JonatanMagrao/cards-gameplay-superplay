@@ -21,13 +21,19 @@ export type CardsLayoutJson = {
 };
 
 export type ApplyCardsLayoutOptions = {
-  parentToCenterNull?: boolean;
+  autoFitLayout?: boolean;
 };
 
-type CreateCardLayersOptions = {
-  parentLayer?: AVLayer | null;
-  sourceResolution?: [number, number];
-  centerOnParent?: boolean;
+type LayoutBounds = {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+};
+
+const toFiniteNumber = (value: any, fallback = 0): number => {
+  const numberValue = Number(value);
+  return isNaN(numberValue) ? fallback : numberValue;
 };
 
 //@ts-ignore
@@ -65,68 +71,207 @@ export const roundToDecimals = (
   return Math.round(value * factor) / factor;
 };
 
-const getLayoutResolution = (layoutJson: CardsLayoutJson, comp: CompItem): [number, number] => {
-  if (layoutJson.resolution && layoutJson.resolution.length >= 2) {
-    return [layoutJson.resolution[0], layoutJson.resolution[1]];
-  }
-
-  return [comp.width, comp.height];
-};
-
 const getPositionForImport = (
-  position: [number, number] | [number, number, number],
-  options?: CreateCardLayersOptions
+  position: [number, number] | [number, number, number]
 ): [number, number, number] => {
   const zValue = position.length > 2 && typeof position[2] === "number" ? position[2] : 0;
-
-  if (options && options.centerOnParent && options.sourceResolution) {
-    return [
-      position[0] - (options.sourceResolution[0] / 2),
-      position[1] - (options.sourceResolution[1] / 2),
-      zValue
-    ];
-  }
 
   return [position[0], position[1], zValue];
 };
 
-const createLayoutTransformControl = (
-  comp: CompItem,
-  sourceResolution: [number, number]
-): AVLayer => {
-  const controlLayer = comp.layers.addNull() as AVLayer;
-  controlLayer.name = `Layout Transform Control (${sourceResolution[0]}x${sourceResolution[1]})`;
-  controlLayer.label = 14;
-  controlLayer.threeDLayer = true;
-  controlLayer.shy = false;
-  controlLayer.locked = false;
-  controlLayer.enabled = true;
-  controlLayer.guideLayer = false;
+const cloneNumberTuple = (values: number[] | undefined, fallback: number[]): number[] => {
+  const cloned: number[] = [];
+  const source = values || fallback;
 
-  const positionProp = getLayerProp(controlLayer, posPropPath) as Property;
-  positionProp.setValue([comp.width / 2, comp.height / 2, 0]);
-
-  return controlLayer;
-};
-
-const revealLayoutTransformControl = (comp: CompItem, controlLayer: AVLayer): void => {
-  controlLayer.locked = false;
-  controlLayer.shy = false;
-  controlLayer.enabled = true;
-  controlLayer.guideLayer = false;
-  controlLayer.moveToBeginning();
-
-  for (let i = 1; i <= comp.numLayers; i++) {
-    comp.layer(i).selected = false;
+  for (let i = 0; i < source.length; i++) {
+    cloned.push(toFiniteNumber(source[i], fallback[Math.min(i, fallback.length - 1)] || 0));
   }
 
-  controlLayer.selected = true;
+  return cloned;
+};
+
+const cloneMarkers = (markers: [number, number, string][] | undefined): [number, number, string][] => {
+  const cloned: [number, number, string][] = [];
+  if (!markers) return cloned;
+
+  for (let i = 0; i < markers.length; i++) {
+    const marker = markers[i];
+    if (!marker || marker.length !== 3) continue;
+    cloned.push([
+      toFiniteNumber(marker[0], 0),
+      toFiniteNumber(marker[1], 0),
+      String(marker[2] || "")
+    ]);
+  }
+
+  return cloned;
+};
+
+const cloneCardLayout = (cardLayout: CardLayout): CardLayout => {
+  return {
+    deckName: cardLayout.deckName,
+    position: cloneNumberTuple(cardLayout.position as number[], [0, 0]) as any,
+    scale: cloneNumberTuple(cardLayout.scale as number[], [100, 100]) as any,
+    rotation: toFiniteNumber(cardLayout.rotation, 0),
+    name: cardLayout.name,
+    isTurned: !!cardLayout.isTurned,
+    label: toFiniteNumber(cardLayout.label, 0),
+    card: toFiniteNumber(cardLayout.card, 0),
+    markers: cloneMarkers(cardLayout.markers)
+  };
+};
+
+const expandBounds = (bounds: LayoutBounds | null, cardBounds: LayoutBounds): LayoutBounds => {
+  if (!bounds) {
+    return {
+      minX: cardBounds.minX,
+      minY: cardBounds.minY,
+      maxX: cardBounds.maxX,
+      maxY: cardBounds.maxY
+    };
+  }
+
+  return {
+    minX: Math.min(bounds.minX, cardBounds.minX),
+    minY: Math.min(bounds.minY, cardBounds.minY),
+    maxX: Math.max(bounds.maxX, cardBounds.maxX),
+    maxY: Math.max(bounds.maxY, cardBounds.maxY)
+  };
+};
+
+const getCardLayoutBounds = (cardLayout: CardLayout): LayoutBounds | null => {
+  if (!cardLayout.deckName) return null;
+
+  const deckItem = getDeckItem(cardLayout.deckName);
+  if (!deckItem) return null;
+
+  const itemWidth = toFiniteNumber((deckItem as any).width, 0);
+  const itemHeight = toFiniteNumber((deckItem as any).height, 0);
+  if (itemWidth <= 0 || itemHeight <= 0) return null;
+
+  const position = cardLayout.position as number[];
+  const scale = cardLayout.scale as number[];
+  const x = toFiniteNumber(position && position.length > 0 ? position[0] : 0, 0);
+  const y = toFiniteNumber(position && position.length > 1 ? position[1] : 0, 0);
+  const scaleX = Math.abs(toFiniteNumber(scale && scale.length > 0 ? scale[0] : 100, 100)) / 100;
+  const scaleY = Math.abs(toFiniteNumber(scale && scale.length > 1 ? scale[1] : 100, 100)) / 100;
+  const width = itemWidth * scaleX;
+  const height = itemHeight * scaleY;
+  const rotation = toFiniteNumber(cardLayout.rotation, 0) * Math.PI / 180;
+  const cos = Math.abs(Math.cos(rotation));
+  const sin = Math.abs(Math.sin(rotation));
+  const rotatedWidth = (width * cos) + (height * sin);
+  const rotatedHeight = (width * sin) + (height * cos);
+  const halfWidth = rotatedWidth / 2;
+  const halfHeight = rotatedHeight / 2;
+
+  return {
+    minX: x - halfWidth,
+    minY: y - halfHeight,
+    maxX: x + halfWidth,
+    maxY: y + halfHeight
+  };
+};
+
+const getCardsLayoutBounds = (cardsLayout: CardLayout[]): LayoutBounds | null => {
+  let bounds: LayoutBounds | null = null;
+
+  for (let i = 0; i < cardsLayout.length; i++) {
+    const cardBounds = getCardLayoutBounds(cardsLayout[i]);
+    if (cardBounds) bounds = expandBounds(bounds, cardBounds);
+  }
+
+  return bounds;
+};
+
+const transformCardLayoutToFit = (
+  cardLayout: CardLayout,
+  layoutCenterX: number,
+  layoutCenterY: number,
+  targetCenterX: number,
+  targetCenterY: number,
+  fitScale: number
+): CardLayout => {
+  const transformed = cloneCardLayout(cardLayout);
+  const position = cardLayout.position as number[];
+  const scale = cardLayout.scale as number[];
+  const x = toFiniteNumber(position && position.length > 0 ? position[0] : 0, 0);
+  const y = toFiniteNumber(position && position.length > 1 ? position[1] : 0, 0);
+  const z = position && position.length > 2 ? toFiniteNumber(position[2], 0) : 0;
+  const transformedScale: number[] = [];
+
+  transformed.position = [
+    targetCenterX + ((x - layoutCenterX) * fitScale),
+    targetCenterY + ((y - layoutCenterY) * fitScale),
+    z
+  ];
+
+  for (let i = 0; i < scale.length; i++) {
+    const fallback = i < 2 ? 100 : scale[i];
+    transformedScale.push(i < 2
+      ? toFiniteNumber(scale[i], fallback) * fitScale
+      : toFiniteNumber(scale[i], fallback)
+    );
+  }
+
+  if (transformedScale.length === 0) {
+    transformedScale.push(100 * fitScale);
+    transformedScale.push(100 * fitScale);
+  } else if (transformedScale.length === 1) {
+    transformedScale.push(100 * fitScale);
+  }
+
+  transformed.scale = transformedScale as any;
+
+  return transformed;
+};
+
+const fitCardsLayoutToComp = (
+  cardsLayout: CardLayout[],
+  comp: CompItem
+): CardLayout[] => {
+  const bounds = getCardsLayoutBounds(cardsLayout);
+  if (!bounds) {
+    const cloned: CardLayout[] = [];
+    for (let i = 0; i < cardsLayout.length; i++) cloned.push(cloneCardLayout(cardsLayout[i]));
+    return cloned;
+  }
+
+  const layoutWidth = Math.max(bounds.maxX - bounds.minX, 1);
+  const layoutHeight = Math.max(bounds.maxY - bounds.minY, 1);
+  const widthScale = comp.width / layoutWidth;
+  const heightScale = comp.height / layoutHeight;
+  const fitScale = Math.min(widthScale, heightScale);
+
+  if (isNaN(fitScale) || fitScale <= 0) {
+    const cloned: CardLayout[] = [];
+    for (let i = 0; i < cardsLayout.length; i++) cloned.push(cloneCardLayout(cardsLayout[i]));
+    return cloned;
+  }
+
+  const layoutCenterX = bounds.minX + (layoutWidth / 2);
+  const layoutCenterY = bounds.minY + (layoutHeight / 2);
+  const targetCenterX = comp.width / 2;
+  const targetCenterY = comp.height / 2;
+  const fitted: CardLayout[] = [];
+
+  for (let i = 0; i < cardsLayout.length; i++) {
+    fitted.push(transformCardLayoutToFit(
+      cardsLayout[i],
+      layoutCenterX,
+      layoutCenterY,
+      targetCenterX,
+      targetCenterY,
+      fitScale
+    ));
+  }
+
+  return fitted;
 };
 
 export const createCardLayersFromLayout = (
   cardsLayout: CardLayout[],
-  comp: CompItem,
-  options?: CreateCardLayersOptions
+  comp: CompItem
 ): void => {
   let previousLayer: AVLayer | null = null;
 
@@ -143,16 +288,14 @@ export const createCardLayersFromLayout = (
     const cardLayer = comp.layers.add(deckItem) as AVLayer;
 
     cardLayer.threeDLayer = true;
-    if (options && options.parentLayer) {
-      cardLayer.parent = options.parentLayer;
-    }
+    cardLayer.parent = null;
 
     // Transforms
     const posValue = getLayerProp(cardLayer, posPropPath)
     const scaleValue = getLayerProp(cardLayer, scalePropPath)
     const rotValue = getLayerProp(cardLayer, zRotPropPath)
 
-    posValue.setValue(getPositionForImport(cardLayout.position, options))
+    posValue.setValue(getPositionForImport(cardLayout.position))
     scaleValue.setValue(cardLayout.scale)
     rotValue.setValue(cardLayout.rotation)
 
@@ -212,11 +355,10 @@ export const applyCardsLayoutFromObject = (layoutJson: CardsLayoutJson, options?
 
   if (!comp) return "No active composition found.";
   if (!layoutJson.cards) return "Invalid JSON: missing 'cards' array.";
-  const sourceResolution = getLayoutResolution(layoutJson, comp);
-  const parentToCenterNull = !!(options && options.parentToCenterNull);
+  const autoFitLayout = !!(options && options.autoFitLayout);
 
   // Warn when the saved layout resolution differs from the active comp.
-  if (layoutJson.resolution && !parentToCenterNull) {
+  if (layoutJson.resolution && !autoFitLayout) {
     const [w, h] = layoutJson.resolution;
     if (w !== comp.width || h !== comp.height) {
       alert(`Warning: Layout resolution (${w}x${h}) differs from Comp (${comp.width}x${comp.height}).`);
@@ -224,25 +366,17 @@ export const applyCardsLayoutFromObject = (layoutJson: CardsLayoutJson, options?
   }
 
   const compSnapshot = captureCompState(comp);
-  let parentLayer: AVLayer | null = null;
 
   try {
     resetDeckCache();
+    const cardsLayout = autoFitLayout
+      ? fitCardsLayoutToComp(layoutJson.cards, comp)
+      : layoutJson.cards;
 
-    if (parentToCenterNull) {
-      parentLayer = createLayoutTransformControl(comp, sourceResolution);
-    }
-
-    createCardLayersFromLayout(layoutJson.cards, comp, {
-      parentLayer,
-      sourceResolution,
-      centerOnParent: parentLayer !== null
-    });
+    createCardLayersFromLayout(cardsLayout, comp);
   } finally {
     restoreCompState(comp, compSnapshot);
   }
-
-  if (parentLayer) revealLayoutTransformControl(comp, parentLayer);
 
   return "OK";
 };

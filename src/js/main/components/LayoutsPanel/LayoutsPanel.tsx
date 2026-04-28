@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fs, path, os } from "../../../lib/cep/node";
-import { evalTS } from "../../../lib/utils/bolt";
+import { csi, evalFile, evalTS } from "../../../lib/utils/bolt";
 import ChevronIcon from "../../../assets/icons/chevron.svg";
 import "./LayoutsPanel.scss";
 
@@ -247,6 +247,20 @@ const getLevelJsonPath = (levelFolderPath: string, preferredResolution: string):
   return null;
 };
 
+const reloadExtendScript = async () => {
+  if (!window.cep) return;
+
+  const extRoot = csi.getSystemPath("extension").replace(/\\/g, "/");
+  const jsxSrc = `${extRoot}/jsx/index.js`;
+  const jsxBinSrc = `${extRoot}/jsx/index.jsxbin`;
+
+  if (fs.existsSync(jsxSrc)) {
+    await evalFile(jsxSrc);
+  } else if (fs.existsSync(jsxBinSrc)) {
+    await evalFile(jsxBinSrc);
+  }
+};
+
 type Props = {
   baseDirDefault?: string;
   title?: string;
@@ -379,9 +393,10 @@ export const LayoutsPanel: React.FC<Props> = ({
       const raw = fs.readFileSync(layoutJsonPath.filePath, "utf-8");
       const layoutData = JSON.parse(raw);
       const applyOptions = {
-        parentToCenterNull: !layoutJsonPath.isExactResolution
+        autoFitLayout: !layoutJsonPath.isExactResolution
       };
 
+      await reloadExtendScript();
       const res = await evalTS("handleApplyCardsLayout", layoutData, cardProject, applyOptions);
       if (res !== "OK" && res !== undefined) alert(`Error applying: ${res}`);
 
