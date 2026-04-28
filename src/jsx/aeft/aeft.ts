@@ -77,6 +77,15 @@ export const getCompResolution = () => {
   return getActiveCompResolution();
 }
 
+export const handleShowAlert = (message: string) => {
+  alert(String(message || ""));
+  return "OK";
+}
+
+export const handleShowConfirm = (message: string) => {
+  return confirm(String(message || ""));
+}
+
 export const handleApplyCardsLayout = (layoutData: CardsLayoutJson, filePath: string, options?: ApplyCardsLayoutOptions) => {
 
   importFilesAndCompsForCards(filePath, cardsFolderName)
@@ -181,6 +190,117 @@ export const handleOpenLayoutPreview = (imagePath: string) => {
   } catch (e) {
     //@ts-ignore
     return "Could not open preview: " + e.toString();
+  }
+}
+
+export const handleShowSaveLayoutDialog = (imagePath: string, defaults?: { name?: string; tags?: string; description?: string; title?: string }) => {
+  try {
+    const imageFile = new File(imagePath);
+    if (!imageFile.exists) return { cancelled: true, error: "Preview image not found: " + imagePath };
+
+    const initialValues = defaults || {};
+    const previewImage = ScriptUI.newImage(imageFile.fsName);
+    const imageWidth = getDimensionValue(previewImage.size, "width", 0, 512);
+    const imageHeight = getDimensionValue(previewImage.size, "height", 1, 512);
+    const largestImageSide = Math.max(imageWidth, imageHeight);
+    const previewScale = largestImageSide > 0 ? 300 / largestImageSide : 1;
+    const previewWidth = Math.max(260, Math.round(imageWidth * previewScale));
+    const previewHeight = Math.max(180, Math.round(imageHeight * previewScale));
+
+    const dialog = new Window("dialog", String(initialValues.title || "Save New Layout"), undefined, { resizeable: true });
+    dialog.orientation = "column";
+    dialog.alignChildren = ["fill", "top"];
+    dialog.margins = 12;
+    dialog.spacing = 10;
+
+    const previewCanvas = dialog.add("group");
+    previewCanvas.alignment = ["fill", "top"];
+    previewCanvas.preferredSize = [previewWidth, previewHeight];
+    previewCanvas.minimumSize = [240, 160];
+
+    previewCanvas.onDraw = function () {
+      const canvasWidth = getDimensionValue(previewCanvas.size, "width", 0, previewWidth);
+      const canvasHeight = getDimensionValue(previewCanvas.size, "height", 1, previewHeight);
+      const scaleX = canvasWidth / imageWidth;
+      const scaleY = canvasHeight / imageHeight;
+      const drawScale = Math.min(scaleX, scaleY);
+      const drawWidth = Math.max(1, Math.round(imageWidth * drawScale));
+      const drawHeight = Math.max(1, Math.round(imageHeight * drawScale));
+      const drawX = Math.round((canvasWidth - drawWidth) / 2);
+      const drawY = Math.round((canvasHeight - drawHeight) / 2);
+
+      previewCanvas.graphics.drawImage(previewImage, drawX, drawY, drawWidth, drawHeight);
+    };
+
+    const addInputRow = function (label: string, defaultValue: string, multiline?: boolean) {
+      const group = dialog.add("group");
+      group.orientation = "column";
+      group.alignChildren = ["fill", "top"];
+      group.spacing = 4;
+      group.add("statictext", undefined, label);
+
+      const input = group.add("edittext", undefined, defaultValue || "", multiline ? { multiline: true, scrolling: true } : undefined);
+      input.alignment = ["fill", "top"];
+      input.preferredSize = multiline ? [previewWidth, 70] : [previewWidth, 24];
+
+      return input;
+    };
+
+    const nameInput = addInputRow("Level name", String(initialValues.name || ""));
+    const tagsInput = addInputRow("Tags (comma separated)", String(initialValues.tags || ""));
+    const descriptionInput = addInputRow("Description", String(initialValues.description || ""), true);
+
+    const buttons = dialog.add("group");
+    buttons.orientation = "row";
+    buttons.alignment = ["right", "top"];
+    buttons.spacing = 8;
+
+    const cancelButton = buttons.add("button", undefined, "Cancel", { name: "cancel" });
+    const saveButton = buttons.add("button", undefined, "Save", { name: "ok" });
+
+    let result = {
+      cancelled: true,
+      name: "",
+      tags: "",
+      description: ""
+    };
+
+    cancelButton.onClick = function () {
+      dialog.close(0);
+    };
+
+    saveButton.onClick = function () {
+      const levelName = String(nameInput.text || "").replace(/^\s+|\s+$/g, "");
+      if (!levelName) {
+        alert("Type a level name first.");
+        return;
+      }
+
+      result = {
+        cancelled: false,
+        name: levelName,
+        tags: String(tagsInput.text || ""),
+        description: String(descriptionInput.text || "")
+      };
+      dialog.close(1);
+    };
+
+    const redrawPreview = function () {
+      try {
+        dialog.layout.resize();
+      } catch (_) { }
+    };
+
+    dialog.onResize = redrawPreview;
+    dialog.onResizing = redrawPreview;
+
+    dialog.center();
+    const dialogResult = dialog.show();
+
+    return dialogResult === 1 ? result : { cancelled: true };
+  } catch (e) {
+    //@ts-ignore
+    return { cancelled: true, error: "Could not open save dialog: " + e.toString() };
   }
 }
 

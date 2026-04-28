@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { csi, subscribeBackgroundColor } from "../lib/utils/bolt";
 import "./main.scss";
 
@@ -24,6 +24,7 @@ export const App = () => {
   const [coinValue, setCoinValue] = useState("02"); // NOVO: Estado da moeda morando no App
 
   const [tab, setTab] = useState<TabKey>("cards");
+  const [layoutsSettingsOpen, setLayoutsSettingsOpen] = useState(false);
   
   const projectRelPath = "disney_solitaire_cards.aepx"
   const assets = `${csi.getSystemPath("extension")}/assets`;
@@ -34,19 +35,25 @@ export const App = () => {
     if (window.cep) subscribeBackgroundColor(setBgColor);
   }, []);
 
-  const tabTitle = useMemo(() => {
-    return tab === "cards" ? "Cards & Actions" : "Layouts";
-  }, [tab]);
-
   return (
     <div className="app" style={{ backgroundColor: bgColor }} spellCheck={false}>
       <header className="app-header">
         <div className="panel">
           {/* Header + Tabs */}
           <div className="panel-tabs-header">
-            <h1 className="panel-title">{tabTitle}</h1>
+            {tab === "layouts" && (
+              <button
+                type="button"
+                className="panel-settings-button"
+                title="Open Folder Path Setup"
+                onClick={() => setLayoutsSettingsOpen(open => !open)}
+                aria-label="Open Folder Path Setup"
+              >
+                {"\u2699"}
+              </button>
+            )}
 
-            <div className="panel-tabs" role="tablist" aria-label="Main tabs">
+            <div className={`panel-tabs ${tab === "layouts" ? "has-settings" : ""}`} role="tablist" aria-label="Main tabs">
               <button
                 type="button"
                 className={`panel-tab ${tab === "cards" ? "is-active" : ""}`}
@@ -87,7 +94,11 @@ export const App = () => {
               <DuplicatePanel controlPresetPath={cardsControlPresetPath} />
             </>
           ) : (
-            <LayoutsPanel baseDirDefault={getDefaultCardsLevelsDir()} cardProject={cardProject} />
+            <LayoutsPanel
+              baseDirDefault={getDefaultCardsLevelsDir()}
+              cardProject={cardProject}
+              settingsOpen={layoutsSettingsOpen}
+            />
           )}
         </div>
       </header>

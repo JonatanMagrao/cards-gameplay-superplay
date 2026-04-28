@@ -17,6 +17,8 @@ export type CardLayout = {
 
 export type CardsLayoutJson = {
   level: string;
+  description?: string;
+  tags?: string[];
   resolution: [number, number];
   cards: CardLayout[];
 };

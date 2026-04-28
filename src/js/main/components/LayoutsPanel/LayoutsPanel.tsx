@@ -2,6 +2,14 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { fs, path, os } from "../../../lib/cep/node";
 import { csi, evalFile, evalTS } from "../../../lib/utils/bolt";
 import ChevronIcon from "../../../assets/icons/chevron.svg";
+import {
+  LayoutIndexEntry,
+  parseTags,
+  scanLayoutEntries,
+  setLayoutFavorite,
+  syncLayoutIndex,
+  upsertLayoutIndexEntry
+} from "./layoutIndex";
 import "./LayoutsPanel.scss";
 
 // --- CONFIGURAÇÃO DE PERSISTÊNCIA ---
@@ -11,6 +19,8 @@ const CONFIG_PATH = path.join(HOME_DIR, CONFIG_FILE_NAME);
 const THUMBNAIL_MAX_SIDE = 512;
 const THUMBNAIL_JPEG_QUALITY = 0.82;
 const LAYOUT_ORIGIN_SCHEMA = "cards-gameplay.layout-origin.v1";
+const CANONICAL_LAYOUT_JSON_NAME = "layout.json";
+const CANONICAL_THUMBNAIL_NAME = "thumbnail.jpg";
 
 // Helpers
 const loadConfig = () => {
@@ -37,12 +47,22 @@ const pad3 = (v: any) => {
   return s.length >= 3 ? s : ("000" + s).slice(-3);
 };
 
+const sanitizeLevelFolderToken = (value: string): string => {
+  return safeTrim(value)
+    .replace(/\\/g, "/")
+    .replace(/[<>:"/|?*\x00-\x1F]/g, "-")
+    .replace(/\s+/g, "-")
+    .replace(/_+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
+};
+
 const normalizeLevelFolderNameUI = (levelId: string): string => {
-  const raw = safeTrim(levelId);
+  const raw = sanitizeLevelFolderToken(levelId);
   const m = raw.match(/^(\d+)(?:[_-](.+))?$/);
   if (!m) return `lvl_${raw.replace(/_/g, "-")}`;
   const num = pad3(m[1]);
-  const name = safeTrim(m[2] || "");
+  const name = sanitizeLevelFolderToken(m[2] || "");
   return name ? `lvl_${num}-${name}` : `lvl_${num}`;
 };
 
@@ -64,6 +84,16 @@ const getImageObjectUrl = (imagePath: string): string | null => {
 const deleteFileIfExists = (filePath: string) => {
   try {
     if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  } catch (e) {
+    console.error(e);
+  }
+};
+
+const deleteFolderIfEmpty = (folderPath: string) => {
+  try {
+    if (!folderPath || !fs.existsSync(folderPath)) return;
+    const entries = fs.readdirSync(folderPath) as string[];
+    if (entries.length === 0) fs.rmdirSync(folderPath);
   } catch (e) {
     console.error(e);
   }
@@ -114,7 +144,7 @@ const convertImageToJpeg = (
         const ctx = canvas.getContext("2d");
         if (!ctx) throw new Error("Could not create thumbnail canvas.");
 
-        ctx.fillStyle = "#171a20";
+        ctx.fillStyle = "#838383";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
@@ -174,6 +204,33 @@ const getLevelPreviewPath = (rootPath: string, levelFolder: string, preferredRes
   return null;
 };
 
+const getLevelFoldersFromRoot = (rootPath: string): string[] => {
+  if (!rootPath || !fs.existsSync(rootPath)) return [];
+
+  try {
+    const entries = fs.readdirSync(rootPath) as string[];
+    const folders = entries.filter((name) => {
+      const full = `${rootPath}/${name}`.replace(/\\/g, "/");
+      try {
+        return fs.statSync(full).isDirectory() && /^lvl_/.test(name);
+      } catch { return false; }
+    });
+    folders.sort();
+    return folders;
+  } catch (_) {
+    return [];
+  }
+};
+
+const applyLayoutEntries = (
+  entries: LayoutIndexEntry[],
+  setLayoutEntries: React.Dispatch<React.SetStateAction<LayoutIndexEntry[]>>,
+  setLevels: React.Dispatch<React.SetStateAction<string[]>>
+) => {
+  setLayoutEntries(entries);
+  setLevels(entries.map(entry => entry.folder));
+};
+
 type LevelJsonPath = {
   filePath: string;
   isExactResolution: boolean;
@@ -188,6 +245,14 @@ type CardsLayoutOriginMetadata = {
   appliedAsFallback?: boolean;
   rootPath?: string;
   levelFolderPath?: string;
+};
+
+type SaveLayoutDialogResult = {
+  cancelled?: boolean;
+  name?: string;
+  tags?: string;
+  description?: string;
+  title?: string;
 };
 
 const normalizePath = (value: string): string => String(value || "").replace(/\\/g, "/");
@@ -236,6 +301,15 @@ const parseResolutionString = (value: string): [number, number] | null => {
   if (!width || !height) return null;
 
   return [width, height];
+};
+
+const getLayoutResolutionString = (layoutData: any): string => {
+  if (!layoutData || !layoutData.resolution || layoutData.resolution.length < 2) return "";
+  return `${layoutData.resolution[0]}x${layoutData.resolution[1]}`;
+};
+
+const getLayoutCardCount = (layoutData: any): number => {
+  return layoutData && layoutData.cards && layoutData.cards.length ? layoutData.cards.length : 0;
 };
 
 const getResolutionFallbackScore = (candidate: string, preferred: string): number => {
@@ -310,24 +384,44 @@ const reloadExtendScript = async () => {
   }
 };
 
+const showHostAlert = async (message: any) => {
+  const text = String(message || "");
+  try {
+    await reloadExtendScript();
+    await evalTS("handleShowAlert", text);
+  } catch (e) {
+    window.alert(text);
+  }
+};
+
+const showHostConfirm = async (message: any): Promise<boolean> => {
+  const text = String(message || "");
+  try {
+    await reloadExtendScript();
+    return await evalTS("handleShowConfirm", text);
+  } catch (e) {
+    return window.confirm(text);
+  }
+};
+
 type Props = {
   baseDirDefault?: string;
-  title?: string;
-  cardProject: string
+  cardProject: string;
+  settingsOpen?: boolean;
 };
 
 export const LayoutsPanel: React.FC<Props> = ({
   baseDirDefault = "D:/Downloads/cardsLevels",
-  title = "Layouts",
-  cardProject
+  cardProject,
+  settingsOpen = false
 }) => {
   const [baseDir, setBaseDir] = useState(baseDirDefault);
   const [persistentSavePath, setPersistentSavePath] = useState<string | null>(null);
   const [levels, setLevels] = useState<string[]>([]);
+  const [layoutEntries, setLayoutEntries] = useState<LayoutIndexEntry[]>([]);
   const [query, setQuery] = useState("");
   const [selectedFolder, setSelectedFolder] = useState("");
   const [saveLevelId, setSaveLevelId] = useState("");
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [compResolution, setCompResolution] = useState("");
   const [layoutPreviewSrc, setLayoutPreviewSrc] = useState<string | null>(null);
   const [layoutPreviewPath, setLayoutPreviewPath] = useState("");
@@ -362,30 +456,74 @@ export const LayoutsPanel: React.FC<Props> = ({
     try {
       if (!fs.existsSync(baseDir)) {
         setLevels([]);
+        setLayoutEntries([]);
         setSelectedFolder("");
         return;
       }
-      const entries = fs.readdirSync(baseDir) as string[];
-      const folders = entries.filter((name) => {
-        const full = `${baseDir}/${name}`.replace(/\\/g, "/");
-        try {
-          return fs.statSync(full).isDirectory() && /^lvl_/.test(name);
-        } catch { return false; }
-      });
-      folders.sort();
-      setLevels(folders);
+
+      syncLayoutIndex(baseDir)
+        .then(entries => {
+          if (entries.length) {
+            applyLayoutEntries(entries, setLayoutEntries, setLevels);
+            return;
+          }
+
+          applyLayoutEntries(scanLayoutEntries(baseDir), setLayoutEntries, setLevels);
+        })
+        .catch(error => {
+          console.error(error);
+          const entries = scanLayoutEntries(baseDir);
+          if (entries.length) {
+            applyLayoutEntries(entries, setLayoutEntries, setLevels);
+            return;
+          }
+
+          setLayoutEntries([]);
+          setLevels(getLevelFoldersFromRoot(baseDir));
+        });
     } catch (e) {
       setLevels([]);
+      setLayoutEntries([]);
     }
   }, [baseDir]);
 
   useEffect(() => { refreshLevels(); }, [refreshLevels]);
 
+  useEffect(() => {
+    if (settingsOpen) refreshLevels();
+  }, [refreshLevels, settingsOpen]);
+
   const filtered = useMemo(() => {
     const q = safeTrim(query).toLowerCase();
     if (!q) return levels;
-    return levels.filter((x) => x.toLowerCase().includes(q));
-  }, [levels, query]);
+
+    const tokens = q.split(/[\s,]+/).filter(Boolean);
+
+    return levels.filter((folder) => {
+      const entry = layoutEntries.find(item => item.folder === folder);
+      const searchable = [
+        folder,
+        folder.replace(/^lvl_/, ""),
+        entry ? entry.name : "",
+        entry ? entry.description : "",
+        entry ? entry.sourceResolution : "",
+        entry ? entry.tags.join(" ") : "",
+      ].join(" ").toLowerCase();
+
+      for (let i = 0; i < tokens.length; i++) {
+        if (searchable.indexOf(tokens[i]) < 0) return false;
+      }
+
+      return true;
+    });
+  }, [layoutEntries, levels, query]);
+
+  const selectedLayoutEntry = useMemo(() => {
+    for (let i = 0; i < layoutEntries.length; i++) {
+      if (layoutEntries[i].folder === selectedFolder) return layoutEntries[i];
+    }
+    return null;
+  }, [layoutEntries, selectedFolder]);
 
   useEffect(() => {
     if (!selectedFolder && filtered.length) setSelectedFolder(filtered[0]);
@@ -394,7 +532,10 @@ export const LayoutsPanel: React.FC<Props> = ({
 
   useEffect(() => {
     const rootPath = (persistentSavePath || baseDir || "").replace(/\\/g, "/");
-    const previewPath = getLevelPreviewPath(rootPath, selectedFolder, compResolution);
+    const indexedPreviewPath = selectedLayoutEntry && selectedLayoutEntry.thumbnailPath && fs.existsSync(selectedLayoutEntry.thumbnailPath)
+      ? selectedLayoutEntry.thumbnailPath
+      : "";
+    const previewPath = indexedPreviewPath || getLevelPreviewPath(rootPath, selectedFolder, compResolution);
     const objectUrl = previewPath ? getImageObjectUrl(previewPath) : null;
 
     setLayoutPreviewSrc(objectUrl);
@@ -403,7 +544,7 @@ export const LayoutsPanel: React.FC<Props> = ({
     return () => {
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [baseDir, persistentSavePath, selectedFolder, compResolution, thumbnailVersion]);
+  }, [baseDir, persistentSavePath, selectedFolder, selectedLayoutEntry, compResolution, thumbnailVersion]);
 
   useEffect(() => {
     const menu = levelMenuRef.current;
@@ -424,7 +565,10 @@ export const LayoutsPanel: React.FC<Props> = ({
   // APPLY
   // -------------------------
   const handleApply = useCallback(async () => {
-    if (!selectedFolder) return alert("Select a level folder first.");
+    if (!selectedFolder) {
+      await showHostAlert("Select a level folder first.");
+      return;
+    }
 
     let rootPath = persistentSavePath || baseDir;
     rootPath = rootPath.replace(/\\/g, "/");
@@ -432,45 +576,60 @@ export const LayoutsPanel: React.FC<Props> = ({
     const levelFolder = `${rootPath}/${selectedFolder}`;
 
     const resolution = await evalTS("getCompResolution");
-    if (!resolution) return alert("No active comp found.");
+    if (!resolution) {
+      await showHostAlert("No active comp found.");
+      return;
+    }
     setCompResolution(String(resolution));
 
-    const layoutJsonPath = getLevelJsonPath(levelFolder, String(resolution));
-    if (!layoutJsonPath) return alert(`No layout JSON found in: ${levelFolder}`);
+    const indexedJsonPath = selectedLayoutEntry && selectedLayoutEntry.jsonPath && fs.existsSync(selectedLayoutEntry.jsonPath)
+      ? selectedLayoutEntry.jsonPath
+      : "";
+    const fallbackJsonPath = indexedJsonPath ? null : getLevelJsonPath(levelFolder, String(resolution));
+    const layoutJsonFilePath = indexedJsonPath || (fallbackJsonPath ? fallbackJsonPath.filePath : "");
+
+    if (!layoutJsonFilePath) {
+      await showHostAlert(`No layout JSON found in: ${levelFolder}`);
+      return;
+    }
 
     try {
-      const raw = fs.readFileSync(layoutJsonPath.filePath, "utf-8");
+      const raw = fs.readFileSync(layoutJsonFilePath, "utf-8");
       const layoutData = JSON.parse(raw);
       const targetResolution = String(resolution);
+      const sourceResolution = layoutData && layoutData.resolution
+        ? `${layoutData.resolution[0]}x${layoutData.resolution[1]}`
+        : "";
+      const isExactResolution = sourceResolution === targetResolution;
       const applyOptions = {
-        autoFitLayout: !layoutJsonPath.isExactResolution,
+        autoFitLayout: !isExactResolution,
         layoutOrigin: {
           schema: LAYOUT_ORIGIN_SCHEMA,
           levelFolder: selectedFolder,
           rootPath,
           levelFolderPath: levelFolder,
-          sourceJson: getFileNameFromPath(layoutJsonPath.filePath),
-          targetJson: `${targetResolution}.json`,
+          sourceJson: getFileNameFromPath(layoutJsonFilePath),
+          targetJson: getFileNameFromPath(layoutJsonFilePath),
           targetResolution,
-          appliedAsFallback: !layoutJsonPath.isExactResolution
+          appliedAsFallback: !isExactResolution
         }
       };
 
       await reloadExtendScript();
       const res = await evalTS("handleApplyCardsLayout", layoutData, cardProject, applyOptions);
-      if (res !== "OK" && res !== undefined) alert(`Error applying: ${res}`);
+      if (res !== "OK" && res !== undefined) await showHostAlert(`Error applying: ${res}`);
 
     } catch (e) {
-      alert("Error reading JSON file.");
+      await showHostAlert("Error reading JSON file.");
       console.error(e);
     }
-  }, [baseDir, cardProject, selectedFolder, persistentSavePath]);
+  }, [baseDir, cardProject, selectedFolder, selectedLayoutEntry, persistentSavePath]);
 
 
   // -------------------------
   // SAVE
   // -------------------------
-  const handleSave = useCallback(async () => {
+  const handleSaveLegacy = useCallback(async () => {
     await reloadExtendScript();
 
     let activeLayoutOrigin: CardsLayoutOriginMetadata | null = null;
@@ -484,11 +643,14 @@ export const LayoutsPanel: React.FC<Props> = ({
 
     const linkedLevelFolder = activeLayoutOrigin ? String(activeLayoutOrigin.levelFolder || "") : "";
     const lvlRaw = linkedLevelFolder ? getLevelLabelFromFolderName(linkedLevelFolder) : safeTrim(saveLevelId);
-    if (!lvlRaw) return alert("Type a level ID first (e.g. 001-Boss).");
+    if (!lvlRaw) {
+      await showHostAlert("Type a level ID first (e.g. 001-Boss).");
+      return;
+    }
 
-    const selectTargetRoot = (): string | null => {
+    const selectTargetRoot = async (): Promise<string | null> => {
       if (!window.cep) {
-        alert("CEP API unavailable.");
+        await showHostAlert("CEP API unavailable.");
         return null;
       }
       const result = window.cep.fs.showOpenDialogEx(false, true, "Select Save Folder", baseDir, []);
@@ -497,7 +659,7 @@ export const LayoutsPanel: React.FC<Props> = ({
 
       let selectedTarget = result.data[0];
       if (!selectedTarget) {
-        alert("Operation cancelled.")
+        await showHostAlert("Operation cancelled.")
         return null
       }
       selectedTarget = normalizePath(selectedTarget);
@@ -519,7 +681,7 @@ export const LayoutsPanel: React.FC<Props> = ({
       if (!levelFolderPath) {
         let targetRoot = persistentSavePath ? normalizePath(persistentSavePath) : "";
         if (!targetRoot) {
-          const selectedRoot = selectTargetRoot();
+          const selectedRoot = await selectTargetRoot();
           if (!selectedRoot) return;
           targetRoot = selectedRoot;
         }
@@ -537,7 +699,7 @@ export const LayoutsPanel: React.FC<Props> = ({
     } else {
       let targetRoot = persistentSavePath ? normalizePath(persistentSavePath) : "";
       if (!targetRoot) {
-        const selectedRoot = selectTargetRoot();
+        const selectedRoot = await selectTargetRoot();
         if (!selectedRoot) return;
         targetRoot = selectedRoot;
       }
@@ -552,10 +714,14 @@ export const LayoutsPanel: React.FC<Props> = ({
     try {
       layoutData = JSON.parse(jsonString);
     } catch (e) {
-      return alert(`Error from AE: ${jsonString}`);
+      await showHostAlert(`Error from AE: ${jsonString}`);
+      return;
     }
 
-    if (layoutData.error) return alert(`Export Failed: ${layoutData.error}`);
+    if (layoutData.error) {
+      await showHostAlert(`Export Failed: ${layoutData.error}`);
+      return;
+    }
 
     const fileName = `${layoutData.resolution[0]}x${layoutData.resolution[1]}.json`;
     const finalFilePath = `${levelFolderPath}/${fileName}`;
@@ -568,14 +734,15 @@ export const LayoutsPanel: React.FC<Props> = ({
       try {
         fs.mkdirSync(levelFolderPath, { recursive: true });
       } catch (e) {
-        return alert(`Could not create folder: ${levelFolderPath}`);
+        await showHostAlert(`Could not create folder: ${levelFolderPath}`);
+        return;
       }
     }
 
     // 5. Overwrite
     if (fs.existsSync(finalFilePath)) {
       const actionLabel = activeLayoutOrigin ? "Update linked layout?" : "Overwrite?";
-      const overwrite = confirm(`Level: ${levelFolderName.replace("lvl_", "")}\nResolution: ${fileName.replace(".json", "")}\n${actionLabel}`);
+      const overwrite = await showHostConfirm(`Level: ${levelFolderName.replace("lvl_", "")}\nResolution: ${fileName.replace(".json", "")}\n${actionLabel}`);
       if (!overwrite) return;
     }
 
@@ -593,7 +760,7 @@ export const LayoutsPanel: React.FC<Props> = ({
 
       if (thumbnailResult && thumbnailResult !== "OK") {
         deleteFileIfExists(tempThumbnailPath);
-        alert(`${activeLayoutOrigin ? "Updated" : "Saved"}, but thumbnail export failed:\n${thumbnailResult}`);
+        await showHostAlert(`${activeLayoutOrigin ? "Updated" : "Saved"}, but thumbnail export failed:\n${thumbnailResult}`);
       } else {
         try {
           const thumbnailReady = await waitForReadableFile(tempThumbnailPath);
@@ -607,10 +774,10 @@ export const LayoutsPanel: React.FC<Props> = ({
           );
           deleteFileIfExists(tempThumbnailPath);
           deleteFileIfExists(legacyThumbnailPath);
-          alert(`${activeLayoutOrigin ? "Updated!" : "Saved!"}\nLevel: ${levelFolderName.replace("lvl_", "")}\nResolution: ${fileName.replace(".json", "")}`);
+          await showHostAlert(`${activeLayoutOrigin ? "Updated!" : "Saved!"}\nLevel: ${levelFolderName.replace("lvl_", "")}\nResolution: ${fileName.replace(".json", "")}`);
         } catch (thumbnailError) {
           deleteFileIfExists(tempThumbnailPath);
-          alert(`${activeLayoutOrigin ? "Updated" : "Saved"}, but thumbnail conversion failed:\n${thumbnailError}`);
+          await showHostAlert(`${activeLayoutOrigin ? "Updated" : "Saved"}, but thumbnail conversion failed:\n${thumbnailError}`);
         }
       }
 
@@ -620,18 +787,360 @@ export const LayoutsPanel: React.FC<Props> = ({
       setThumbnailVersion(v => v + 1);
       refreshLevels();
     } catch (e) {
-      alert(`Write error: ${e}`);
+      await showHostAlert(`Write error: ${e}`);
     }
 
   }, [baseDir, saveLevelId, persistentSavePath, refreshLevels]);
+
+  const selectTargetRoot = useCallback(async (dialogTitle: string): Promise<string | null> => {
+    if (!window.cep) {
+      await showHostAlert("CEP API unavailable.");
+      return null;
+    }
+
+    const result = window.cep.fs.showOpenDialogEx(false, true, dialogTitle, baseDir, []);
+    if (result.err !== 0 || !result.data || result.data.length === 0) return null;
+
+    const selectedTarget = normalizePath(result.data[0] || "");
+    if (!selectedTarget) return null;
+
+    saveConfig({ savePath: selectedTarget });
+    setPersistentSavePath(selectedTarget);
+    setBaseDir(selectedTarget);
+
+    return selectedTarget;
+  }, [baseDir]);
+
+  const getTargetRoot = useCallback(async (dialogTitle: string): Promise<string | null> => {
+    const targetRoot = persistentSavePath ? normalizePath(persistentSavePath) : "";
+    return targetRoot || await selectTargetRoot(dialogTitle);
+  }, [persistentSavePath, selectTargetRoot]);
+
+  const getActiveLayoutOrigin = useCallback(async (): Promise<CardsLayoutOriginMetadata | null> => {
+    try {
+      const origin = await evalTS("handleGetActiveCardsLayoutOrigin");
+      return isLayoutOriginMetadata(origin) ? origin : null;
+    } catch (e) {
+      console.error(e);
+      return null;
+    }
+  }, []);
+
+  const readActiveLayoutData = useCallback(async (levelName: string): Promise<any> => {
+    const jsonString = await evalTS("handleSaveCardsLayout", levelName || "New Layout");
+
+    let layoutData: any;
+    try {
+      layoutData = JSON.parse(jsonString);
+    } catch (e) {
+      throw new Error(`Error from AE: ${jsonString}`);
+    }
+
+    if (layoutData.error) throw new Error(`Export failed: ${layoutData.error}`);
+    if (!layoutData.resolution || layoutData.resolution.length < 2) throw new Error("Export failed: invalid layout resolution.");
+
+    return layoutData;
+  }, []);
+
+  const createTemporaryThumbnail = useCallback(async (rootPathInput: string, layoutData: any): Promise<string> => {
+    const rootPath = normalizePath(rootPathInput);
+    const tempFolderPath = normalizePath(path.join(rootPath, ".cards-layout-temp"));
+    if (!fs.existsSync(tempFolderPath)) fs.mkdirSync(tempFolderPath, { recursive: true });
+
+    const tempThumbnailPath = normalizePath(path.join(tempFolderPath, `layout-preview-${Date.now()}.png`));
+    deleteFileIfExists(tempThumbnailPath);
+
+    const thumbnailResult = await evalTS(
+      "handleSaveCardsLayoutThumbnail",
+      layoutData,
+      tempThumbnailPath,
+      THUMBNAIL_MAX_SIDE
+    );
+
+    if (thumbnailResult && thumbnailResult !== "OK") {
+      deleteFileIfExists(tempThumbnailPath);
+      throw new Error(String(thumbnailResult));
+    }
+
+    const thumbnailReady = await waitForReadableFile(tempThumbnailPath);
+    if (!thumbnailReady) {
+      deleteFileIfExists(tempThumbnailPath);
+      throw new Error("Temporary thumbnail was not created in time.");
+    }
+
+    return tempThumbnailPath;
+  }, []);
+
+  const cleanupTemporaryThumbnail = useCallback((tempThumbnailPath: string) => {
+    if (!tempThumbnailPath) return;
+    const tempFolderPath = normalizePath(path.dirname(tempThumbnailPath));
+    deleteFileIfExists(tempThumbnailPath);
+    deleteFolderIfEmpty(tempFolderPath);
+  }, []);
+
+  const getExistingLayoutMetadata = useCallback((levelFolderPath: string, fallbackEntry: LayoutIndexEntry | null) => {
+    const metadata = {
+      name: fallbackEntry ? fallbackEntry.name : "",
+      description: fallbackEntry ? fallbackEntry.description : "",
+      tags: fallbackEntry ? fallbackEntry.tags : [] as string[],
+    };
+
+    const candidatePaths = [
+      fallbackEntry ? fallbackEntry.jsonPath : "",
+      normalizePath(path.join(levelFolderPath, CANONICAL_LAYOUT_JSON_NAME))
+    ];
+
+    for (let i = 0; i < candidatePaths.length; i++) {
+      const candidatePath = candidatePaths[i];
+      if (!candidatePath || !fs.existsSync(candidatePath)) continue;
+
+      try {
+        const raw = fs.readFileSync(candidatePath, "utf-8");
+        const data = JSON.parse(raw);
+        return {
+          name: String(data.level || metadata.name || ""),
+          description: String(data.description || metadata.description || ""),
+          tags: parseTags(data.tags && data.tags.length ? data.tags : metadata.tags),
+        };
+      } catch (_) { }
+    }
+
+    return metadata;
+  }, []);
+
+  const writeCanonicalLayout = useCallback(async (
+    rootPathInput: string,
+    levelFolderName: string,
+    layoutData: any,
+    tempThumbnailPath: string,
+    metadata: { name: string; tags: string[]; description: string },
+    confirmOverwrite: boolean
+  ): Promise<boolean> => {
+    const rootPath = normalizePath(rootPathInput);
+    const levelFolderPath = normalizePath(path.join(rootPath, levelFolderName));
+    const jsonPath = normalizePath(path.join(levelFolderPath, CANONICAL_LAYOUT_JSON_NAME));
+    const thumbnailPath = normalizePath(path.join(levelFolderPath, CANONICAL_THUMBNAIL_NAME));
+
+    const folderExists = fs.existsSync(levelFolderPath);
+    const hasExistingContent = folderExists && ((fs.readdirSync(levelFolderPath) as string[]).length > 0);
+
+    if (confirmOverwrite && hasExistingContent) {
+      const overwrite = await showHostConfirm(`Level "${getLevelLabelFromFolderName(levelFolderName)}" already exists.\nOverwrite its canonical layout?`);
+      if (!overwrite) return false;
+    }
+
+    if (!folderExists) fs.mkdirSync(levelFolderPath, { recursive: true });
+
+    const tags = parseTags(metadata.tags);
+    const layoutToSave = {
+      ...layoutData,
+      level: metadata.name || getLevelLabelFromFolderName(levelFolderName),
+      description: metadata.description || "",
+      tags,
+    };
+
+    await convertImageToJpeg(
+      tempThumbnailPath,
+      thumbnailPath,
+      THUMBNAIL_MAX_SIDE,
+      THUMBNAIL_JPEG_QUALITY
+    );
+
+    fs.writeFileSync(jsonPath, JSON.stringify(layoutToSave, null, 2), "utf-8");
+
+    await upsertLayoutIndexEntry(rootPath, {
+      folder: levelFolderName,
+      name: layoutToSave.level,
+      description: layoutToSave.description,
+      tags,
+      jsonPath,
+      thumbnailPath,
+      sourceResolution: getLayoutResolutionString(layoutToSave),
+      cardCount: getLayoutCardCount(layoutToSave),
+    });
+
+    setCompResolution(getLayoutResolutionString(layoutToSave));
+    setSelectedFolder(levelFolderName);
+    setQuery("");
+    setThumbnailVersion(v => v + 1);
+    refreshLevels();
+
+    return true;
+  }, [refreshLevels]);
+
+  const handleSaveNew = useCallback(async () => {
+    let tempThumbnailPath = "";
+
+    try {
+      const rootPath = await getTargetRoot("Select Layouts Folder");
+      if (!rootPath) return;
+
+      await reloadExtendScript();
+
+      const layoutData = await readActiveLayoutData("New Layout");
+      tempThumbnailPath = await createTemporaryThumbnail(rootPath, layoutData);
+
+      const dialogResult = await evalTS("handleShowSaveLayoutDialog", tempThumbnailPath, {
+        title: "Save New Layout",
+        name: "",
+        tags: "",
+        description: ""
+      }) as SaveLayoutDialogResult & { error?: string };
+
+      if (dialogResult && dialogResult.error) {
+        await showHostAlert(dialogResult.error);
+        cleanupTemporaryThumbnail(tempThumbnailPath);
+        return;
+      }
+
+      if (!dialogResult || dialogResult.cancelled) {
+        cleanupTemporaryThumbnail(tempThumbnailPath);
+        return;
+      }
+
+      const levelName = safeTrim(dialogResult.name);
+      if (!levelName) {
+        cleanupTemporaryThumbnail(tempThumbnailPath);
+        await showHostAlert("Type a level name first.");
+        return;
+      }
+
+      const levelFolderName = normalizeLevelFolderNameUI(levelName);
+      const saved = await writeCanonicalLayout(
+        rootPath,
+        levelFolderName,
+        layoutData,
+        tempThumbnailPath,
+        {
+          name: levelName,
+          tags: parseTags(dialogResult.tags),
+          description: String(dialogResult.description || "")
+        },
+        true
+      );
+
+      cleanupTemporaryThumbnail(tempThumbnailPath);
+      if (saved) await showHostAlert(`Saved!\nLevel: ${getLevelLabelFromFolderName(levelFolderName)}\nResolution: ${getLayoutResolutionString(layoutData)}`);
+    } catch (e) {
+      cleanupTemporaryThumbnail(tempThumbnailPath);
+      await showHostAlert(`Save failed: ${e}`);
+    }
+  }, [
+    cleanupTemporaryThumbnail,
+    createTemporaryThumbnail,
+    getTargetRoot,
+    readActiveLayoutData,
+    writeCanonicalLayout
+  ]);
+
+  const handleUpdateCurrent = useCallback(async () => {
+    let tempThumbnailPath = "";
+
+    try {
+      await reloadExtendScript();
+
+      const activeLayoutOrigin = await getActiveLayoutOrigin();
+      if (!activeLayoutOrigin) {
+        await showHostAlert("Apply a layout first. Update Current uses the layout marker on the active composition.");
+        return;
+      }
+
+      const levelFolderName = String(activeLayoutOrigin.levelFolder || "");
+      const linkedFolderPath = getLinkedLevelFolderPath(activeLayoutOrigin);
+      let rootPath = linkedFolderPath ? getRootPathFromLevelFolderPath(linkedFolderPath) : normalizePath(activeLayoutOrigin.rootPath || "");
+
+      if (!rootPath) {
+        const selectedRoot = await getTargetRoot("Select Layouts Folder");
+        if (!selectedRoot) return;
+        rootPath = selectedRoot;
+      }
+
+      if (rootPath && rootPath !== normalizePath(persistentSavePath || baseDir || "")) {
+        saveConfig({ savePath: rootPath });
+        setPersistentSavePath(rootPath);
+        setBaseDir(rootPath);
+      }
+
+      const levelFolderPath = linkedFolderPath || normalizePath(path.join(rootPath, levelFolderName));
+      const indexedEntry = layoutEntries.find(entry => entry.folder === levelFolderName) || null;
+      const existingMetadata = getExistingLayoutMetadata(levelFolderPath, indexedEntry);
+      const levelName = existingMetadata.name || getLevelLabelFromFolderName(levelFolderName);
+      const layoutData = await readActiveLayoutData(levelName);
+      tempThumbnailPath = await createTemporaryThumbnail(rootPath, layoutData);
+
+      const dialogResult = await evalTS("handleShowSaveLayoutDialog", tempThumbnailPath, {
+        title: "Update Layout",
+        name: levelName,
+        tags: existingMetadata.tags.join(", "),
+        description: existingMetadata.description
+      }) as SaveLayoutDialogResult & { error?: string };
+
+      if (dialogResult && dialogResult.error) {
+        await showHostAlert(dialogResult.error);
+        cleanupTemporaryThumbnail(tempThumbnailPath);
+        return;
+      }
+
+      if (!dialogResult || dialogResult.cancelled) {
+        cleanupTemporaryThumbnail(tempThumbnailPath);
+        return;
+      }
+
+      const saved = await writeCanonicalLayout(
+        rootPath,
+        levelFolderName,
+        layoutData,
+        tempThumbnailPath,
+        {
+          name: safeTrim(dialogResult.name) || levelName,
+          tags: parseTags(dialogResult.tags),
+          description: String(dialogResult.description || "")
+        },
+        false
+      );
+
+      cleanupTemporaryThumbnail(tempThumbnailPath);
+      if (saved) await showHostAlert(`Updated!\nLevel: ${getLevelLabelFromFolderName(levelFolderName)}\nResolution: ${getLayoutResolutionString(layoutData)}`);
+    } catch (e) {
+      cleanupTemporaryThumbnail(tempThumbnailPath);
+      await showHostAlert(`Update failed: ${e}`);
+    }
+  }, [
+    baseDir,
+    cleanupTemporaryThumbnail,
+    createTemporaryThumbnail,
+    getActiveLayoutOrigin,
+    getExistingLayoutMetadata,
+    getTargetRoot,
+    layoutEntries,
+    persistentSavePath,
+    readActiveLayoutData,
+    writeCanonicalLayout
+  ]);
+
+  const handleToggleFavorite = useCallback(async () => {
+    if (!selectedLayoutEntry || !selectedFolder) return;
+
+    try {
+      const rootPath = normalizePath(persistentSavePath || baseDir || "");
+      if (!rootPath) return;
+      await setLayoutFavorite(rootPath, selectedFolder, !selectedLayoutEntry.favorite);
+      refreshLevels();
+    } catch (e) {
+      await showHostAlert(`Could not update favorite: ${e}`);
+    }
+  }, [baseDir, persistentSavePath, refreshLevels, selectedFolder, selectedLayoutEntry]);
 
 
   // -------------------------
   // UI HANDLERS
   // -------------------------
 
-  const handleChangePath = () => {
-    if (!window.cep) return alert("CEP API unavailable.");
+  const handleChangePath = async () => {
+    if (!window.cep) {
+      await showHostAlert("CEP API unavailable.");
+      return;
+    }
 
     const result = window.cep.fs.showOpenDialogEx(
       false,
@@ -665,10 +1174,12 @@ export const LayoutsPanel: React.FC<Props> = ({
     if (!layoutPreviewPath) return;
 
     const result = await evalTS("handleOpenLayoutPreview", layoutPreviewPath);
-    if (result && result !== "OK") alert(String(result));
+    if (result && result !== "OK") await showHostAlert(String(result));
   }, [layoutPreviewPath]);
 
-  const selectedLevelLabel = selectedFolder ? selectedFolder.replace("lvl_", "") : "";
+  const selectedLevelLabel = selectedLayoutEntry
+    ? (selectedLayoutEntry.name || selectedLayoutEntry.label)
+    : (selectedFolder ? selectedFolder.replace("lvl_", "") : "");
 
   const moveSelectedLevel = useCallback((offset: number) => {
     if (!filtered.length || offset === 0) return;
@@ -758,18 +1269,6 @@ export const LayoutsPanel: React.FC<Props> = ({
 
   return (
     <section className="panel-section layouts-section">
-      <div className="layouts-section-header" style={{ display: 'flex', justifyContent: 'space-between' }}>
-        <span className="section-label">{title}</span>
-        <button
-          className="layouts-btn-ghost"
-          title={"Open Folder Path Setup"}
-          onClick={() => {
-            const next = !settingsOpen;
-            setSettingsOpen(next);
-            if (next) refreshLevels();
-          }}>⚙</button>
-      </div>
-
       {settingsOpen && (
         <div className="layouts-settings">
           <div className="field-row" style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
@@ -813,7 +1312,21 @@ export const LayoutsPanel: React.FC<Props> = ({
 
       <div className="layouts-grid">
         <div className="layouts-card">
-          <div className="layouts-card-header"><span className="layouts-card-title">Apply</span></div>
+          <div className="layouts-card-header">
+            <span className="layouts-card-title layouts-resolution-title">
+              {selectedLayoutEntry ? selectedLayoutEntry.sourceResolution : ""}
+            </span>
+            <button
+              type="button"
+              className={`layouts-btn-ghost layouts-favorite-button ${selectedLayoutEntry && selectedLayoutEntry.favorite ? "is-active" : ""}`}
+              onClick={handleToggleFavorite}
+              disabled={!selectedLayoutEntry}
+              title={selectedLayoutEntry && selectedLayoutEntry.favorite ? "Remove favorite" : "Add favorite"}
+              aria-label={selectedLayoutEntry && selectedLayoutEntry.favorite ? "Remove favorite" : "Add favorite"}
+            >
+              <span aria-hidden="true">{selectedLayoutEntry && selectedLayoutEntry.favorite ? "★" : "☆"}</span>
+            </button>
+          </div>
           <div
             className={`layouts-preview ${layoutPreviewSrc ? "is-clickable" : ""}`}
             onClick={layoutPreviewSrc ? handleOpenLayoutPreview : undefined}
@@ -825,6 +1338,19 @@ export const LayoutsPanel: React.FC<Props> = ({
               <span>No preview</span>
             )}
           </div>
+          <div className="layouts-info">
+            <div
+              className={`layouts-description ${selectedLayoutEntry && selectedLayoutEntry.description ? "" : "is-empty"}`}
+              title={selectedLayoutEntry ? selectedLayoutEntry.description : ""}
+            >
+              {selectedLayoutEntry && selectedLayoutEntry.description ? selectedLayoutEntry.description : "No description"}
+            </div>
+            <div className="layouts-tags">
+              {selectedLayoutEntry && selectedLayoutEntry.tags.map(tag => (
+                <span className="layouts-tag" key={tag}>{tag}</span>
+              ))}
+            </div>
+          </div>
           <div className="layouts-apply-row">
             <div
               className="layouts-combobox"
@@ -834,6 +1360,12 @@ export const LayoutsPanel: React.FC<Props> = ({
               }}
             >
               <div className={`layouts-combobox-control ${levelMenuOpen ? "is-open" : ""}`}>
+                <span
+                  className={`layouts-level-star ${selectedLayoutEntry && selectedLayoutEntry.favorite ? "is-active" : ""}`}
+                  aria-hidden="true"
+                >
+                  {"\u2605"}
+                </span>
                 <input
                   ref={levelInputRef}
                   className="layouts-combobox-input"
@@ -876,22 +1408,31 @@ export const LayoutsPanel: React.FC<Props> = ({
                   aria-label="Layouts"
                   onWheel={handleLevelMenuWheel}
                 >
-                  {filtered.length ? filtered.map(l => (
-                    <button
-                      key={l}
-                      type="button"
-                      className={`layouts-combobox-option ${selectedFolder === l ? "is-selected" : ""}`}
-                      role="option"
-                      aria-selected={selectedFolder === l}
-                      data-folder={l}
-                      onMouseDown={event => {
-                        event.preventDefault();
-                        selectLevelFromMenu(l, true);
-                      }}
-                    >
-                      {l.replace("lvl_", "")}
-                    </button>
-                  )) : (
+                  {filtered.length ? filtered.map(l => {
+                    const entry = layoutEntries.find(item => item.folder === l);
+                    return (
+                      <button
+                        key={l}
+                        type="button"
+                        className={`layouts-combobox-option ${selectedFolder === l ? "is-selected" : ""}`}
+                        role="option"
+                        aria-selected={selectedFolder === l}
+                        data-folder={l}
+                        onMouseDown={event => {
+                          event.preventDefault();
+                          selectLevelFromMenu(l, true);
+                        }}
+                      >
+                        <span
+                          className={`layouts-level-star ${entry && entry.favorite ? "is-active" : ""}`}
+                          aria-hidden="true"
+                        >
+                          {"\u2605"}
+                        </span>
+                        <span className="layouts-option-label">{entry?.name || l.replace("lvl_", "")}</span>
+                      </button>
+                    );
+                  }) : (
                     <div className="layouts-combobox-empty">None</div>
                   )}
                 </div>
@@ -900,12 +1441,13 @@ export const LayoutsPanel: React.FC<Props> = ({
             <button className="layouts-btn-primary" onClick={handleApply} disabled={!selectedFolder}>Apply</button>
           </div>
         </div>
-        <div className="layouts-card">
-          <div className="layouts-card-header"><span className="layouts-card-title">Save</span></div>
-          <input className="field-input" value={saveLevelId} onChange={e => setSaveLevelId(e.target.value)} placeholder="Ex: 001-Boss" />
-          <div className="button-row layouts-actions">
-            <button onClick={handleSave}>
-              {persistentSavePath ? "Save Layout" : "Save Layout (Select Folder)"}
+        <div className="layouts-card layouts-save-card">
+          <div className="button-row layouts-actions layouts-save-actions">
+            <button onClick={handleSaveNew}>
+              {persistentSavePath ? "Save New" : "Save New (Select Folder)"}
+            </button>
+            <button onClick={handleUpdateCurrent}>
+              Update Current
             </button>
           </div>
         </div>

@@ -51,7 +51,7 @@ const config: CEP_Config = {
     sourceMap: false,
     jsxBin: "off",
   },
-  installModules: [],
+  installModules: ["sql.js"],
   copyAssets: ["assets"],
   copyZipAssets: [],
 };
