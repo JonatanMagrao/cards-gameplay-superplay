@@ -86,6 +86,183 @@ export const handleShowConfirm = (message: string) => {
   return confirm(String(message || ""));
 }
 
+export const handleShowUpdateLayoutTargetDialog = (options?: {
+  applied?: { label?: string; thumbnailPath?: string };
+  selected?: { label?: string; thumbnailPath?: string };
+}) => {
+  try {
+    const dialogOptions = options || {};
+    const applied = dialogOptions.applied || {};
+    const selected = dialogOptions.selected || {};
+    const choices = [
+      {
+        id: "applied",
+        label: String(applied.label || "Applied layout"),
+        thumbnailPath: String(applied.thumbnailPath || "")
+      },
+      {
+        id: "selected",
+        label: String(selected.label || "Selected layout"),
+        thumbnailPath: String(selected.thumbnailPath || "")
+      }
+    ];
+
+    let selectedTarget = "applied";
+    const thumbWidth = 170;
+    const thumbHeight = 130;
+
+    const loadImage = function (filePath: string) {
+      try {
+        const imageFile = new File(filePath);
+        if (!imageFile.exists) return null;
+
+        const image = ScriptUI.newImage(imageFile.fsName);
+        return {
+          image: image,
+          width: getDimensionValue(image.size, "width", 0, 512),
+          height: getDimensionValue(image.size, "height", 1, 512)
+        };
+      } catch (_) {
+        return null;
+      }
+    };
+
+    const dialog = new Window("dialog", "Update Layout", undefined, { resizeable: false });
+    dialog.orientation = "column";
+    dialog.alignChildren = ["fill", "top"];
+    dialog.margins = 14;
+    dialog.spacing = 12;
+
+    dialog.add("statictext", undefined, "Which layout do you want to update?");
+
+    const optionsGroup = dialog.add("group");
+    optionsGroup.orientation = "row";
+    optionsGroup.alignChildren = ["fill", "top"];
+    optionsGroup.spacing = 14;
+
+    const optionControls: any[] = [];
+
+    const selectTarget = function (targetId: string) {
+      selectedTarget = targetId;
+
+      for (let i = 0; i < optionControls.length; i++) {
+        const control = optionControls[i];
+        const isSelected = control.id === selectedTarget;
+        control.radio.value = isSelected;
+        control.selectButton.text = isSelected ? "Selected" : "Select";
+
+        try {
+          control.canvas.notify("onDraw");
+        } catch (_) { }
+      }
+
+      try {
+        dialog.update();
+      } catch (_) { }
+    };
+
+    const addChoiceOption = function (choice: { id: string; label: string; thumbnailPath: string }) {
+      const imageData = loadImage(choice.thumbnailPath);
+
+      const item = optionsGroup.add("group");
+      item.orientation = "column";
+      item.alignChildren = ["fill", "top"];
+      item.spacing = 6;
+      item.preferredSize = [thumbWidth, thumbHeight + 58];
+
+      const radio = item.add("radiobutton", undefined, choice.label);
+      radio.alignment = ["fill", "top"];
+
+      const canvas = item.add("group");
+      canvas.alignment = ["fill", "top"];
+      canvas.preferredSize = [thumbWidth, thumbHeight];
+      canvas.minimumSize = [thumbWidth, thumbHeight];
+
+      canvas.onDraw = function () {
+        const graphics = canvas.graphics;
+        const width = getDimensionValue(canvas.size, "width", 0, thumbWidth);
+        const height = getDimensionValue(canvas.size, "height", 1, thumbHeight);
+        const bgBrush = graphics.newBrush(graphics.BrushType.SOLID_COLOR, [0.12, 0.13, 0.16, 1]);
+        const emptyBrush = graphics.newBrush(graphics.BrushType.SOLID_COLOR, [0.42, 0.42, 0.42, 1]);
+        const borderColor = selectedTarget === choice.id ? [0.35, 0.75, 1, 1] : [0.32, 0.35, 0.42, 1];
+        const borderWidth = selectedTarget === choice.id ? 3 : 1;
+        const borderPen = graphics.newPen(graphics.PenType.SOLID_COLOR, borderColor, borderWidth);
+
+        graphics.rectPath(0, 0, width, height);
+        graphics.fillPath(bgBrush);
+
+        if (imageData && imageData.image) {
+          const imageWidth = imageData.width || 1;
+          const imageHeight = imageData.height || 1;
+          const scale = Math.min((width - 12) / imageWidth, (height - 12) / imageHeight);
+          const drawWidth = Math.max(1, Math.round(imageWidth * scale));
+          const drawHeight = Math.max(1, Math.round(imageHeight * scale));
+          const drawX = Math.round((width - drawWidth) / 2);
+          const drawY = Math.round((height - drawHeight) / 2);
+
+          graphics.drawImage(imageData.image, drawX, drawY, drawWidth, drawHeight);
+        } else {
+          graphics.rectPath(10, 10, width - 20, height - 20);
+          graphics.fillPath(emptyBrush);
+        }
+
+        graphics.rectPath(1, 1, width - 2, height - 2);
+        graphics.strokePath(borderPen);
+      };
+
+      const selectButton = item.add("button", undefined, choice.id === selectedTarget ? "Selected" : "Select");
+      selectButton.alignment = ["fill", "top"];
+
+      optionControls.push({
+        id: choice.id,
+        radio: radio,
+        canvas: canvas,
+        selectButton: selectButton
+      });
+
+      const selectChoice = function () { selectTarget(choice.id); };
+
+      radio.onClick = selectChoice;
+      canvas.onClick = selectChoice;
+      selectButton.onClick = selectChoice;
+    };
+
+    for (let i = 0; i < choices.length; i++) {
+      addChoiceOption(choices[i]);
+    }
+
+    selectTarget(selectedTarget);
+
+    const buttons = dialog.add("group");
+    buttons.orientation = "row";
+    buttons.alignment = ["right", "top"];
+    buttons.spacing = 8;
+
+    const cancelButton = buttons.add("button", undefined, "Cancel", { name: "cancel" });
+    const continueButton = buttons.add("button", undefined, "Continue", { name: "ok" });
+
+    cancelButton.onClick = function () {
+      dialog.close(0);
+    };
+
+    continueButton.onClick = function () {
+      dialog.close(1);
+    };
+
+    dialog.center();
+    const dialogResult = dialog.show();
+    if (dialogResult !== 1) return { cancelled: true };
+
+    return {
+      cancelled: false,
+      target: selectedTarget
+    };
+  } catch (e) {
+    //@ts-ignore
+    return { cancelled: true, error: "Could not open update target dialog: " + e.toString() };
+  }
+}
+
 export const handleApplyCardsLayout = (layoutData: CardsLayoutJson, filePath: string, options?: ApplyCardsLayoutOptions) => {
 
   importFilesAndCompsForCards(filePath, cardsFolderName)

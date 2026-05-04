@@ -2,14 +2,19 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { fs, path, os } from "../../../lib/cep/node";
 import { csi, evalFile, evalTS } from "../../../lib/utils/bolt";
 import ChevronIcon from "../../../assets/icons/chevron.svg";
+import CachedIcon from "../../../assets/icons/cached.svg";
 import {
   LayoutIndexEntry,
   parseTags,
-  scanLayoutEntries,
-  setLayoutFavorite,
-  syncLayoutIndex,
-  upsertLayoutIndexEntry
+  setLayoutFavorite
 } from "./layoutIndex";
+import {
+  clearLayoutCache,
+  getLayoutCacheRootPath,
+  readLayoutCacheEntries,
+  syncLayoutCacheFromRemote,
+  syncSingleLayoutToCache
+} from "./layoutCache";
 import "./LayoutsPanel.scss";
 
 // --- CONFIGURAÇÃO DE PERSISTÊNCIA ---
@@ -204,24 +209,6 @@ const getLevelPreviewPath = (rootPath: string, levelFolder: string, preferredRes
   return null;
 };
 
-const getLevelFoldersFromRoot = (rootPath: string): string[] => {
-  if (!rootPath || !fs.existsSync(rootPath)) return [];
-
-  try {
-    const entries = fs.readdirSync(rootPath) as string[];
-    const folders = entries.filter((name) => {
-      const full = `${rootPath}/${name}`.replace(/\\/g, "/");
-      try {
-        return fs.statSync(full).isDirectory() && /^lvl_/.test(name);
-      } catch { return false; }
-    });
-    folders.sort();
-    return folders;
-  } catch (_) {
-    return [];
-  }
-};
-
 const applyLayoutEntries = (
   entries: LayoutIndexEntry[],
   setLayoutEntries: React.Dispatch<React.SetStateAction<LayoutIndexEntry[]>>,
@@ -253,6 +240,21 @@ type SaveLayoutDialogResult = {
   tags?: string;
   description?: string;
   title?: string;
+};
+
+type UpdateLayoutTargetDialogResult = {
+  cancelled?: boolean;
+  target?: "applied" | "selected";
+  error?: string;
+};
+
+type UpdateLayoutTarget = {
+  levelFolderName: string;
+  levelFolderPath: string;
+  rootPath: string;
+  indexedEntry: LayoutIndexEntry | null;
+  label: string;
+  thumbnailPath: string;
 };
 
 const normalizePath = (value: string): string => String(value || "").replace(/\\/g, "/");
@@ -292,6 +294,19 @@ const getLinkedLevelFolderPath = (origin: CardsLayoutOriginMetadata): string => 
   return "";
 };
 
+const getLayoutThumbnailPath = (
+  rootPath: string,
+  levelFolder: string,
+  entry: LayoutIndexEntry | null,
+  preferredResolution: string
+): string => {
+  const indexedThumbnailPath = entry && entry.thumbnailPath && fs.existsSync(entry.thumbnailPath)
+    ? entry.thumbnailPath
+    : "";
+
+  return indexedThumbnailPath || getLevelPreviewPath(rootPath, levelFolder, preferredResolution) || "";
+};
+
 const parseResolutionString = (value: string): [number, number] | null => {
   const match = String(value || "").match(/(\d{2,5})x(\d{2,5})/i);
   if (!match) return null;
@@ -306,10 +321,6 @@ const parseResolutionString = (value: string): [number, number] | null => {
 const getLayoutResolutionString = (layoutData: any): string => {
   if (!layoutData || !layoutData.resolution || layoutData.resolution.length < 2) return "";
   return `${layoutData.resolution[0]}x${layoutData.resolution[1]}`;
-};
-
-const getLayoutCardCount = (layoutData: any): number => {
-  return layoutData && layoutData.cards && layoutData.cards.length ? layoutData.cards.length : 0;
 };
 
 const getResolutionFallbackScore = (candidate: string, preferred: string): number => {
@@ -407,16 +418,20 @@ const showHostConfirm = async (message: any): Promise<boolean> => {
 type Props = {
   baseDirDefault?: string;
   cardProject: string;
+  onSettingsClose?: () => void;
   settingsOpen?: boolean;
 };
 
 export const LayoutsPanel: React.FC<Props> = ({
   baseDirDefault = "D:/Downloads/cardsLevels",
   cardProject,
+  onSettingsClose,
   settingsOpen = false
 }) => {
   const [baseDir, setBaseDir] = useState(baseDirDefault);
   const [persistentSavePath, setPersistentSavePath] = useState<string | null>(null);
+  const [customCachePath, setCustomCachePath] = useState("");
+  const [trimCoveredCards, setTrimCoveredCards] = useState(false);
   const [levels, setLevels] = useState<string[]>([]);
   const [layoutEntries, setLayoutEntries] = useState<LayoutIndexEntry[]>([]);
   const [query, setQuery] = useState("");
@@ -426,9 +441,14 @@ export const LayoutsPanel: React.FC<Props> = ({
   const [layoutPreviewSrc, setLayoutPreviewSrc] = useState<string | null>(null);
   const [layoutPreviewPath, setLayoutPreviewPath] = useState("");
   const [thumbnailVersion, setThumbnailVersion] = useState(0);
+  const [isCacheRefreshing, setIsCacheRefreshing] = useState(false);
+  const [cacheRefreshProgress, setCacheRefreshProgress] = useState(0);
   const [levelMenuOpen, setLevelMenuOpen] = useState(false);
   const levelInputRef = useRef<HTMLInputElement | null>(null);
   const levelMenuRef = useRef<HTMLDivElement | null>(null);
+  const cacheRefreshInFlightRef = useRef(false);
+  const remoteRootPath = useMemo(() => normalizePath(persistentSavePath || baseDir || ""), [baseDir, persistentSavePath]);
+  const cacheRootPath = useMemo(() => getLayoutCacheRootPath(remoteRootPath, customCachePath), [customCachePath, remoteRootPath]);
 
   // --- INIT ---
   useEffect(() => {
@@ -437,6 +457,8 @@ export const LayoutsPanel: React.FC<Props> = ({
       setPersistentSavePath(config.savePath);
       setBaseDir(config.savePath);
     }
+    if (config.cachePath) setCustomCachePath(normalizePath(config.cachePath));
+    if (typeof config.trimCoveredCards === "boolean") setTrimCoveredCards(config.trimCoveredCards);
   }, []);
 
   useEffect(() => {
@@ -452,46 +474,93 @@ export const LayoutsPanel: React.FC<Props> = ({
   }, []);
 
   // --- REFRESH ---
-  const refreshLevels = useCallback(() => {
+  const refreshLevels = useCallback(async (): Promise<LayoutIndexEntry[]> => {
     try {
-      if (!fs.existsSync(baseDir)) {
+      if (!cacheRootPath || !fs.existsSync(cacheRootPath)) {
         setLevels([]);
         setLayoutEntries([]);
         setSelectedFolder("");
-        return;
+        return [];
       }
 
-      syncLayoutIndex(baseDir)
-        .then(entries => {
-          if (entries.length) {
-            applyLayoutEntries(entries, setLayoutEntries, setLevels);
-            return;
-          }
-
-          applyLayoutEntries(scanLayoutEntries(baseDir), setLayoutEntries, setLevels);
-        })
-        .catch(error => {
-          console.error(error);
-          const entries = scanLayoutEntries(baseDir);
-          if (entries.length) {
-            applyLayoutEntries(entries, setLayoutEntries, setLevels);
-            return;
-          }
-
-          setLayoutEntries([]);
-          setLevels(getLevelFoldersFromRoot(baseDir));
-        });
+      const entries = await readLayoutCacheEntries(remoteRootPath, customCachePath);
+      applyLayoutEntries(entries, setLayoutEntries, setLevels);
+      if (!entries.length) setSelectedFolder("");
+      return entries;
     } catch (e) {
+      console.error(e);
       setLevels([]);
       setLayoutEntries([]);
+      return [];
     }
-  }, [baseDir]);
+  }, [cacheRootPath, customCachePath, remoteRootPath]);
 
-  useEffect(() => { refreshLevels(); }, [refreshLevels]);
+  const syncCacheFromRemote = useCallback(async (showErrors: boolean = true): Promise<LayoutIndexEntry[]> => {
+    if (cacheRefreshInFlightRef.current) return [];
+
+    try {
+      if (!remoteRootPath || !fs.existsSync(remoteRootPath)) {
+        if (showErrors) await showHostAlert("Select a layouts folder before refreshing the local cache.");
+        return [];
+      }
+
+      cacheRefreshInFlightRef.current = true;
+      setCacheRefreshProgress(0);
+      setIsCacheRefreshing(true);
+      await sleep(40);
+      const result = await syncLayoutCacheFromRemote(remoteRootPath, customCachePath, {
+        onProgress: progress => {
+          const total = Math.max(1, progress.totalFolders);
+          setCacheRefreshProgress(Math.round((progress.completedFolders / total) * 100));
+        }
+      });
+      setCacheRefreshProgress(100);
+      applyLayoutEntries(result.entries, setLayoutEntries, setLevels);
+      if (!result.entries.length) setSelectedFolder("");
+      setThumbnailVersion(v => v + 1);
+      await sleep(180);
+      return result.entries;
+    } catch (e) {
+      console.error(e);
+      if (showErrors) await showHostAlert(`Could not refresh local layouts cache: ${e}`);
+      return [];
+    } finally {
+      cacheRefreshInFlightRef.current = false;
+      setIsCacheRefreshing(false);
+      setCacheRefreshProgress(0);
+    }
+  }, [customCachePath, remoteRootPath]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    refreshLevels().then(entries => {
+      if (!isMounted || entries.length || !remoteRootPath) return;
+
+      try {
+        if (fs.existsSync(remoteRootPath)) syncCacheFromRemote(false);
+      } catch (_) { }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [refreshLevels, remoteRootPath, syncCacheFromRemote]);
 
   useEffect(() => {
     if (settingsOpen) refreshLevels();
   }, [refreshLevels, settingsOpen]);
+
+  useEffect(() => {
+    if (!settingsOpen) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && onSettingsClose) onSettingsClose();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onSettingsClose, settingsOpen]);
 
   const filtered = useMemo(() => {
     const q = safeTrim(query).toLowerCase();
@@ -531,11 +600,10 @@ export const LayoutsPanel: React.FC<Props> = ({
   }, [filtered, selectedFolder]);
 
   useEffect(() => {
-    const rootPath = (persistentSavePath || baseDir || "").replace(/\\/g, "/");
     const indexedPreviewPath = selectedLayoutEntry && selectedLayoutEntry.thumbnailPath && fs.existsSync(selectedLayoutEntry.thumbnailPath)
       ? selectedLayoutEntry.thumbnailPath
       : "";
-    const previewPath = indexedPreviewPath || getLevelPreviewPath(rootPath, selectedFolder, compResolution);
+    const previewPath = indexedPreviewPath || getLevelPreviewPath(cacheRootPath || remoteRootPath, selectedFolder, compResolution);
     const objectUrl = previewPath ? getImageObjectUrl(previewPath) : null;
 
     setLayoutPreviewSrc(objectUrl);
@@ -544,7 +612,7 @@ export const LayoutsPanel: React.FC<Props> = ({
     return () => {
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [baseDir, persistentSavePath, selectedFolder, selectedLayoutEntry, compResolution, thumbnailVersion]);
+  }, [cacheRootPath, remoteRootPath, selectedFolder, selectedLayoutEntry, compResolution, thumbnailVersion]);
 
   useEffect(() => {
     const menu = levelMenuRef.current;
@@ -570,10 +638,9 @@ export const LayoutsPanel: React.FC<Props> = ({
       return;
     }
 
-    let rootPath = persistentSavePath || baseDir;
-    rootPath = rootPath.replace(/\\/g, "/");
-
-    const levelFolder = `${rootPath}/${selectedFolder}`;
+    const remoteRoot = remoteRootPath;
+    const cachedLevelFolder = cacheRootPath ? `${cacheRootPath}/${selectedFolder}` : "";
+    const remoteLevelFolder = remoteRoot ? `${remoteRoot}/${selectedFolder}` : "";
 
     const resolution = await evalTS("getCompResolution");
     if (!resolution) {
@@ -585,11 +652,14 @@ export const LayoutsPanel: React.FC<Props> = ({
     const indexedJsonPath = selectedLayoutEntry && selectedLayoutEntry.jsonPath && fs.existsSync(selectedLayoutEntry.jsonPath)
       ? selectedLayoutEntry.jsonPath
       : "";
-    const fallbackJsonPath = indexedJsonPath ? null : getLevelJsonPath(levelFolder, String(resolution));
-    const layoutJsonFilePath = indexedJsonPath || (fallbackJsonPath ? fallbackJsonPath.filePath : "");
+    const cachedFallbackJsonPath = getLevelJsonPath(cachedLevelFolder, String(resolution));
+    const remoteFallbackJsonPath = (cachedFallbackJsonPath || indexedJsonPath) ? null : getLevelJsonPath(remoteLevelFolder, String(resolution));
+    const layoutJsonFilePath = (cachedFallbackJsonPath ? cachedFallbackJsonPath.filePath : "")
+      || indexedJsonPath
+      || (remoteFallbackJsonPath ? remoteFallbackJsonPath.filePath : "");
 
     if (!layoutJsonFilePath) {
-      await showHostAlert(`No layout JSON found in: ${levelFolder}`);
+      await showHostAlert(`No layout JSON found for: ${selectedFolder}`);
       return;
     }
 
@@ -606,8 +676,8 @@ export const LayoutsPanel: React.FC<Props> = ({
         layoutOrigin: {
           schema: LAYOUT_ORIGIN_SCHEMA,
           levelFolder: selectedFolder,
-          rootPath,
-          levelFolderPath: levelFolder,
+          rootPath: remoteRoot,
+          levelFolderPath: remoteLevelFolder,
           sourceJson: getFileNameFromPath(layoutJsonFilePath),
           targetJson: getFileNameFromPath(layoutJsonFilePath),
           targetResolution,
@@ -623,7 +693,7 @@ export const LayoutsPanel: React.FC<Props> = ({
       await showHostAlert("Error reading JSON file.");
       console.error(e);
     }
-  }, [baseDir, cardProject, selectedFolder, selectedLayoutEntry, persistentSavePath]);
+  }, [cacheRootPath, cardProject, remoteRootPath, selectedFolder, selectedLayoutEntry]);
 
 
   // -------------------------
@@ -948,25 +1018,21 @@ export const LayoutsPanel: React.FC<Props> = ({
 
     fs.writeFileSync(jsonPath, JSON.stringify(layoutToSave, null, 2), "utf-8");
 
-    await upsertLayoutIndexEntry(rootPath, {
-      folder: levelFolderName,
-      name: layoutToSave.level,
-      description: layoutToSave.description,
-      tags,
-      jsonPath,
-      thumbnailPath,
-      sourceResolution: getLayoutResolutionString(layoutToSave),
-      cardCount: getLayoutCardCount(layoutToSave),
-    });
+    try {
+      const cacheResult = await syncSingleLayoutToCache(rootPath, levelFolderName, customCachePath);
+      applyLayoutEntries(cacheResult.entries, setLayoutEntries, setLevels);
+    } catch (cacheError) {
+      console.error(cacheError);
+      await refreshLevels();
+    }
 
     setCompResolution(getLayoutResolutionString(layoutToSave));
     setSelectedFolder(levelFolderName);
     setQuery("");
     setThumbnailVersion(v => v + 1);
-    refreshLevels();
 
     return true;
-  }, [refreshLevels]);
+  }, [customCachePath, refreshLevels]);
 
   const handleSaveNew = useCallback(async () => {
     let tempThumbnailPath = "";
@@ -978,7 +1044,7 @@ export const LayoutsPanel: React.FC<Props> = ({
       await reloadExtendScript();
 
       const layoutData = await readActiveLayoutData("New Layout");
-      tempThumbnailPath = await createTemporaryThumbnail(rootPath, layoutData);
+      tempThumbnailPath = await createTemporaryThumbnail(getLayoutCacheRootPath(rootPath, customCachePath) || rootPath, layoutData);
 
       const dialogResult = await evalTS("handleShowSaveLayoutDialog", tempThumbnailPath, {
         title: "Save New Layout",
@@ -1006,6 +1072,13 @@ export const LayoutsPanel: React.FC<Props> = ({
       }
 
       const levelFolderName = normalizeLevelFolderNameUI(levelName);
+      const levelFolderPath = normalizePath(path.join(rootPath, levelFolderName));
+      if (fs.existsSync(levelFolderPath)) {
+        cleanupTemporaryThumbnail(tempThumbnailPath);
+        await showHostAlert(`Layout "${getLevelLabelFromFolderName(levelFolderName)}" already exists.\nUse Update to modify an existing layout.`);
+        return;
+      }
+
       const saved = await writeCanonicalLayout(
         rootPath,
         levelFolderName,
@@ -1016,7 +1089,7 @@ export const LayoutsPanel: React.FC<Props> = ({
           tags: parseTags(dialogResult.tags),
           description: String(dialogResult.description || "")
         },
-        true
+        false
       );
 
       cleanupTemporaryThumbnail(tempThumbnailPath);
@@ -1028,31 +1101,117 @@ export const LayoutsPanel: React.FC<Props> = ({
   }, [
     cleanupTemporaryThumbnail,
     createTemporaryThumbnail,
+    customCachePath,
     getTargetRoot,
     readActiveLayoutData,
     writeCanonicalLayout
   ]);
 
-  const handleUpdateCurrent = useCallback(async () => {
+  const handleUpdate = useCallback(async () => {
     let tempThumbnailPath = "";
 
     try {
       await reloadExtendScript();
 
       const activeLayoutOrigin = await getActiveLayoutOrigin();
-      if (!activeLayoutOrigin) {
-        await showHostAlert("Apply a layout first. Update Current uses the layout marker on the active composition.");
+      const selectedLevelFolderName = String(selectedFolder || "");
+      const selectedLabel = selectedLayoutEntry
+        ? selectedLayoutEntry.name || selectedLayoutEntry.label || getLevelLabelFromFolderName(selectedLevelFolderName)
+        : getLevelLabelFromFolderName(selectedLevelFolderName);
+
+      const resolveSelectedTarget = (): UpdateLayoutTarget => {
+        const indexedEntry = selectedLayoutEntry || null;
+        const rootPath = remoteRootPath;
+        const levelFolderPath = rootPath ? normalizePath(path.join(rootPath, selectedLevelFolderName)) : "";
+
+        return {
+          levelFolderName: selectedLevelFolderName,
+          levelFolderPath,
+          rootPath,
+          indexedEntry,
+          label: selectedLabel,
+          thumbnailPath: getLayoutThumbnailPath(
+            rootPath,
+            selectedLevelFolderName,
+            indexedEntry,
+            compResolution || (indexedEntry ? indexedEntry.sourceResolution : "")
+          )
+        };
+      };
+
+      let updateTarget: UpdateLayoutTarget | null = null;
+
+      if (activeLayoutOrigin) {
+        const activeLevelFolderName = String(activeLayoutOrigin.levelFolder || "");
+        const linkedFolderPath = getLinkedLevelFolderPath(activeLayoutOrigin);
+        const activeRootPath = linkedFolderPath ? getRootPathFromLevelFolderPath(linkedFolderPath) : normalizePath(activeLayoutOrigin.rootPath || "");
+        const activeLevelFolderPath = linkedFolderPath || (activeRootPath ? normalizePath(path.join(activeRootPath, activeLevelFolderName)) : "");
+        const activeEntry = layoutEntries.find(entry => entry.folder === activeLevelFolderName) || null;
+        const activeLabel = activeEntry
+          ? activeEntry.name || activeEntry.label || getLevelLabelFromFolderName(activeLevelFolderName)
+          : getLevelLabelFromFolderName(activeLevelFolderName);
+
+        updateTarget = {
+          levelFolderName: activeLevelFolderName,
+          levelFolderPath: activeLevelFolderPath,
+          rootPath: activeRootPath,
+          indexedEntry: activeEntry,
+          label: activeLabel,
+          thumbnailPath: getLayoutThumbnailPath(
+            activeRootPath,
+            activeLevelFolderName,
+            activeEntry,
+            String(activeLayoutOrigin.targetResolution || compResolution || (activeEntry ? activeEntry.sourceResolution : ""))
+          )
+        };
+
+        if (selectedLevelFolderName && selectedLevelFolderName !== activeLevelFolderName) {
+          const selectedTarget = resolveSelectedTarget();
+          const dialogResult = await evalTS("handleShowUpdateLayoutTargetDialog", {
+            applied: {
+              label: updateTarget.label,
+              thumbnailPath: updateTarget.thumbnailPath
+            },
+            selected: {
+              label: selectedTarget.label,
+              thumbnailPath: selectedTarget.thumbnailPath
+            }
+          }) as UpdateLayoutTargetDialogResult;
+
+          if (dialogResult && dialogResult.error) {
+            await showHostAlert(dialogResult.error);
+            return;
+          }
+
+          if (!dialogResult || dialogResult.cancelled) return;
+          if (dialogResult.target === "selected") updateTarget = selectedTarget;
+        }
+      } else {
+        if (!selectedLevelFolderName) {
+          await showHostAlert("Apply a layout first or select a layout to update.");
+          return;
+        }
+
+        const proceed = await showHostConfirm(
+          `No applied layout marker was found on the active composition.\n\nUpdate selected layout "${selectedLabel}"?`
+        );
+        if (!proceed) return;
+
+        updateTarget = resolveSelectedTarget();
+      }
+
+      if (!updateTarget || !updateTarget.levelFolderName) {
+        await showHostAlert("Could not resolve which layout should be updated.");
         return;
       }
 
-      const levelFolderName = String(activeLayoutOrigin.levelFolder || "");
-      const linkedFolderPath = getLinkedLevelFolderPath(activeLayoutOrigin);
-      let rootPath = linkedFolderPath ? getRootPathFromLevelFolderPath(linkedFolderPath) : normalizePath(activeLayoutOrigin.rootPath || "");
+      let { levelFolderName, levelFolderPath, rootPath, indexedEntry } = updateTarget;
 
       if (!rootPath) {
         const selectedRoot = await getTargetRoot("Select Layouts Folder");
         if (!selectedRoot) return;
         rootPath = selectedRoot;
+        levelFolderPath = normalizePath(path.join(rootPath, levelFolderName));
       }
 
       if (rootPath && rootPath !== normalizePath(persistentSavePath || baseDir || "")) {
@@ -1061,12 +1220,10 @@ export const LayoutsPanel: React.FC<Props> = ({
         setBaseDir(rootPath);
       }
 
-      const levelFolderPath = linkedFolderPath || normalizePath(path.join(rootPath, levelFolderName));
-      const indexedEntry = layoutEntries.find(entry => entry.folder === levelFolderName) || null;
       const existingMetadata = getExistingLayoutMetadata(levelFolderPath, indexedEntry);
       const levelName = existingMetadata.name || getLevelLabelFromFolderName(levelFolderName);
       const layoutData = await readActiveLayoutData(levelName);
-      tempThumbnailPath = await createTemporaryThumbnail(rootPath, layoutData);
+      tempThumbnailPath = await createTemporaryThumbnail(getLayoutCacheRootPath(rootPath, customCachePath) || rootPath, layoutData);
 
       const dialogResult = await evalTS("handleShowSaveLayoutDialog", tempThumbnailPath, {
         title: "Update Layout",
@@ -1109,12 +1266,17 @@ export const LayoutsPanel: React.FC<Props> = ({
     baseDir,
     cleanupTemporaryThumbnail,
     createTemporaryThumbnail,
+    customCachePath,
     getActiveLayoutOrigin,
     getExistingLayoutMetadata,
     getTargetRoot,
     layoutEntries,
     persistentSavePath,
     readActiveLayoutData,
+    compResolution,
+    remoteRootPath,
+    selectedFolder,
+    selectedLayoutEntry,
     writeCanonicalLayout
   ]);
 
@@ -1122,14 +1284,13 @@ export const LayoutsPanel: React.FC<Props> = ({
     if (!selectedLayoutEntry || !selectedFolder) return;
 
     try {
-      const rootPath = normalizePath(persistentSavePath || baseDir || "");
-      if (!rootPath) return;
-      await setLayoutFavorite(rootPath, selectedFolder, !selectedLayoutEntry.favorite);
+      if (!cacheRootPath || !fs.existsSync(cacheRootPath)) return;
+      await setLayoutFavorite(cacheRootPath, selectedFolder, !selectedLayoutEntry.favorite);
       refreshLevels();
     } catch (e) {
       await showHostAlert(`Could not update favorite: ${e}`);
     }
-  }, [baseDir, persistentSavePath, refreshLevels, selectedFolder, selectedLayoutEntry]);
+  }, [cacheRootPath, refreshLevels, selectedFolder, selectedLayoutEntry]);
 
 
   // -------------------------
@@ -1158,10 +1319,87 @@ export const LayoutsPanel: React.FC<Props> = ({
     }
   };
 
+  const handleChangeCachePath = async () => {
+    if (!window.cep) {
+      await showHostAlert("CEP API unavailable.");
+      return;
+    }
+
+    const result = window.cep.fs.showOpenDialogEx(
+      false,
+      true,
+      "Select Cache Folder",
+      cacheRootPath || customCachePath || HOME_DIR,
+      []
+    );
+
+    if (result.err === 0 && result.data && result.data.length > 0) {
+      const newPath = normalizePath(result.data[0] || "");
+      if (!newPath) return;
+      const previousCachePath = normalizePath(cacheRootPath || "");
+      const shouldClearPreviousCache = previousCachePath && previousCachePath !== newPath
+        ? await showHostConfirm(`Clear previous local cache?\n\n${previousCachePath}`)
+        : false;
+
+      saveConfig({ cachePath: newPath });
+      setCustomCachePath(newPath);
+
+      let syncedNewCache = false;
+
+      try {
+        if (remoteRootPath && fs.existsSync(remoteRootPath)) {
+          setCacheRefreshProgress(0);
+          setIsCacheRefreshing(true);
+          await sleep(40);
+          const result = await syncLayoutCacheFromRemote(remoteRootPath, newPath, {
+            onProgress: progress => {
+              const total = Math.max(1, progress.totalFolders);
+              setCacheRefreshProgress(Math.round((progress.completedFolders / total) * 100));
+            }
+          });
+          setCacheRefreshProgress(100);
+          applyLayoutEntries(result.entries, setLayoutEntries, setLevels);
+          if (!result.entries.length) setSelectedFolder("");
+          setThumbnailVersion(v => v + 1);
+          syncedNewCache = true;
+          await sleep(180);
+        }
+      } catch (e) {
+        console.error(e);
+        await showHostAlert(`Could not refresh local layouts cache: ${e}`);
+      } finally {
+        setIsCacheRefreshing(false);
+        setCacheRefreshProgress(0);
+      }
+
+      if (shouldClearPreviousCache && syncedNewCache) clearLayoutCache(previousCachePath);
+    }
+  };
+
   const handleOpenSavePath = () => {
     if (!persistentSavePath) return;
     let cmd = "";
     const p = path.normalize(persistentSavePath);
+    if (process.platform === "win32") {
+      cmd = `explorer "${p}"`;
+    } else {
+      cmd = `open "${p}"`;
+    }
+    require("child_process").exec(cmd);
+  };
+
+  const handleOpenCachePath = () => {
+    if (!cacheRootPath) return;
+
+    try {
+      if (!fs.existsSync(cacheRootPath)) fs.mkdirSync(cacheRootPath, { recursive: true });
+    } catch (e) {
+      console.error(e);
+      return;
+    }
+
+    let cmd = "";
+    const p = path.normalize(cacheRootPath);
     if (process.platform === "win32") {
       cmd = `explorer "${p}"`;
     } else {
@@ -1177,9 +1415,23 @@ export const LayoutsPanel: React.FC<Props> = ({
     if (result && result !== "OK") await showHostAlert(String(result));
   }, [layoutPreviewPath]);
 
+  const handleRefreshLayoutCache = useCallback(() => {
+    syncCacheFromRemote(true);
+  }, [syncCacheFromRemote]);
+
+  const handleToggleTrimCoveredCards = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const nextValue = event.target.checked;
+    setTrimCoveredCards(nextValue);
+    saveConfig({ trimCoveredCards: nextValue });
+  }, []);
+
   const selectedLevelLabel = selectedLayoutEntry
     ? (selectedLayoutEntry.name || selectedLayoutEntry.label)
     : (selectedFolder ? selectedFolder.replace("lvl_", "") : "");
+  const cacheLineStyle = useMemo(
+    () => ({ "--layouts-cache-progress": `${cacheRefreshProgress}%` } as React.CSSProperties),
+    [cacheRefreshProgress]
+  );
 
   const moveSelectedLevel = useCallback((offset: number) => {
     if (!filtered.length || offset === 0) return;
@@ -1270,52 +1522,117 @@ export const LayoutsPanel: React.FC<Props> = ({
   return (
     <section className="panel-section layouts-section">
       {settingsOpen && (
-        <div className="layouts-settings">
-          <div className="field-row" style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-
-            <span
-              className="field-label"
-              style={{ color: '#61dafb', marginBottom: 0, cursor: 'help' }}
-              title={persistentSavePath || "Path not set"}
-            >
-              Folder Path
-            </span>
-
-            <div className="save-target-row">
-              {/* BOTÃO OPEN:
-                  Fica desabilitado (disabled) se persistentSavePath for null/vazio.
-              */}
-              <button
-                className={"btn-open-folder"}
-                onClick={handleOpenSavePath}
-                style={{ flex: 1, marginRight: "5px" }}
-                disabled={!persistentSavePath || !safeTrim(persistentSavePath)}
+        <div
+          className="layouts-settings-backdrop"
+          onMouseDown={event => {
+            if (event.target === event.currentTarget && onSettingsClose) onSettingsClose();
+          }}
+        >
+          <div className="layouts-settings-modal" role="dialog" aria-modal="true" aria-label="Layout settings">
+            <div className="layouts-settings-modal-header">
+              <span>Settings</span>
+                    <button
+                type="button"
+                className="layouts-settings-close"
+                onClick={onSettingsClose}
+                aria-label="Close settings"
+                title="Close"
               >
-                Open
-              </button>
-
-              {/* BOTÃO CHANGE/SET:
-                  Sempre habilitado para permitir definir o path.
-              */}
-              <button
-                className="btn-change"
-                onClick={handleChangePath}
-                style={{ flex: 1 }}
-              >
-                {persistentSavePath ? "Change" : "Set"}
+                {"\u00d7"}
               </button>
             </div>
+            <div className="layouts-settings">
+              <div className="layouts-settings-section">
+                <div className="layouts-settings-section-title">Storage</div>
+                <div className="layouts-settings-row">
+                  <span
+                    className="layouts-settings-label"
+                    title={persistentSavePath || "Path not set"}
+                  >
+                    Folder Path
+                  </span>
 
+                  <div className="layouts-settings-actions">
+                    <button
+                      className="btn-open-folder"
+                      onClick={handleOpenSavePath}
+                      disabled={!persistentSavePath || !safeTrim(persistentSavePath)}
+                    >
+                      Open
+                    </button>
+
+                    <button
+                      className="btn-change"
+                      onClick={handleChangePath}
+                    >
+                      {persistentSavePath ? "Change" : "Set"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="layouts-settings-row">
+                  <span
+                    className="layouts-settings-label"
+                    title={cacheRootPath || "Path not set"}
+                  >
+                    Cache Path
+                  </span>
+
+                  <div className="layouts-settings-actions">
+                    <button
+                      className="btn-open-folder"
+                      onClick={handleOpenCachePath}
+                      disabled={!cacheRootPath || !safeTrim(cacheRootPath)}
+                    >
+                      Open
+                    </button>
+
+                    <button
+                      className="btn-change"
+                      onClick={handleChangeCachePath}
+                    >
+                      Change
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+
+              <div className="layouts-settings-section">
+                <div className="layouts-settings-section-title">Timeline</div>
+                <label className="layouts-settings-row layouts-settings-check-row" title="Reserved preference. Timeline trimming will be implemented later.">
+                  <span className="layouts-settings-label">Trim Covered Cards</span>
+                  <span className="layouts-settings-check-control">
+                    <input
+                      type="checkbox"
+                      checked={trimCoveredCards}
+                      onChange={handleToggleTrimCoveredCards}
+                    />
+                    <span className="layouts-settings-check-box" aria-hidden="true" />
+                  </span>
+                </label>
+              </div>
+            </div>
           </div>
         </div>
       )}
 
       <div className="layouts-grid">
-        <div className="layouts-card">
+        <div className={`layouts-card ${isCacheRefreshing ? "is-cache-refreshing" : ""} ${levelMenuOpen ? "is-menu-open" : ""}`}>
           <div className="layouts-card-header">
             <span className="layouts-card-title layouts-resolution-title">
               {selectedLayoutEntry ? selectedLayoutEntry.sourceResolution : ""}
             </span>
+                    <button
+              type="button"
+              className={`layouts-btn-ghost layouts-cache-button ${isCacheRefreshing ? "is-refreshing" : ""}`}
+              onClick={handleRefreshLayoutCache}
+              disabled={isCacheRefreshing || !remoteRootPath}
+              title="Refresh local layouts cache"
+              aria-label="Refresh local layouts cache"
+            >
+              <img src={CachedIcon} alt="" />
+            </button>
             <button
               type="button"
               className={`layouts-btn-ghost layouts-favorite-button ${selectedLayoutEntry && selectedLayoutEntry.favorite ? "is-active" : ""}`}
@@ -1326,6 +1643,9 @@ export const LayoutsPanel: React.FC<Props> = ({
             >
               <span aria-hidden="true">{selectedLayoutEntry && selectedLayoutEntry.favorite ? "★" : "☆"}</span>
             </button>
+          </div>
+          <div className="layouts-cache-line" style={cacheLineStyle} aria-hidden="true">
+            <span />
           </div>
           <div
             className={`layouts-preview ${layoutPreviewSrc ? "is-clickable" : ""}`}
@@ -1446,8 +1766,8 @@ export const LayoutsPanel: React.FC<Props> = ({
             <button onClick={handleSaveNew}>
               {persistentSavePath ? "Save New" : "Save New (Select Folder)"}
             </button>
-            <button onClick={handleUpdateCurrent}>
-              Update Current
+            <button onClick={handleUpdate}>
+              Update
             </button>
           </div>
         </div>

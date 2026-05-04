@@ -45,9 +45,9 @@ export const App = () => {
               <button
                 type="button"
                 className="panel-settings-button"
-                title="Open Folder Path Setup"
+                title="Open Paths Settings"
                 onClick={() => setLayoutsSettingsOpen(open => !open)}
-                aria-label="Open Folder Path Setup"
+                aria-label="Open Paths Settings"
               >
                 {"\u2699"}
               </button>
@@ -97,6 +97,7 @@ export const App = () => {
             <LayoutsPanel
               baseDirDefault={getDefaultCardsLevelsDir()}
               cardProject={cardProject}
+              onSettingsClose={() => setLayoutsSettingsOpen(false)}
               settingsOpen={layoutsSettingsOpen}
             />
           )}
