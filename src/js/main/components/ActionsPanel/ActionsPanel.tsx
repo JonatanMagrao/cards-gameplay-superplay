@@ -1,5 +1,6 @@
 import React from "react";
 import { csi, evalTS } from "../../../lib/utils/bolt";
+import { fs, os, path } from "../../../lib/cep/node";
 
 type Props = {
   cardsPreset?: string;
@@ -7,6 +8,20 @@ type Props = {
   progressBarPreset?: string;
   expressionLibRelPath?: string;
   coinValue: string; // NOVO: Recebendo a moeda escolhida
+};
+
+const CONFIG_FILE_NAME = ".cards-layout-config.json";
+
+const readTrimCoveredCardsPreference = (): boolean => {
+  try {
+    const configPath = path.join(os.homedir(), CONFIG_FILE_NAME);
+    if (!fs.existsSync(configPath)) return false;
+
+    const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    return config && config.trimCoveredCards === true;
+  } catch (_) {
+    return false;
+  }
 };
 
 export const ActionsPanel: React.FC<Props> = ({
@@ -28,9 +43,9 @@ export const ActionsPanel: React.FC<Props> = ({
   const coinPath = `${assets}/coins-vfx/coin_plus-${coinValue}.mov`;
 
   // NOVO: Passando os dois caminhos pro seu ExtendScript
-  const applyJump = async () => await evalTS("handleApplyJump", cardPresetPath, coinPath, sfxFolderPath);
+  const applyJump = async () => await evalTS("handleApplyJump", cardPresetPath, coinPath, sfxFolderPath, readTrimCoveredCardsPreference());
 
-  const flipStockCards = async () => await evalTS("handleFlipStockCards", expressionLibPath, sfxFolderPath);
+  const flipStockCards = async () => await evalTS("handleFlipStockCards", expressionLibPath, sfxFolderPath, readTrimCoveredCardsPreference());
   const applyFlipCard = async () => await evalTS("handleFlipCards");
 
   const handleSetTargetLayer = async () => await evalTS("handleSetTargetLayer");
@@ -40,7 +55,7 @@ export const ActionsPanel: React.FC<Props> = ({
 
   const resetCardsAnimation = async () => await evalTS("handleResetCardsAnimation");
   const restoreCardsAnimation = async () =>
-    await evalTS("handleRestoreCardsAnimation", cardPresetPath, expressionLibPath, coinPath, sfxFolderPath);
+    await evalTS("handleRestoreCardsAnimation", cardPresetPath, expressionLibPath, coinPath, sfxFolderPath, readTrimCoveredCardsPreference());
 
   const handleImportFilesAndComps = async () =>
     await evalTS("handleImportFilesAndComps", cardProject);

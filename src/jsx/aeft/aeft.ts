@@ -514,10 +514,10 @@ export const handleSetTableauLayer = () => {
   }
 }
 
-export const handleApplyJump = (presetPath: string, coinFilePath: string, sfxFolderPath?: string) => {
+export const handleApplyJump = (presetPath: string, coinFilePath: string, sfxFolderPath?: string, trimCoveredCards?: boolean) => {
   app.beginUndoGroup("Apply Jump")
   try {
-    applyJumpOnSelectedlayers(presetPath, coinFilePath, sfxFolderPath, getCardsControlPresetPath(presetPath))
+    applyJumpOnSelectedlayers(presetPath, coinFilePath, sfxFolderPath, getCardsControlPresetPath(presetPath), trimCoveredCards === true)
   } catch (e) {
     alertError(e, 93, "handleApplyJump", "aeft.ts")
   } finally {
@@ -525,10 +525,10 @@ export const handleApplyJump = (presetPath: string, coinFilePath: string, sfxFol
   }
 }
 
-export const handleFlipStockCards = (expressionLibPath?: string, sfxFolderPath?: string) => {
+export const handleFlipStockCards = (expressionLibPath?: string, sfxFolderPath?: string, trimCoveredCards?: boolean) => {
   app.beginUndoGroup("Flip Stock Cards")
   try {
-    flipStockCards(undefined, expressionLibPath, sfxFolderPath, getCardsControlPresetPath(expressionLibPath))
+    flipStockCards(undefined, expressionLibPath, sfxFolderPath, getCardsControlPresetPath(expressionLibPath), trimCoveredCards === true)
   } catch (e) {
     alertError(e, 114, "handleFlipStockCards", "aeft.ts")
   } finally {
@@ -644,7 +644,8 @@ export const handleRestoreCardsAnimation = (
   presetPath: string,
   expressionLibPath?: string,
   coinFilePath?: string,
-  sfxFolderPath?: string
+  sfxFolderPath?: string,
+  trimCoveredCards?: boolean
 ) => {
   app.beginUndoGroup("Restore Cards Animation by Layout")
   restoreCardsAnimation(
@@ -653,7 +654,8 @@ export const handleRestoreCardsAnimation = (
     expressionLibPath,
     coinFilePath,
     sfxFolderPath,
-    getCardsControlPresetPath(presetPath)
+    getCardsControlPresetPath(presetPath),
+    trimCoveredCards === true
   )
   app.endUndoGroup()
 }

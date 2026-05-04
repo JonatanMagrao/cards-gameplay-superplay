@@ -411,6 +411,169 @@ const applyJumpSfx = (comp: CompItem, sfxTime: number, sfxFolderPath: string | u
   applySfx(comp, sfxTime, joinPath(sfxFolderPath, jumpSfxFileName), keyLabel.green);
 }
 
+const cardFxDisplayName = "Cards Gameplay Superplay"
+const trimBounceThresholdPx = 0.5
+const trimMinSettleFrames = 2
+const trimDefaultSettleFrames = 10
+const trimMaxSettleFrames = 24
+const trimStockSettleFrames = 2
+
+const clampNumber = (value: number, minValue: number, maxValue: number): number => {
+  return Math.min(maxValue, Math.max(minValue, value))
+}
+
+const getCardEffectProp = (layer: Layer, propName: string): Property | null => {
+  const cardEffect = getEffectByNameOrMatchName(layer, cardFxDisplayName, cardFxMatchName)
+  if (!cardEffect) return null
+
+  try {
+    const prop = cardEffect.property(propName) as Property
+    if (prop) return prop
+  } catch (_) { }
+
+  return null
+}
+
+const getCardEffectNumber = (layer: Layer, propName: string, fallback: number): number => {
+  const prop = getCardEffectProp(layer, propName)
+  if (!prop) return fallback
+
+  try {
+    return toNumber(prop.value, fallback)
+  } catch (_) {
+    return fallback
+  }
+}
+
+const getBounceSettleSeconds = (comp: CompItem, layer: Layer): number => {
+  const frameDuration = comp.frameDuration
+  const minSettle = frameDuration * trimMinSettleFrames
+  const maxSettle = frameDuration * trimMaxSettleFrames
+  const defaultSettle = frameDuration * trimDefaultSettleFrames
+  const amplitude = Math.abs(getCardEffectNumber(layer, "Bounce Amplitude", 0))
+
+  if (amplitude <= 0.0001) return minSettle
+
+  const frequency = Math.abs(getCardEffectNumber(layer, "Bounce Frequency", 0))
+  const decay = Math.abs(getCardEffectNumber(layer, "Bounce Decay", 0))
+  let settleSeconds = defaultSettle
+
+  if (decay > 0.0001) {
+    settleSeconds = Math.log(Math.max(amplitude, trimBounceThresholdPx) / trimBounceThresholdPx) / decay
+  }
+
+  if (frequency > 0.0001) {
+    settleSeconds = Math.max(settleSeconds, 1 / frequency)
+  }
+
+  if (!isFinite(settleSeconds) || settleSeconds < 0) settleSeconds = defaultSettle
+  return clampNumber(settleSeconds, minSettle, maxSettle)
+}
+
+const getJumpCoveredTrimTime = (comp: CompItem, layer: Layer, jumpTime: number): number => {
+  const jumpDurationFrames = Math.max(0, getCardEffectNumber(layer, "Jump Duration", 0))
+  const jumpDurationSeconds = jumpDurationFrames * comp.frameDuration
+  const trimTime = jumpTime + jumpDurationSeconds + getBounceSettleSeconds(comp, layer)
+
+  return clampNumber(trimTime, 0, comp.duration)
+}
+
+const getCardsControlNumber = (comp: CompItem, propName: string, fallback: number): number => {
+  const control = getCardsControlProp(comp, propName)
+  if (!control) return fallback
+
+  try {
+    return toNumber(control.prop.value, fallback)
+  } catch (_) {
+    return fallback
+  }
+}
+
+const getFlipStockCoveredTrimTime = (comp: CompItem, flipTime: number): number => {
+  const moveEndFrames = Math.max(0, getCardsControlNumber(comp, "Stock Move End Frames", 11))
+  const flipEndFrames = Math.max(0, getCardsControlNumber(comp, "Stock Flip End Frames", 17))
+  const endFrames = Math.max(moveEndFrames, flipEndFrames) + trimStockSettleFrames
+  const trimTime = flipTime + (endFrames * comp.frameDuration)
+
+  return clampNumber(trimTime, 0, comp.duration)
+}
+
+const getCoveredTrimTimeForAction = (comp: CompItem, marker: LayerMarkerMeta): number | null => {
+  const cardAction = getMarkerActionName(marker)
+
+  if (cardAction === "Jump") return getJumpCoveredTrimTime(comp, marker.layer, marker.time)
+  if (cardAction === "Flip Stock") return getFlipStockCoveredTrimTime(comp, marker.time)
+
+  return null
+}
+
+const setLayerOutPointSafely = (layer: Layer, comp: CompItem, outPoint: number) => {
+  if (!layer) return
+
+  const minOutPoint = layer.inPoint + comp.frameDuration
+  const safeOutPoint = clampNumber(Math.max(outPoint, minOutPoint), minOutPoint, comp.duration)
+  const wasLocked = layer.locked
+
+  try {
+    layer.locked = false
+    layer.outPoint = safeOutPoint
+  } catch (e) {
+    $.writeln(`[Cards Gameplay] Could not trim layer "${layer.name}": ${e}`)
+  } finally {
+    try { layer.locked = wasLocked } catch (_) { }
+  }
+}
+
+const resetCardLayerOutPoints = (comp: CompItem, cardLayers?: Layer[]) => {
+  const layers = cardLayers || findCardLayers()
+
+  for (let i = 0; i < layers.length; i++) {
+    setLayerOutPointSafely(layers[i], comp, comp.duration)
+  }
+}
+
+const getOrderedCoveringActionMarkersFromLayers = (cardLayers: Layer[]): LayerMarkerMeta[] => {
+  const actionMarkers: LayerMarkerMeta[] = []
+
+  for (let i = 0; i < cardLayers.length; i++) {
+    const layerMarkers = getLayerMarkersMetadata(cardLayers[i])
+
+    for (let j = 0; j < layerMarkers.length; j++) {
+      const marker = layerMarkers[j]
+      const markerAction = getMarkerActionName(marker)
+      if (markerAction === "Jump" || markerAction === "Flip Stock") actionMarkers.push(marker)
+    }
+  }
+
+  actionMarkers.sort(compareLayerMarkersByTime)
+  return actionMarkers
+}
+
+const recalculateCoveredCardTrims = (comp: CompItem, trimCoveredCards: boolean) => {
+  const cardLayers = findCardLayers()
+
+  resetCardLayerOutPoints(comp, cardLayers)
+  if (!trimCoveredCards) return
+
+  const targetLayer = getTargetLayer() as Layer
+  if (!targetLayer) return
+
+  const actionMarkers = getOrderedCoveringActionMarkersFromLayers(cardLayers)
+  let previousLayer: Layer | null = targetLayer
+
+  for (let i = 0; i < actionMarkers.length; i++) {
+    const marker = actionMarkers[i]
+    const coveringLayer = marker.layer
+    const trimTime = getCoveredTrimTimeForAction(comp, marker)
+
+    if (previousLayer && coveringLayer && previousLayer !== coveringLayer && trimTime !== null) {
+      setLayerOutPointSafely(previousLayer, comp, trimTime)
+    }
+
+    previousLayer = coveringLayer
+  }
+}
+
 const getLayerVisualCompPositionAtTime = (comp: CompItem, layer: Layer, time: number): [number, number, number] => {
   const posProp = getLayerProp(layer, posPropPath) as Property;
   const posValue = posProp.valueAtTime(time, false) as number[];
@@ -509,7 +672,8 @@ export const applyJumpOnSelectedlayers = (
   presetPath: string,
   coinFilePath: string,
   sfxFolderPath?: string,
-  controlPresetPath?: string
+  controlPresetPath?: string,
+  trimCoveredCards: boolean = false
 ) => {
 
   const thisComp = requireActiveComp("Apply Jump");
@@ -556,6 +720,8 @@ export const applyJumpOnSelectedlayers = (
       applyJumpSfx(thisComp, thisTime, sfxFolderPath, jumpSfxSequenceIndex)
       jumpSfxSequenceIndex++
     }
+
+    recalculateCoveredCardTrims(thisComp, trimCoveredCards === true)
 
   } catch (e) {
     alertError(e, 208, "applyJumpOnSelectedlayers", "actions.ts")
@@ -1141,7 +1307,8 @@ export const flipStockCards = (
   stockLayerToFlip?: Layer,
   expressionLibPath?: string,
   sfxFolderPath?: string,
-  controlPresetPath?: string
+  controlPresetPath?: string,
+  trimCoveredCards: boolean = false
 ) => {
 
   // main consts
@@ -1185,6 +1352,8 @@ export const flipStockCards = (
     applyStockExpressions(thisComp, expressionLibPath, firstSelectedLayer, controlPresetPath)
 
     applySfx(thisComp, markerTime, joinPath(sfxFolderPath, flipStockSfxFileName), keyLabel.yellow)
+
+    if (!stockLayerToFlip) recalculateCoveredCardTrims(thisComp, trimCoveredCards === true)
   } finally {
     ensureCardsControlsLayer(thisComp, controlPresetPath)
     restoreCompState(thisComp, compSnapshot)
@@ -1397,6 +1566,8 @@ export const resetCardsAnimation = (presetMatchName: string) => {
         ? thisComp.selectedLayers
         : findCardLayers()
 
+      resetCardLayerOutPoints(thisComp, cardsList)
+
       for (let i = 0; i < cardsList.length; i++) {
         const layer = cardsList[i]
         try {
@@ -1443,7 +1614,8 @@ export const restoreCardsAnimation = (
   expressionLibPath?: string,
   coinFilePath?: string,
   sfxFolderPath?: string,
-  controlPresetPath?: string
+  controlPresetPath?: string,
+  trimCoveredCards: boolean = false
 ) => {
 
   const thisComp = requireActiveComp("Restore Cards Animation")
@@ -1497,6 +1669,7 @@ export const restoreCardsAnimation = (
     ensureCardsControlsLayer(thisComp, controlPresetPath)
     clearFxPrecompLayers()
     clearCoinVfxLayers(thisComp)
+    recalculateCoveredCardTrims(thisComp, false)
 
     thisComp.time = 0
 
@@ -1544,6 +1717,8 @@ export const restoreCardsAnimation = (
       jumpSfxSequenceIndex = 1
     }
   }
+
+  recalculateCoveredCardTrims(thisComp, trimCoveredCards === true)
 
   } finally {
     ensureCardsControlsLayer(thisComp, controlPresetPath)
