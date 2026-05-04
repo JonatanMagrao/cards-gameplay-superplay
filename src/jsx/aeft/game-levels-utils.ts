@@ -32,10 +32,10 @@ export type ApplyCardsLayoutOptions = {
 export type CardsLayoutOriginMetadata = {
   schema: string;
   levelFolder: string;
-  sourceJson: string;
-  targetJson: string;
-  targetResolution: string;
-  appliedAsFallback: boolean;
+  sourceJson?: string;
+  targetJson?: string;
+  targetResolution?: string;
+  appliedAsFallback?: boolean;
   rootPath?: string;
   levelFolderPath?: string;
 };
@@ -175,13 +175,7 @@ const isCardsLayoutOriginMetadata = (value: any): boolean => {
 const normalizeCardsLayoutOriginMetadata = (origin: CardsLayoutOriginMetadata): CardsLayoutOriginMetadata => {
   return {
     schema: LAYOUT_ORIGIN_SCHEMA,
-    levelFolder: String(origin.levelFolder || ""),
-    sourceJson: String(origin.sourceJson || ""),
-    targetJson: String(origin.targetJson || ""),
-    targetResolution: String(origin.targetResolution || ""),
-    appliedAsFallback: !!origin.appliedAsFallback,
-    rootPath: origin.rootPath ? String(origin.rootPath) : "",
-    levelFolderPath: origin.levelFolderPath ? String(origin.levelFolderPath) : ""
+    levelFolder: String(origin.levelFolder || "")
   };
 };
 

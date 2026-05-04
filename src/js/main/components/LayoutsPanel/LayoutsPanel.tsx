@@ -226,12 +226,9 @@ type LevelJsonPath = {
 type CardsLayoutOriginMetadata = {
   schema?: string;
   levelFolder?: string;
-  sourceJson?: string;
-  targetJson?: string;
-  targetResolution?: string;
-  appliedAsFallback?: boolean;
   rootPath?: string;
   levelFolderPath?: string;
+  targetResolution?: string;
 };
 
 type SaveLayoutDialogResult = {
@@ -675,13 +672,7 @@ export const LayoutsPanel: React.FC<Props> = ({
         autoFitLayout: !isExactResolution,
         layoutOrigin: {
           schema: LAYOUT_ORIGIN_SCHEMA,
-          levelFolder: selectedFolder,
-          rootPath: remoteRoot,
-          levelFolderPath: remoteLevelFolder,
-          sourceJson: getFileNameFromPath(layoutJsonFilePath),
-          targetJson: getFileNameFromPath(layoutJsonFilePath),
-          targetResolution,
-          appliedAsFallback: !isExactResolution
+          levelFolder: selectedFolder
         }
       };
 
