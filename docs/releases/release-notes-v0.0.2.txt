@@ -1,0 +1,20 @@
+Cards Gameplay v0.0.2
+
+Git Source
+- No Git tag for 0.0.2 was found.
+- No branch named 0.0.2 was found.
+- No package.json version set to 0.0.2 was found.
+- No commit message or tracked file content referencing 0.0.2 was found.
+- The visible package.json history jumps from 0.0.1 directly to 0.1.2 at commit c8441e7.
+
+Overview
+Release notes for v0.0.2 could not be recovered from the current Git history.
+
+Status
+- This file is intentionally a trace note, not a reconstructed feature release.
+- If v0.0.2 existed as a manual package outside this Git history, its notes should be filled from the original package, shared-drive folder, or external documentation.
+- Based only on Git, there is not enough evidence to safely assign specific changes to v0.0.2.
+
+Notes
+- The next confirmed version marker in Git is v0.1.2.
+- The previous confirmed version marker in Git is v0.0.1.

@@ -1,30 +1,28 @@
-import { raise, alertError } from "./errors"
-import { expPos, expRot } from "../utils/expressions"
-import { getActiveComp, forEachLayer, getItemByName } from "./aeft-utils"
+import { alertError } from "./errors"
+import { expFlipCard, expPos, expRot, expScale, expStockFlip, expStockPos } from "../utils/expressions"
+import { captureCompState, findCompItemByName, findFootageItemByName, getActiveComp, forEachLayer, getItemByName, requireActiveComp, restoreCompState } from "./aeft-utils"
 import {
-  getDeepestZ,
-  setKeyframeToLayer,
   getTargetLayer,
   targetExist,
   namedMarkerExists,
   findCardLayers,
   removePropertyKeyframesByLabel,
-  filterLayerMarkersByLabelAndComment
+  filterLayerMarkersByLabelAndComment,
+  getMarkerCommentTitle,
+  getLayerCardTag
 } from "./cards-utils"
 import {
-  frameDuration,
   getLayerProp,
   addMarkerToLayer,
   selectAllSelectedLayers,
   deselectAllSelectedLayers,
   forEachSelectedLayer,
   fxExistsByMatchName,
-  removeFxByMatchName,
   LayerMarkerMeta,
   getLayerMarkersMetadata,
-  getFootageByName,
-  deselectAllLayer,
+  setExpressionSafely,
 } from "./aeft-utils-jonatan"
+import { parseMarkerComment } from "./markers"
 
 
 export const keyLabel = {
@@ -47,14 +45,58 @@ export const keyLabel = {
 } as const
 
 const cardFxMatchName = "Pseudo/cards_gameplay_superplay"
-const sfxPrecompName = "SFX Precomp"
+export const cardsControlFxMatchName = "Pseudo/cards_gameplay_control"
+export const cardsControlPresetFileName = "cards-gameplay-control.ffx"
+const fxPrecompName = "FX Precomp"
+const legacySfxPrecompName = "SFX Precomp"
+const expressionLibName = "superplay-expression-lib.jsx"
+const cardsControlsLayerName = "Cards Controls"
+const cardsControlFxDisplayName = "Cards Gameplay Control"
+const cardsGroupControlLayerName = "Cards Group Control"
+const cardsLayoutOriginSchema = "cards-gameplay.layout-origin.v1"
+const coinVfxLayerNamePrefix = "Coin VFX"
+const jumpSfxFilePrefix = "jump_sfx_"
+const jumpSfxFileExtension = ".wav"
+const jumpSfxMaxScanCount = 99
+const flipStockSfxFileName = "flip-stock_sfx_01.wav"
+const markerTimeTolerance = 0.0001
+
+type CardsControlSlider = {
+  name: string;
+  expected: string;
+}
+
+const cardsControlsSliders: CardsControlSlider[] = [
+  { name: "Global Z Step", expected: "0.05" },
+  { name: "Stock Spacing X", expected: "inferred from current stock spacing" },
+  { name: "Stock Arc Height", expected: "29" },
+  { name: "Stock Move Mid Frames", expected: "6" },
+  { name: "Stock Move End Frames", expected: "11" },
+  { name: "Stock Shift Delay Frames", expected: "2" },
+  { name: "Stock Shift Duration Frames", expected: "11" },
+  { name: "Stock Flip Start Frames", expected: "2" },
+  { name: "Stock Flip End Frames", expected: "17" },
+] 
+
+const jumpCardsControlsSliders: string[] = ["Global Z Step"]
+const stockCardsControlsSliders: string[] = [
+  "Global Z Step",
+  "Stock Spacing X",
+  "Stock Arc Height",
+  "Stock Move Mid Frames",
+  "Stock Move End Frames",
+  "Stock Shift Delay Frames",
+  "Stock Shift Duration Frames",
+  "Stock Flip Start Frames",
+  "Stock Flip End Frames",
+]
 
 const actionLabelColor = keyLabel.green
 const anticipationLabelColor = keyLabel.yellow
-const zAdjust = .1
 
 const transformGroupMatchName = "ADBE Transform Group"
 const essentialPropertiesMatchName = "ADBE Layer Overrides"
+const layerEffect = "ADBE Effect Parade"
 
 export const markerPropPath = "ADBE Marker"
 export const posPropPath = [transformGroupMatchName, "ADBE Position"] as const
@@ -68,21 +110,50 @@ export const progressBarEPPath = [essentialPropertiesMatchName, "Bar Control"] a
 
 export const textPropPath = ["ADBE Text Properties", "ADBE Text Document"] as const
 
+export const superplayCardEffect = [layerEffect, cardFxMatchName]
+
 
 //================================= TABLEAU JUMP ACTIONS
 
-const ensureSfxPrecomp = (): CompItem => {
-  let sfxPrecomp = getItemByName(sfxPrecompName) as CompItem
-  const thisComp = getActiveComp() as CompItem;
+const removeCardTagsFromLayerName = (layerName: string): string => {
+  let cleanName = String(layerName || "");
+  const tagsList = ["TARGET", "STOCK", "TABLEAU"];
 
-  if (!sfxPrecomp) {
-    const { pixelAspect, duration, frameRate } = thisComp
-    //@ts-ignore
-    sfxPrecomp = app.project.items.addComp(sfxPrecompName, 100, 100, pixelAspect, duration, frameRate);
+  for (let i = 0; i < tagsList.length; i++) {
+    const tagName = tagsList[i];
+    const tagPattern = new RegExp("\\s*\\[" + tagName + "\\]");
+    cleanName = cleanName.replace(tagPattern, "");
   }
 
-  return sfxPrecomp
+  return cleanName;
+}
 
+const syncFxPrecompSettings = (fxPrecomp: CompItem, parentComp: CompItem) => {
+  try { (fxPrecomp as any).width = parentComp.width; } catch (_) { }
+  try { (fxPrecomp as any).height = parentComp.height; } catch (_) { }
+  try { fxPrecomp.pixelAspect = parentComp.pixelAspect; } catch (_) { }
+  try { fxPrecomp.duration = parentComp.duration; } catch (_) { }
+  try { fxPrecomp.frameRate = parentComp.frameRate; } catch (_) { }
+}
+
+const ensureFxPrecomp = (parentComp?: CompItem): CompItem => {
+  const thisComp = parentComp || getActiveComp() as CompItem;
+  let fxPrecomp = findCompItemByName(fxPrecompName, false) as CompItem
+
+  if (!fxPrecomp) {
+    fxPrecomp = findCompItemByName(legacySfxPrecompName, false) as CompItem
+    if (fxPrecomp) fxPrecomp.name = fxPrecompName;
+  }
+
+  if (!fxPrecomp) {
+    const { width, height, pixelAspect, duration, frameRate } = thisComp
+    //@ts-ignore
+    fxPrecomp = app.project.items.addComp(fxPrecompName, width, height, pixelAspect, duration, frameRate);
+  } else {
+    syncFxPrecompSettings(fxPrecomp, thisComp);
+  }
+
+  return fxPrecomp
 }
 
 const findPrecompBySourceName = (comp: CompItem, sourceName: string): AVLayer | null => {
@@ -97,226 +168,1159 @@ const findPrecompBySourceName = (comp: CompItem, sourceName: string): AVLayer | 
   return null;
 };
 
-const applySfx = (comp: CompItem, sfxTime: number, sfxName: string, labelColor: number) => {
-  const sfxPrecomp = ensureSfxPrecomp() as CompItem;
+const findPrecompBySourceItem = (comp: CompItem, sourceItem: CompItem): AVLayer | null => {
+  for (let i = 1; i <= comp.numLayers; i++) {
+    const layer = comp.layer(i) as AVLayer;
+    const src = (layer as any).source as any;
 
-  let sfxPrecompRef = findPrecompBySourceName(comp, sfxPrecompName);
+    if (src && src === sourceItem) {
+      return layer;
+    }
+  }
+  return null;
+};
 
-  if (!sfxPrecompRef) {
-    sfxPrecompRef = comp.layers.add(sfxPrecomp) as AVLayer;
-    sfxPrecompRef.label = keyLabel.brown;
-    sfxPrecompRef.startTime = 0;
-    sfxPrecompRef.selected = false
-    sfxPrecompRef.moveToEnd();
-    sfxPrecompRef.threeDLayer = true
-    sfxPrecompRef.locked = true
-  } else {
-    sfxPrecompRef.locked = false
-    sfxPrecompRef.moveToEnd()
-    sfxPrecompRef.locked = true
+const textContains = (textValue: string, searchValue: string): boolean => {
+  const text = String(textValue || "");
+  const search = String(searchValue || "");
+  if (search.length === 0) return true;
+  if (search.length > text.length) return false;
+
+  for (let i = 0; i <= text.length - search.length; i++) {
+    let matches = true;
+
+    for (let j = 0; j < search.length; j++) {
+      if (text.charAt(i + j) !== search.charAt(j)) {
+        matches = false;
+        break;
+      }
+    }
+
+    if (matches) return true;
   }
 
-  const sfxFile = getFootageByName(sfxName);
+  return false;
+}
+
+const getFileNameFromPath = (filePath: string): string => {
+  const pathText = String(filePath || "");
+  let lastSeparatorIndex = -1;
+
+  for (let i = 0; i < pathText.length; i++) {
+    const char = pathText.charAt(i);
+    if (char === "/" || char === "\\") lastSeparatorIndex = i;
+  }
+
+  return pathText.substring(lastSeparatorIndex + 1);
+}
+
+const joinPath = (folderPath: string | undefined, fileName: string): string => {
+  const folder = String(folderPath || "");
+  if (folder === "") return fileName;
+
+  const lastChar = folder.charAt(folder.length - 1);
+  return lastChar === "/" || lastChar === "\\"
+    ? `${folder}${fileName}`
+    : `${folder}/${fileName}`;
+}
+
+const getNumberedSfxFileName = (prefix: string, fileNumber: number): string => {
+  const numberText = fileNumber < 10
+    ? `0${fileNumber}`
+    : String(fileNumber);
+
+  return `${prefix}${numberText}${jumpSfxFileExtension}`;
+}
+
+const getJumpSfxVariationCount = (sfxFolderPath?: string): number => {
+  const folderPath = String(sfxFolderPath || "");
+  if (folderPath === "") return 1;
+
+  let variationCount = 0;
+
+  for (let i = 1; i <= jumpSfxMaxScanCount; i++) {
+    const fileName = getNumberedSfxFileName(jumpSfxFilePrefix, i);
+    const sfxFile = new File(joinPath(folderPath, fileName));
+
+    if (!sfxFile.exists) break;
+    variationCount = i;
+  }
+
+  return variationCount > 0 ? variationCount : 1;
+}
+
+const getJumpSfxFileNameForSequence = (sfxFolderPath: string | undefined, sequenceIndex: number): string => {
+  const variationCount = getJumpSfxVariationCount(sfxFolderPath);
+  const safeSequenceIndex = sequenceIndex < 1 ? 1 : Math.floor(sequenceIndex);
+  const wrappedIndex = ((safeSequenceIndex - 1) % variationCount) + 1;
+
+  return getNumberedSfxFileName(jumpSfxFilePrefix, wrappedIndex);
+}
+
+const ensureFootageItem = (filePath: string, missingLabel: string): FootageItem | null => {
+  const itemName = getFileNameFromPath(filePath);
+  const existingItem = findFootageItemByName(itemName, false);
+
+  if (existingItem && existingItem instanceof FootageItem) return existingItem;
+
+  const file = new File(filePath);
+  if (!file.exists) {
+    alert(`${missingLabel} file not found:\n${filePath}`);
+    return null;
+  }
+
+  const importOptions = new ImportOptions(file);
+  const importedItem = app.project.importFile(importOptions) as FootageItem;
+  importedItem.name = itemName;
+
+  return importedItem;
+}
+
+const ensureFxPrecompLayer = (comp: CompItem): AVLayer => {
+  const fxPrecomp = ensureFxPrecomp(comp);
+  let fxPrecompRef = findPrecompBySourceItem(comp, fxPrecomp);
+
+  if (!fxPrecompRef) fxPrecompRef = findPrecompBySourceName(comp, fxPrecompName);
+  if (!fxPrecompRef) fxPrecompRef = findPrecompBySourceName(comp, legacySfxPrecompName);
+
+  if (!fxPrecompRef) {
+    fxPrecompRef = comp.layers.add(fxPrecomp) as AVLayer;
+  }
+
+  fxPrecompRef.locked = false;
+  fxPrecompRef.name = fxPrecompName;
+  fxPrecompRef.label = keyLabel.brown;
+  fxPrecompRef.enabled = true;
+  fxPrecompRef.guideLayer = false;
+  fxPrecompRef.shy = false;
+  fxPrecompRef.selected = false;
+  fxPrecompRef.startTime = 0;
+  try { fxPrecompRef.threeDLayer = false; } catch (_) { }
+  fxPrecompRef.moveToBeginning();
+  fxPrecompRef.locked = true;
+
+  return fxPrecompRef;
+}
+
+const applySfx = (comp: CompItem, sfxTime: number, sfxFilePath: string, labelColor: number) => {
+  const fxPrecompRef = ensureFxPrecompLayer(comp);
+
+  const sfxFile = ensureFootageItem(sfxFilePath, "SFX");
   if (!sfxFile) {
-    alert(`Sound file "${sfxName}" not found in project.`);
     return;
   }
 
-  const sfxLayerItem = sfxPrecompRef.source.layers.add(sfxFile)
+  const sfxLayerItem = (fxPrecompRef.source as CompItem).layers.add(sfxFile)
   sfxLayerItem.startTime = sfxTime
   sfxLayerItem.label = labelColor
+  sfxLayerItem.name = getFileNameFromPath(sfxFilePath)
 
 };
 
-const clearSfxPrecompLayers = () => {
-  const sfxPrecomp = getItemByName("SFX Precomp") as CompItem;
+const clearCompLayers = (comp: CompItem | null) => {
+  if (!comp) return;
 
-  if (!sfxPrecomp) return;
-
-  for (let i = sfxPrecomp.numLayers; i > 0; i--) {
-    sfxPrecomp.layer(i).remove();
+  for (let i = comp.numLayers; i > 0; i--) {
+    comp.layer(i).remove();
   }
 };
 
-export const jumpPos = (time: number, camada: Layer, targetLayer: Layer) => {
+const clearFxPrecompLayers = () => {
+  const fxPrecomp = findCompItemByName(fxPrecompName, false) as CompItem;
+  const legacySfxPrecomp = findCompItemByName(legacySfxPrecompName, false) as CompItem;
 
-  const myLayer = camada as unknown as AVLayer
-  myLayer.threeDLayer = true
+  clearCompLayers(fxPrecomp);
+  if (legacySfxPrecomp && legacySfxPrecomp !== fxPrecomp) clearCompLayers(legacySfxPrecomp);
+};
 
-  const posProp = getLayerProp(myLayer, posPropPath)
-  const targetPosProp = getLayerProp(targetLayer, posPropPath)
-  const startPos = posProp.value
-  const targetEndPos = targetPosProp.valueAtTime(targetLayer.outPoint, false)
-  const lastZPos = getDeepestZ()
-
-  targetEndPos[2] = lastZPos - zAdjust
-
-  const keyTime1 = time + frameDuration(4)
-  const keyTime2 = time + frameDuration(24)
-
-  setKeyframeToLayer(posProp, keyTime1, startPos, actionLabelColor)
-  setKeyframeToLayer(posProp, keyTime2, targetEndPos, actionLabelColor)
-
-  posProp.expression = expPos
-
+const getLayerSourceName = (layer: Layer): string => {
+  try {
+    const source = (layer as any).source as any;
+    return source && source.name ? source.name : "";
+  } catch (_) {
+    return "";
+  }
 }
 
-export const jumpScale = (time: number, camada: Layer) => {
+const isCoinVfxLayer = (layer: Layer): boolean => {
+  return textContains(layer.name, coinVfxLayerNamePrefix) || textContains(getLayerSourceName(layer), "coin_plus-");
+}
 
-  const scaleProp = getLayerProp(camada, scalePropPath)
-  const layerScale = scaleProp.value
-  const pressScaleEffect = []
+const clearCoinVfxLayers = (comp: CompItem) => {
+  for (let i = comp.numLayers; i >= 1; i--) {
+    const layer = comp.layer(i);
+    if (isCoinVfxLayer(layer)) layer.remove();
+  }
+}
 
-  for (let i of layerScale) {
-    pressScaleEffect.push(i * .8)
+const getMarkerActionName = (marker: LayerMarkerMeta): string => {
+  return marker.title || getMarkerCommentTitle(marker.comment);
+}
+
+const compareLayerMarkersByTime = (a: LayerMarkerMeta, b: LayerMarkerMeta): number => {
+  const timeDiff = a.time - b.time;
+  if (Math.abs(timeDiff) > markerTimeTolerance) return timeDiff;
+
+  return a.layer.index - b.layer.index;
+}
+
+const getJumpSfxSequenceMarkers = (): LayerMarkerMeta[] => {
+  const cardsLayers = findCardLayers();
+  const sequenceMarkers: LayerMarkerMeta[] = [];
+
+  for (let i = 0; i < cardsLayers.length; i++) {
+    const layerMarkers = getLayerMarkersMetadata(cardsLayers[i]);
+
+    for (let j = 0; j < layerMarkers.length; j++) {
+      const marker = layerMarkers[j];
+      const markerAction = getMarkerActionName(marker);
+
+      if (markerAction === "Jump" || markerAction === "Flip Stock") {
+        sequenceMarkers.push(marker);
+      }
+    }
   }
 
-  const firstKeyTime = time
-  const secondKeyTime = firstKeyTime + frameDuration(4)
-  const thirdKeyTime = secondKeyTime + frameDuration(4)
+  sequenceMarkers.sort(compareLayerMarkersByTime);
 
-  setKeyframeToLayer(scaleProp, firstKeyTime, layerScale, actionLabelColor, { ease: true, easeIn: 16, easeOut: 100 })
-  setKeyframeToLayer(scaleProp, secondKeyTime, pressScaleEffect, actionLabelColor, { ease: true, easeIn: 33.3333, easeOut: 33.3333 })
-  setKeyframeToLayer(scaleProp, thirdKeyTime, layerScale, actionLabelColor, { ease: true, easeIn: 100, easeOut: 16 })
-
+  return sequenceMarkers;
 }
 
-export const jumpRotation = (time: number, camada: Layer) => {
+const getNextJumpSfxSequenceIndexAtTime = (time: number): number => {
+  const sequenceMarkers = getJumpSfxSequenceMarkers();
+  let sequenceIndex = 1;
 
-  const rotationProp = getLayerProp(camada, zRotPropPath)
-  const layerRotation = rotationProp.value
+  for (let i = 0; i < sequenceMarkers.length; i++) {
+    const marker = sequenceMarkers[i];
+    if (marker.time > time + markerTimeTolerance) break;
 
-  const firstKeyTime = time + frameDuration(4)
-  const secondkeyTime = time + frameDuration(24)
+    const markerAction = getMarkerActionName(marker);
 
-  setKeyframeToLayer(rotationProp, firstKeyTime, layerRotation, actionLabelColor)
-  setKeyframeToLayer(rotationProp, secondkeyTime, 0, actionLabelColor)
+    if (markerAction === "Flip Stock") {
+      sequenceIndex = 1;
+    } else if (markerAction === "Jump") {
+      sequenceIndex++;
+    }
+  }
 
-  rotationProp.expression = expRot
-
+  return sequenceIndex;
 }
 
-export const applyJumpOnSelectedlayers = (presetPath: string) => {
+const applyJumpSfx = (comp: CompItem, sfxTime: number, sfxFolderPath: string | undefined, sequenceIndex: number) => {
+  const jumpSfxFileName = getJumpSfxFileNameForSequence(sfxFolderPath, sequenceIndex);
+  applySfx(comp, sfxTime, joinPath(sfxFolderPath, jumpSfxFileName), keyLabel.green);
+}
+
+const cardFxDisplayName = "Cards Gameplay Superplay"
+const trimBounceThresholdPx = 0.5
+const trimMinSettleFrames = 2
+const trimDefaultSettleFrames = 10
+const trimMaxSettleFrames = 24
+const trimStockSettleFrames = 2
+
+const clampNumber = (value: number, minValue: number, maxValue: number): number => {
+  return Math.min(maxValue, Math.max(minValue, value))
+}
+
+const getCardEffectProp = (layer: Layer, propName: string): Property | null => {
+  const cardEffect = getEffectByNameOrMatchName(layer, cardFxDisplayName, cardFxMatchName)
+  if (!cardEffect) return null
+
+  try {
+    const prop = cardEffect.property(propName) as Property
+    if (prop) return prop
+  } catch (_) { }
+
+  return null
+}
+
+const getCardEffectNumber = (layer: Layer, propName: string, fallback: number): number => {
+  const prop = getCardEffectProp(layer, propName)
+  if (!prop) return fallback
+
+  try {
+    return toNumber(prop.value, fallback)
+  } catch (_) {
+    return fallback
+  }
+}
+
+const getBounceSettleSeconds = (comp: CompItem, layer: Layer): number => {
+  const frameDuration = comp.frameDuration
+  const minSettle = frameDuration * trimMinSettleFrames
+  const maxSettle = frameDuration * trimMaxSettleFrames
+  const defaultSettle = frameDuration * trimDefaultSettleFrames
+  const amplitude = Math.abs(getCardEffectNumber(layer, "Bounce Amplitude", 0))
+
+  if (amplitude <= 0.0001) return minSettle
+
+  const frequency = Math.abs(getCardEffectNumber(layer, "Bounce Frequency", 0))
+  const decay = Math.abs(getCardEffectNumber(layer, "Bounce Decay", 0))
+  let settleSeconds = defaultSettle
+
+  if (decay > 0.0001) {
+    settleSeconds = Math.log(Math.max(amplitude, trimBounceThresholdPx) / trimBounceThresholdPx) / decay
+  }
+
+  if (frequency > 0.0001) {
+    settleSeconds = Math.max(settleSeconds, 1 / frequency)
+  }
+
+  if (!isFinite(settleSeconds) || settleSeconds < 0) settleSeconds = defaultSettle
+  return clampNumber(settleSeconds, minSettle, maxSettle)
+}
+
+const getJumpCoveredTrimTime = (comp: CompItem, layer: Layer, jumpTime: number): number => {
+  const jumpDurationFrames = Math.max(0, getCardEffectNumber(layer, "Jump Duration", 0))
+  const jumpDurationSeconds = jumpDurationFrames * comp.frameDuration
+  const trimTime = jumpTime + jumpDurationSeconds + getBounceSettleSeconds(comp, layer)
+
+  return clampNumber(trimTime, 0, comp.duration)
+}
+
+const getCardsControlNumber = (comp: CompItem, propName: string, fallback: number): number => {
+  const control = getCardsControlProp(comp, propName)
+  if (!control) return fallback
+
+  try {
+    return toNumber(control.prop.value, fallback)
+  } catch (_) {
+    return fallback
+  }
+}
+
+const getFlipStockCoveredTrimTime = (comp: CompItem, flipTime: number): number => {
+  const moveEndFrames = Math.max(0, getCardsControlNumber(comp, "Stock Move End Frames", 11))
+  const flipEndFrames = Math.max(0, getCardsControlNumber(comp, "Stock Flip End Frames", 17))
+  const endFrames = Math.max(moveEndFrames, flipEndFrames) + trimStockSettleFrames
+  const trimTime = flipTime + (endFrames * comp.frameDuration)
+
+  return clampNumber(trimTime, 0, comp.duration)
+}
+
+const getCoveredTrimTimeForAction = (comp: CompItem, marker: LayerMarkerMeta): number | null => {
+  const cardAction = getMarkerActionName(marker)
+
+  if (cardAction === "Jump") return getJumpCoveredTrimTime(comp, marker.layer, marker.time)
+  if (cardAction === "Flip Stock") return getFlipStockCoveredTrimTime(comp, marker.time)
+
+  return null
+}
+
+const setLayerOutPointSafely = (layer: Layer, comp: CompItem, outPoint: number) => {
+  if (!layer) return
+
+  const minOutPoint = layer.inPoint + comp.frameDuration
+  const safeOutPoint = clampNumber(Math.max(outPoint, minOutPoint), minOutPoint, comp.duration)
+  const wasLocked = layer.locked
+
+  try {
+    layer.locked = false
+    layer.outPoint = safeOutPoint
+  } catch (e) {
+    $.writeln(`[Cards Gameplay] Could not trim layer "${layer.name}": ${e}`)
+  } finally {
+    try { layer.locked = wasLocked } catch (_) { }
+  }
+}
+
+const resetCardLayerOutPoints = (comp: CompItem, cardLayers?: Layer[]) => {
+  const layers = cardLayers || findCardLayers()
+
+  for (let i = 0; i < layers.length; i++) {
+    setLayerOutPointSafely(layers[i], comp, comp.duration)
+  }
+}
+
+const getOrderedCoveringActionMarkersFromLayers = (cardLayers: Layer[]): LayerMarkerMeta[] => {
+  const actionMarkers: LayerMarkerMeta[] = []
+
+  for (let i = 0; i < cardLayers.length; i++) {
+    const layerMarkers = getLayerMarkersMetadata(cardLayers[i])
+
+    for (let j = 0; j < layerMarkers.length; j++) {
+      const marker = layerMarkers[j]
+      const markerAction = getMarkerActionName(marker)
+      if (markerAction === "Jump" || markerAction === "Flip Stock") actionMarkers.push(marker)
+    }
+  }
+
+  actionMarkers.sort(compareLayerMarkersByTime)
+  return actionMarkers
+}
+
+const recalculateCoveredCardTrims = (comp: CompItem, trimCoveredCards: boolean) => {
+  const cardLayers = findCardLayers()
+
+  resetCardLayerOutPoints(comp, cardLayers)
+  if (!trimCoveredCards) return
 
   const targetLayer = getTargetLayer() as Layer
-  const thisComp = getActiveComp();
+  if (!targetLayer) return
+
+  const actionMarkers = getOrderedCoveringActionMarkersFromLayers(cardLayers)
+  let previousLayer: Layer | null = targetLayer
+
+  for (let i = 0; i < actionMarkers.length; i++) {
+    const marker = actionMarkers[i]
+    const coveringLayer = marker.layer
+    const trimTime = getCoveredTrimTimeForAction(comp, marker)
+
+    if (previousLayer && coveringLayer && previousLayer !== coveringLayer && trimTime !== null) {
+      setLayerOutPointSafely(previousLayer, comp, trimTime)
+    }
+
+    previousLayer = coveringLayer
+  }
+}
+
+const getLayerVisualCompPositionAtTime = (comp: CompItem, layer: Layer, time: number): [number, number, number] => {
+  const posProp = getLayerProp(layer, posPropPath) as Property;
+  const posValue = posProp.valueAtTime(time, false) as number[];
+  const localPosition: [number, number, number] = [
+    toNumber(posValue[0]),
+    toNumber(posValue[1]),
+    toNumber(posValue.length > 2 ? posValue[2] : 0),
+  ];
+
+  const originalTime = comp.time;
+
+  try {
+    comp.time = time;
+
+    const avLayer = layer as AVLayer;
+    if (!avLayer || typeof avLayer.sourcePointToComp !== "function") return localPosition;
+
+    const anchorProp = getLayerProp(layer, anchorPropPath) as Property;
+    const anchorValue = anchorProp.value as number[];
+    const compPoint = avLayer.sourcePointToComp([
+      toNumber(anchorValue[0]),
+      toNumber(anchorValue[1]),
+    ]);
+
+    return [
+      toNumber(compPoint[0], localPosition[0]),
+      toNumber(compPoint[1], localPosition[1]),
+      localPosition[2],
+    ];
+  } catch (_) {
+    return localPosition;
+  } finally {
+    try {
+      comp.time = originalTime;
+    } catch (_) { }
+  }
+}
+
+const markersRequireTarget = (markers: LayerMarkerMeta[]): boolean => {
+  for (let i = 0; i < markers.length; i++) {
+    const cardAction = getMarkerActionName(markers[i]);
+    if (cardAction === "Jump" || cardAction === "Flip Stock") return true;
+  }
+
+  return false;
+}
+
+export const jumpPos = (camada: Layer) => {
+  const posProp = getLayerProp(camada, posPropPath)
+  setExpressionSafely(posProp, expPos)
+}
+
+export const jumpScale = (camada: Layer) => {
+  const scaleProp = getLayerProp(camada, scalePropPath)
+  setExpressionSafely(scaleProp, expScale)
+}
+
+export const jumpRotation = (camada: Layer) => {
+  const rotationProp = getLayerProp(camada, zRotPropPath)
+  setExpressionSafely(rotationProp, expRot)
+}
+
+export const setJumpTargetLayer = (camada: Layer, targetLayer: Layer) => {
+
+  camada
+    .property("ADBE Effect Parade")
+    .property(cardFxMatchName)
+    .property("Target Layer")
+    //@ts-ignore
+    .setValue(targetLayer.index)
+}
+
+const applyCoin = (camada: Layer, coinFilePath: string | undefined, coinTime: number) => {
+  if (!coinFilePath) return;
+
+  const thisComp = getActiveComp()
+  const importedItem = ensureFootageItem(coinFilePath, "Coin VFX") as AVItem
+  if (!importedItem) return;
+
+  const fxPrecompRef = ensureFxPrecompLayer(thisComp);
+  const fxPrecomp = fxPrecompRef.source as CompItem;
+  const coinLayer = fxPrecomp.layers.add(importedItem)
+
+  const camadaPosValue = getLayerVisualCompPositionAtTime(thisComp, camada, coinTime)
+  const coinLayerPos = getLayerProp(coinLayer, posPropPath)
+
+  coinLayer.name = `${coinVfxLayerNamePrefix} - ${camada.name}`
+  coinLayer.startTime = coinTime
+  coinLayer.label = keyLabel.fuschia
+  coinLayer.threeDLayer = false
+  coinLayerPos.setValue([camadaPosValue[0], camadaPosValue[1]])
+
+}
+
+export const applyJumpOnSelectedlayers = (
+  presetPath: string,
+  coinFilePath: string,
+  sfxFolderPath?: string,
+  controlPresetPath?: string,
+  trimCoveredCards: boolean = false
+) => {
+
+  const thisComp = requireActiveComp("Apply Jump");
+  if (!thisComp) return;
+
+  const targetLayer = getTargetLayer() as Layer
   const thisTime = thisComp.time
 
   if (!targetLayer) {
-    alert('Please, set a target layer before applying the "Jump" action.')
+    alert('Please set a target layer before applying the "Jump" action.')
     return
   }
 
+  const compSnapshot = captureCompState(thisComp)
+
   try {
+    ensureCardsControlsLayer(thisComp, controlPresetPath)
+    warnCardsControlsFallbacks(thisComp, jumpCardsControlsSliders)
+    let jumpSfxSequenceIndex = getNextJumpSfxSequenceIndexAtTime(thisTime)
+    const selectedLayers: Layer[] = []
 
-    forEachSelectedLayer(thisComp, camada => {
+    for (let i = 0; i < thisComp.selectedLayers.length; i++) {
+      selectedLayers.push(thisComp.selectedLayers[i])
+    }
+
+    for (let i = 0; i < selectedLayers.length; i++) {
+      const camada = selectedLayers[i]
+
       if (!fxExistsByMatchName(camada, cardFxMatchName)) camada.applyPreset(new File(presetPath))
-      if (namedMarkerExists(camada, "Jump")) return
+      if (namedMarkerExists(camada, "Jump")) continue
 
-      jumpPos(thisTime, camada, targetLayer)
-      jumpScale(thisTime, camada)
-      jumpRotation(thisTime, camada)
+      //@ts-ignore
+      camada.threeDLayer = true
+
+      applyCoin(camada, coinFilePath, thisTime)
+
+      jumpPos(camada)
+      jumpScale(camada)
+      jumpRotation(camada)
+
       addMarkerToLayer(camada, thisTime, { title: "Jump", label: keyLabel.green })
+      setJumpTargetLayer(camada, targetLayer)
 
-      camada
-        .property("ADBE Effect Parade")
-        .property(cardFxMatchName)
-        .property("Target Layer")
-        //@ts-ignore
-        .setValue(targetLayer.index)
+      applyJumpSfx(thisComp, thisTime, sfxFolderPath, jumpSfxSequenceIndex)
+      jumpSfxSequenceIndex++
+    }
 
-      // applySfx(thisComp, thisTime, "jump_sfx_01.wav", keyLabel.green)
-    })
+    recalculateCoveredCardTrims(thisComp, trimCoveredCards === true)
 
   } catch (e) {
     alertError(e, 208, "applyJumpOnSelectedlayers", "actions.ts")
+  } finally {
+    ensureCardsControlsLayer(thisComp, controlPresetPath)
+    restoreCompState(thisComp, compSnapshot)
   }
 }
 
 // ============================== STOCK CARD ACTIONS
 
-const moveNextCards = (keyTimePos1: number, nextLayers: Layer[], distanceXPosLayers: number) => {
+const ensureExpressionLibProjectItem = (expressionLibPath?: string): FootageItem | null => {
+  const existingItem = findFootageItemByName(expressionLibName, false);
 
-  let incrementKeyframeDistance = 3
+  if (existingItem) {
+    if (expressionLibPath) {
+      try {
+        const libFile = new File(expressionLibPath);
+        if (libFile.exists) {
+          (existingItem as any).replace(libFile);
+          existingItem.name = expressionLibName;
+        }
+      } catch (_) { }
+    }
 
-  for (let nextLayer of nextLayers) {
-    const startKeyTime = keyTimePos1 + frameDuration(1) * incrementKeyframeDistance
-    const endKeyTime = startKeyTime + frameDuration(11)
-
-    const layerPos = getLayerProp(nextLayer, posPropPath)
-    const layerPosValue = layerPos.value
-
-    setKeyframeToLayer(layerPos, startKeyTime, layerPosValue, anticipationLabelColor, { ease: true, easeIn: 75, easeOut: 75 })
-
-    layerPosValue[0] += distanceXPosLayers
-    setKeyframeToLayer(layerPos, endKeyTime, layerPosValue, anticipationLabelColor, { ease: true, easeIn: 75, easeOut: 75 })
-
-    incrementKeyframeDistance += 1
+    return existingItem;
   }
 
+  if (!expressionLibPath) return null;
+
+  const libFile = new File(expressionLibPath);
+  if (!libFile.exists) {
+    alert(`Expression library not found:\n${expressionLibPath}`);
+    return null;
+  }
+
+  const importOptions = new ImportOptions(libFile);
+  const importedItem = app.project.importFile(importOptions) as FootageItem;
+  importedItem.name = expressionLibName;
+
+  return importedItem;
 }
 
-const getAllStockLayers = (comp: CompItem) => {
-  const matches: Layer[] = [];
-  if (!comp || !(comp instanceof CompItem)) return matches;
+const ensureExpressionLibLayer = (comp: CompItem, expressionLibPath?: string): AVLayer | null => {
+  const libItem = ensureExpressionLibProjectItem(expressionLibPath);
+  if (!libItem) return null;
 
+  let libLayer = findPrecompBySourceName(comp, expressionLibName);
+
+  if (!libLayer) {
+    libLayer = comp.layers.add(libItem) as AVLayer;
+  }
+
+  const wasLocked = libLayer.locked;
+  libLayer.locked = false;
+  libLayer.name = expressionLibName;
+  libLayer.enabled = false;
+  libLayer.guideLayer = true;
+  libLayer.shy = true;
+  libLayer.selected = false;
+  libLayer.startTime = 0;
+  libLayer.moveToEnd();
+  libLayer.locked = wasLocked || true;
+  comp.hideShyLayers = true;
+
+  return libLayer;
+}
+
+let lastCardsControlsFallbackWarning = "";
+
+const findLayerByNameInComp = (comp: CompItem, layerName: string): Layer | null => {
   for (let i = 1; i <= comp.numLayers; i++) {
     const layer = comp.layer(i);
-    if (!layer) continue;
+    if (layer && layer.name === layerName) return layer;
+  }
 
-    if (layer.name && layer.name.indexOf("[STOCK]") !== -1 && layer.label === anticipationLabelColor) {
-      matches.push(layer);
+  return null;
+}
+
+const getEffectByNameOrMatchName = (
+  layer: Layer,
+  effectName: string,
+  effectMatchName?: string
+): PropertyGroup | null => {
+  const effects = layer.property(layerEffect) as PropertyGroup;
+  if (!effects) return null;
+
+  if (effectMatchName) {
+    try {
+      const effect = effects.property(effectMatchName) as PropertyGroup;
+      if (effect) return effect;
+    } catch (_) { }
+  }
+
+  try {
+    const effect = effects.property(effectName) as PropertyGroup;
+    if (effect) return effect;
+  } catch (_) { }
+
+  for (let i = 1; i <= effects.numProperties; i++) {
+    const effect = effects.property(i) as PropertyGroup;
+    if (!effect) continue;
+    if (effect.name === effectName || (effectMatchName && effect.matchName === effectMatchName)) {
+      return effect;
     }
   }
 
-  return matches;
+  return null;
 }
 
-const getAllStockLayersBelow = (comp: CompItem, layerRef: Layer) => {
-  const matches: Layer[] = [];
-  if (!comp || !(comp instanceof CompItem)) return matches;
+const getCardsControlEffect = (layer: Layer): PropertyGroup | null => {
+  return getEffectByNameOrMatchName(layer, cardsControlFxDisplayName, cardsControlFxMatchName);
+}
+
+const getCardsControlEffectProp = (layer: Layer, propName: string): Property | null => {
+  const controlEffect = getCardsControlEffect(layer);
+  if (!controlEffect) return null;
+
+  try {
+    const prop = controlEffect.property(propName) as Property;
+    if (prop) return prop;
+  } catch (_) { }
+
+  return null;
+}
+
+const getCardsControlProp = (comp: CompItem, propName: string): { layer: Layer, prop: Property } | null => {
+  const controlsLayer = findLayerByNameInComp(comp, cardsControlsLayerName);
+  if (!controlsLayer) return null;
+
+  const pseudoProp = getCardsControlEffectProp(controlsLayer, propName);
+  if (pseudoProp) return { layer: controlsLayer, prop: pseudoProp };
+
+  return null;
+}
+
+const hasCardsControlProp = (layer: Layer, propName: string): boolean => {
+  return getCardsControlEffectProp(layer, propName) !== null;
+}
+
+const applyCardsControlPreset = (layer: Layer, presetPath?: string): void => {
+  if (!presetPath) return;
+
+  try {
+    const presetFile = new File(String(presetPath || ""));
+    if (!presetFile.exists) return;
+
+    layer.applyPreset(presetFile);
+  } catch (_) { }
+}
+
+const ensureCardsControlEffect = (layer: Layer, presetPath?: string): void => {
+  if (getCardsControlEffect(layer)) return;
+
+  applyCardsControlPreset(layer, presetPath);
+  if (getCardsControlEffect(layer)) return;
+
+  try {
+    const effects = layer.property(layerEffect) as PropertyGroup;
+    if (effects) effects.addProperty(cardsControlFxMatchName);
+  } catch (_) { }
+}
+
+export const ensureCardsControlsLayer = (comp: CompItem, presetPath?: string): AVLayer | null => {
+  let controlsLayer = findLayerByNameInComp(comp, cardsControlsLayerName) as AVLayer | null;
+
+  if (!controlsLayer) {
+    controlsLayer = comp.layers.addNull() as AVLayer;
+  }
+
+  controlsLayer.locked = false;
+
+  try {
+    controlsLayer.name = cardsControlsLayerName;
+    controlsLayer.label = keyLabel.cyan;
+    controlsLayer.guideLayer = true;
+    controlsLayer.shy = false;
+    controlsLayer.enabled = true;
+    controlsLayer.threeDLayer = false;
+    ensureCardsControlEffect(controlsLayer, presetPath);
+    controlsLayer.name = cardsControlsLayerName;
+    controlsLayer.moveToBeginning();
+    controlsLayer.selected = false;
+  } finally {
+    controlsLayer.locked = false;
+  }
+
+  return controlsLayer;
+}
+
+const collectCardLayersFromComp = (comp: CompItem): AVLayer[] => {
+  const cardsLayers: AVLayer[] = [];
+
+  for (let i = 1; i <= comp.numLayers; i++) {
+    const layer = comp.layer(i) as AVLayer;
+    if (layer && getLayerCardTag(layer.name) !== null) cardsLayers.push(layer);
+  }
+
+  return cardsLayers;
+}
+
+const getCardsGroupControlLayer = (comp: CompItem): AVLayer | null => {
+  return findLayerByNameInComp(comp, cardsGroupControlLayerName) as AVLayer | null;
+}
+
+const ensureCardsGroupControlLayer = (comp: CompItem): AVLayer => {
+  let groupLayer = getCardsGroupControlLayer(comp);
+  const shouldInitializeTransform = !groupLayer;
+
+  if (!groupLayer) {
+    groupLayer = comp.layers.addNull() as AVLayer;
+  }
+
+  groupLayer.locked = false;
+  groupLayer.name = cardsGroupControlLayerName;
+  groupLayer.label = keyLabel.blue;
+  groupLayer.guideLayer = true;
+  groupLayer.shy = false;
+  groupLayer.enabled = true;
+  groupLayer.threeDLayer = true;
+
+  if (shouldInitializeTransform) {
+    try {
+      getLayerProp(groupLayer, posPropPath).setValue([comp.width / 2, comp.height / 2, 0]);
+      getLayerProp(groupLayer, scalePropPath).setValue([100, 100, 100]);
+      getLayerProp(groupLayer, zRotPropPath).setValue(0);
+    } catch (_) { }
+  }
+
+  groupLayer.moveToBeginning();
+  groupLayer.selected = false;
+  return groupLayer;
+}
+
+const setLayerParentSafely = (layer: AVLayer, parentLayer: AVLayer | null): void => {
+  const wasLocked = layer.locked;
+  layer.locked = false;
+
+  try {
+    layer.parent = parentLayer;
+  } catch (_) { }
+
+  layer.locked = wasLocked;
+}
+
+const removeLayerSafely = (layer: Layer | null): void => {
+  if (!layer) return;
+
+  try {
+    layer.locked = false;
+  } catch (_) { }
+
+  try {
+    layer.remove();
+  } catch (_) { }
+}
+
+const removeCompLayersByPredicate = (comp: CompItem, predicate: (layer: Layer) => boolean): void => {
+  for (let i = comp.numLayers; i >= 1; i--) {
+    const layer = comp.layer(i);
+    if (predicate(layer)) removeLayerSafely(layer);
+  }
+}
+
+const removeLayerByName = (comp: CompItem, layerName: string): void => {
+  removeCompLayersByPredicate(comp, layer => layer.name === layerName);
+}
+
+const removeLayersByNameOrSourceName = (comp: CompItem, layerName: string): void => {
+  removeCompLayersByPredicate(comp, layer => {
+    return layer.name === layerName || getLayerSourceName(layer) === layerName;
+  });
+}
+
+const getCompMarkerProperty = (comp: CompItem): Property | null => {
+  try {
+    const markerProperty = (comp as any).markerProperty as Property;
+    if (markerProperty) return markerProperty;
+  } catch (_) { }
+
+  try {
+    const markerProperty = (comp as any).property("ADBE Marker") as Property;
+    if (markerProperty) return markerProperty;
+  } catch (_) { }
+
+  return null;
+}
+
+const isCardsLayoutOriginMarkerComment = (comment: string): boolean => {
+  const parsedComment = parseMarkerComment(comment || "");
+  if (!parsedComment.data) return false;
+
+  try {
+    const parsedData = JSON.parse(parsedComment.data);
+    return !!(parsedData && parsedData.schema === cardsLayoutOriginSchema);
+  } catch (_) { }
+
+  return false;
+}
+
+const clearCardsLayoutOriginMarkers = (comp: CompItem): void => {
+  const markerProperty = getCompMarkerProperty(comp) as any;
+  if (!markerProperty) return;
+
+  for (let i = markerProperty.numKeys; i >= 1; i--) {
+    const markerValue = markerProperty.keyValue(i) as MarkerValue;
+    if (isCardsLayoutOriginMarkerComment(markerValue.comment)) {
+      markerProperty.removeKey(i);
+    }
+  }
+}
+
+export const groupCardsToControl = () => {
+  const thisComp = requireActiveComp("Group Cards");
+  if (!thisComp) return;
+
+  const cardsLayers = collectCardLayersFromComp(thisComp);
+  if (cardsLayers.length === 0) {
+    alert("No card layers found in the active composition.");
+    return;
+  }
+
+  const compSnapshot = captureCompState(thisComp);
+
+  try {
+    const groupLayer = ensureCardsGroupControlLayer(thisComp);
+
+    for (let i = 0; i < cardsLayers.length; i++) {
+      const cardLayer = cardsLayers[i];
+      if (cardLayer === groupLayer || cardLayer.parent === groupLayer) continue;
+      setLayerParentSafely(cardLayer, groupLayer);
+    }
+
+    groupLayer.moveToBeginning();
+  } finally {
+    restoreCompState(thisComp, compSnapshot);
+  }
+}
+
+export const clearCardsLevel = () => {
+  const thisComp = requireActiveComp("Clear Level");
+  if (!thisComp) return;
+
+  if (!confirm("Clear all cards and gameplay control layers from this composition?")) {
+    return;
+  }
+
+  const compSnapshot = captureCompState(thisComp);
+
+  try {
+    const cardsLayers = collectCardLayersFromComp(thisComp);
+    for (let i = cardsLayers.length - 1; i >= 0; i--) {
+      removeLayerSafely(cardsLayers[i]);
+    }
+
+    removeLayerByName(thisComp, cardsGroupControlLayerName);
+    removeLayerByName(thisComp, cardsControlsLayerName);
+    removeLayersByNameOrSourceName(thisComp, expressionLibName);
+    removeLayersByNameOrSourceName(thisComp, fxPrecompName);
+    removeLayersByNameOrSourceName(thisComp, legacySfxPrecompName);
+    clearCoinVfxLayers(thisComp);
+    clearFxPrecompLayers();
+    clearCardsLayoutOriginMarkers(thisComp);
+  } finally {
+    restoreCompState(thisComp, compSnapshot);
+  }
+}
+
+const toNumber = (value: any, fallback = 0): number => {
+  const numberValue = Number(value);
+  return isNaN(numberValue) ? fallback : numberValue;
+}
+
+const layerNameHasTag = (layer: Layer | null, tag: string): boolean => {
+  if (!layer || !layer.name) return false;
+
+  const text = String(layer.name || "");
+  if (tag.length === 0) return true;
+  if (tag.length > text.length) return false;
+
+  for (let i = 0; i <= text.length - tag.length; i++) {
+    let matches = true;
+
+    for (let j = 0; j < tag.length; j++) {
+      if (text.charAt(i + j) !== tag.charAt(j)) {
+        matches = false;
+        break;
+      }
+    }
+
+    if (matches) return true;
+  }
+
+  return false;
+}
+
+const isStockLayer = (layer: Layer | null): boolean => {
+  return layerNameHasTag(layer, "[STOCK]");
+}
+
+const getLayerPositionAtTime = (layer: Layer, time: number, preExpression = false): [number, number, number] => {
+  const posProp = getLayerProp(layer, posPropPath) as Property;
+  const posValue = posProp.valueAtTime(time, preExpression) as number[];
+
+  return [
+    toNumber(posValue[0]),
+    toNumber(posValue[1]),
+    toNumber(posValue.length > 2 ? posValue[2] : 0),
+  ];
+}
+
+const getStockLayers = (comp: CompItem): Layer[] => {
+  const stockLayers: Layer[] = [];
 
   for (let i = 1; i <= comp.numLayers; i++) {
     const layer = comp.layer(i);
-    if (!layer) continue;
+    if (isStockLayer(layer)) stockLayers.push(layer);
+  }
 
-    if (layer.name && layer.name.indexOf("[STOCK]") !== -1 && layer.label === anticipationLabelColor && layer.index > layerRef.index) {
-      matches.push(layer);
+  return stockLayers;
+}
+
+const getNextStockLayer = (comp: CompItem, baseLayer: Layer): Layer | null => {
+  for (let i = baseLayer.index + 1; i <= comp.numLayers; i++) {
+    const layer = comp.layer(i);
+    if (isStockLayer(layer)) return layer;
+  }
+
+  return null;
+}
+
+const inferStockSpacingXFromLayer = (comp: CompItem, baseLayer: Layer, sampleTime = comp.time): number | null => {
+  const nextStockLayer = getNextStockLayer(comp, baseLayer);
+  if (!nextStockLayer) return null;
+
+  const basePos = getLayerPositionAtTime(baseLayer, sampleTime, true);
+  const nextPos = getLayerPositionAtTime(nextStockLayer, sampleTime, true);
+  const spacingX = basePos[0] - nextPos[0];
+
+  return Math.abs(spacingX) > 0.0001 ? spacingX : null;
+}
+
+const inferStockSpacingX = (comp: CompItem, sampleTime = comp.time): number | null => {
+  const stockLayers = getStockLayers(comp);
+
+  for (let i = 0; i < stockLayers.length - 1; i++) {
+    const currentPos = getLayerPositionAtTime(stockLayers[i], sampleTime, true);
+    const nextPos = getLayerPositionAtTime(stockLayers[i + 1], sampleTime, true);
+    const spacingX = currentPos[0] - nextPos[0];
+
+    if (Math.abs(spacingX) > 0.0001) return spacingX;
+  }
+
+  return null;
+}
+
+const ensureStockSpacingX = (comp: CompItem, sampleTime = comp.time, stockLayerToFlip?: Layer) => {
+  const control = getCardsControlProp(comp, "Stock Spacing X");
+  if (!control) return;
+
+  const currentValue = toNumber(control.prop.value, 0);
+  if (Math.abs(currentValue) > 0.0001) return;
+
+  const inferredSpacingX = stockLayerToFlip
+    ? inferStockSpacingXFromLayer(comp, stockLayerToFlip, sampleTime) || inferStockSpacingX(comp, sampleTime)
+    : inferStockSpacingX(comp, sampleTime);
+
+  if (inferredSpacingX === null) {
+    $.writeln("[Cards Gameplay] Stock Spacing X could not be inferred.");
+    return;
+  }
+
+  const wasLocked = control.layer.locked;
+  control.layer.locked = false;
+
+  try {
+    control.prop.setValue(inferredSpacingX);
+    $.writeln(`[Cards Gameplay] Stock Spacing X inferred: ${inferredSpacingX}`);
+  } catch (err) {
+    $.writeln(`[Cards Gameplay] Could not set Stock Spacing X: ${err}`);
+  }
+
+  control.layer.locked = wasLocked;
+}
+
+const stringListContains = (items: string[], target: string): boolean => {
+  for (let i = 0; i < items.length; i++) {
+    if (items[i] === target) return true;
+  }
+
+  return false;
+}
+
+export const warnCardsControlsFallbacks = (comp: CompItem, sliderNames: string[]) => {
+  const requestedSliders: CardsControlSlider[] = [];
+  for (let i = 0; i < cardsControlsSliders.length; i++) {
+    const slider = cardsControlsSliders[i];
+    if (stringListContains(sliderNames, slider.name)) requestedSliders.push(slider);
+  }
+
+  const controlsLayer = findLayerByNameInComp(comp, cardsControlsLayerName);
+  const missingSliders: CardsControlSlider[] = [];
+
+  for (let i = 0; i < requestedSliders.length; i++) {
+    const slider = requestedSliders[i];
+    if (!controlsLayer || !hasCardsControlProp(controlsLayer, slider.name)) {
+      missingSliders.push(slider);
     }
   }
 
-  return matches;
+  if (missingSliders.length === 0) return;
+
+  const missingSliderNames: string[] = [];
+  const missingSliderLines: string[] = [];
+
+  for (let i = 0; i < missingSliders.length; i++) {
+    const slider = missingSliders[i];
+    missingSliderNames.push(slider.name);
+    missingSliderLines.push(`- ${slider.name}: ${slider.expected}`);
+  }
+
+  const signature = `${comp.name}|${controlsLayer ? "controls-layer" : "no-controls-layer"}|${missingSliderNames.join("|")}`;
+  if (signature === lastCardsControlsFallbackWarning) return;
+
+  lastCardsControlsFallbackWarning = signature;
+
+  const layerMessage = controlsLayer
+    ? `Missing control(s) on "${cardsControlsLayerName}" / "${cardsControlFxDisplayName}".`
+    : `Layer "${cardsControlsLayerName}" was not found.`;
+
+  alert([
+    "[Cards Gameplay Warning]",
+    layerMessage,
+    "Please add or repair these pseudo effect controls:",
+    missingSliderLines.join("\n"),
+  ].join("\n"));
 }
 
-const getNextStockCard = (comp: CompItem, baseLayer: Layer, labelColor: Number): Layer | null => {
-  if (!comp || !(comp instanceof CompItem)) return null;
-  if (!baseLayer || typeof baseLayer.index !== "number") return null;
+const applyStockExpressions = (
+  comp: CompItem,
+  expressionLibPath?: string,
+  stockLayerToFlip?: Layer,
+  controlPresetPath?: string
+) => {
+  ensureCardsControlsLayer(comp, controlPresetPath);
+  ensureExpressionLibLayer(comp, expressionLibPath);
+  ensureStockSpacingX(comp, comp.time, stockLayerToFlip);
+  warnCardsControlsFallbacks(comp, stockCardsControlsSliders);
 
-  var nextIndex = baseLayer.index + 1;
-  if (nextIndex < 1 || nextIndex > comp.numLayers) return null;
+  for (let i = 1; i <= comp.numLayers; i++) {
+    const layer = comp.layer(i) as AVLayer;
+    if (!isStockLayer(layer)) continue;
 
-  var nextLayer = comp.layer(nextIndex);
-  if (!nextLayer) return null;
+    layer.threeDLayer = true;
 
-  if (!nextLayer.name || nextLayer.name.indexOf("[STOCK]") === -1) return null;
-  if (typeof labelColor === "number" && nextLayer.label !== labelColor) return null;
+    const layerPos = getLayerProp(layer, posPropPath);
+    setExpressionSafely(layerPos, expStockPos);
 
-  return nextLayer;
+    try {
+      const layerFlip = getLayerProp(layer, flipCardEssPropPath);
+      setExpressionSafely(layerFlip, expStockFlip);
+    } catch (_) { }
+  }
 }
 
-export const flipStockCards = (stockLayerToFlip?: Layer) => {
+const getLayerMarkerKeyIndexByComment = (layer: Layer, markerComment: string): number | null => {
+  const markerProp = layer.property(markerPropPath) as Property;
+  if (!markerProp || markerProp.numKeys < 1) return null;
+
+  const targetComment = String(markerComment || "").toLowerCase();
+
+  for (let i = 1; i <= markerProp.numKeys; i++) {
+    const markerValue = markerProp.keyValue(i) as MarkerValue;
+    const comment = getMarkerCommentTitle(markerValue.comment).toLowerCase();
+
+    if (comment === targetComment) return i;
+  }
+
+  return null;
+}
+
+export const flipStockCards = (
+  stockLayerToFlip?: Layer,
+  expressionLibPath?: string,
+  sfxFolderPath?: string,
+  controlPresetPath?: string,
+  trimCoveredCards: boolean = false
+) => {
 
   // main consts
-  const thisComp = getActiveComp();
+  const thisComp = requireActiveComp("Flip Stock");
+  if (!thisComp) return;
+
   const targetLayer = getTargetLayer()
 
   if (!targetLayer) {
-    alert('Please, set a target layer before applying the "Flip Stock" action.')
+    alert('Please set a target layer before applying the "Flip Stock" action.')
     return
   }
-
-  const jumpHeight = 29
-  // const stockLayers = getAllStockLayers(thisComp)
 
   let firstSelectedLayer = null
 
@@ -324,100 +1328,49 @@ export const flipStockCards = (stockLayerToFlip?: Layer) => {
     firstSelectedLayer = stockLayerToFlip
   } else {
     if (!thisComp || !thisComp.selectedLayers || thisComp.selectedLayers.length === 0) {
-      alert("Please, select the Stock Card");
+      alert("Please select the Stock Card");
       return
     } else {
       firstSelectedLayer = thisComp.selectedLayers[0];
     }
   }
 
-  // property consts
-  const flipCardPos = getLayerProp(firstSelectedLayer, posPropPath)
-  const targetLayerPos = getLayerProp(targetLayer, posPropPath).value
-  const layerFlip = getLayerProp(firstSelectedLayer, flipCardEssPropPath)
-  const currentPos = flipCardPos.value;
-  const lastZPos = getDeepestZ()
-
-  // key timing consts
   const keyTimePos1 = thisComp.time;
-  const keyTimePos2 = keyTimePos1 + frameDuration(6)
-  const keyTimePos3 = keyTimePos2 + frameDuration(5)
-  const keyFlip1 = keyTimePos1 + frameDuration(2)
-  const keyFlip2 = keyTimePos1 + frameDuration(17)
+  const flipStockMarkerKeyIndex = getLayerMarkerKeyIndexByComment(firstSelectedLayer, "Flip Stock");
+  const markerTime = flipStockMarkerKeyIndex === null
+    ? keyTimePos1
+    : (firstSelectedLayer.property(markerPropPath) as Property).keyTime(flipStockMarkerKeyIndex);
 
-  //actions
+  const compSnapshot = captureCompState(thisComp)
 
-  addMarkerToLayer(firstSelectedLayer, keyTimePos1, { title: "Flip Stock", label: 2 })
+  try {
+    addMarkerToLayer(firstSelectedLayer, markerTime, {
+      title: "Flip Stock",
+      label: 2,
+    })
 
-  // FIRST POSITION KEYFRAME
-  setKeyframeToLayer(
-    flipCardPos,
-    keyTimePos1,
-    currentPos,
-    actionLabelColor,
-    { ease: true, easeIn: 75, easeOut: 75 }
-  )
+    applyStockExpressions(thisComp, expressionLibPath, firstSelectedLayer, controlPresetPath)
 
-  const diffXPos = targetLayerPos[0] > currentPos[0]
-    ? targetLayerPos[0] - currentPos[0]
-    : currentPos[0] - targetLayerPos[0]
+    applySfx(thisComp, markerTime, joinPath(sfxFolderPath, flipStockSfxFileName), keyLabel.yellow)
 
-  // SECOND POSITION KEYFRAME
-  const posSecondKey = [...currentPos]
-  posSecondKey[0] += diffXPos / 2
-  posSecondKey[1] -= jumpHeight
-  posSecondKey[2] = lastZPos - zAdjust
-  setKeyframeToLayer(
-    flipCardPos,
-    keyTimePos2,
-    posSecondKey,
-    actionLabelColor,
-    { ease: true, speedIn: 2640, speedOut: 2640, easeIn: 1.16, easeOut: 16 }
-  )
-
-  // THIRD POSITION KEYFRAME
-  const posThirdkey = [...posSecondKey]
-  posThirdkey[0] = getLayerProp(targetLayer, posPropPath).value[0]
-  posThirdkey[1] = currentPos[1]
-  setKeyframeToLayer(
-    flipCardPos,
-    keyTimePos3,
-    posThirdkey,
-    actionLabelColor,
-    { ease: true, easeIn: 75, easeOut: 75 }
-  )
-
-  // ESSENTIAL PROPERTIES FLIP KEYFRAMES
-  // if it is turned to front, only ignore and follow as is
-  if (layerFlip.value !== 100) {
-    setKeyframeToLayer(layerFlip, keyFlip1, 0, actionLabelColor)
-    setKeyframeToLayer(layerFlip, keyFlip2, 100, actionLabelColor)
+    if (!stockLayerToFlip) recalculateCoveredCardTrims(thisComp, trimCoveredCards === true)
+  } finally {
+    ensureCardsControlsLayer(thisComp, controlPresetPath)
+    restoreCompState(thisComp, compSnapshot)
   }
-
-  // applySfx(thisComp, thisComp.time, "flip-stock_sfx_01.wav", keyLabel.yellow)
-  const nextLayer = getNextStockCard(thisComp, firstSelectedLayer, anticipationLabelColor)
-
-  if (nextLayer) {
-    const stockLayersBelow = getAllStockLayersBelow(thisComp, firstSelectedLayer)
-    const firstLayerXPosValue = getLayerProp(firstSelectedLayer, posPropPath).value[0]
-    const secondLayerXPosValue = getLayerProp(nextLayer, posPropPath).value[0]
-    const distanceXPosLayers = firstLayerXPosValue - secondLayerXPosValue
-
-    moveNextCards(keyTimePos1, stockLayersBelow, distanceXPosLayers)
-  }
-
-
 }
 
 // ============================== CARDS MODIFIERS
 
 export const setTargetLayer = () => {
 
-  const thisComp = getActiveComp();
+  const thisComp = requireActiveComp("Set Target");
+  if (!thisComp) return;
+
   const targetLayer = thisComp.selectedLayers[0] as unknown as AVLayer
 
   if (!targetLayer) {
-    alert("Please, select one layer to be the target.")
+    alert("Please select one layer to be the target.")
     return
   };
 
@@ -430,11 +1383,7 @@ export const setTargetLayer = () => {
     targetLayer.threeDLayer = true
     targetLayer.label = 1
 
-    const tagsList = ["TARGET", "STOCK", "TABLEAU"]
-    const pattern = tagsList.join("|")
-    const removeOldPattern = new RegExp(`\\s*\\[(${pattern})\\].*`, "g")
-
-    targetLayer.name = targetLayer.name.replace(removeOldPattern, "")
+    targetLayer.name = removeCardTagsFromLayerName(targetLayer.name)
     targetLayer.name = `${targetLayer.name} [TARGET]`
   } catch (e) {
     alertError(e, 341, "setTargetLayer", "actions.ts")
@@ -444,10 +1393,8 @@ export const setTargetLayer = () => {
 
 export const setCardType = (cardTypeName: string, layerLabel: number) => {
 
-  const thisComp = getActiveComp();
-  const tagsList = ["TARGET", "STOCK", "TABLEAU"]
-  const pattern = tagsList.join("|")
-  const removeOldPattern = new RegExp(`\\s*\\[(${pattern})\\].*`, "g")
+  const thisComp = requireActiveComp("Set Card Type");
+  if (!thisComp) return;
 
   try {
     forEachSelectedLayer(thisComp, camada => {
@@ -456,7 +1403,7 @@ export const setCardType = (cardTypeName: string, layerLabel: number) => {
       layer.threeDLayer = true
       layer.label = layerLabel
 
-      layer.name = layer.name.replace(removeOldPattern, "")
+      layer.name = removeCardTagsFromLayerName(layer.name)
       layer.name = `${layer.name} [${cardTypeName.toUpperCase()}]`
 
     })
@@ -468,30 +1415,32 @@ export const setCardType = (cardTypeName: string, layerLabel: number) => {
 
 export const applyFlipCardOnSelectedlayers = () => {
 
-  const thisComp = getActiveComp();
+  const thisComp = requireActiveComp("Flip Cards");
+  if (!thisComp) return;
 
   forEachLayer(thisComp, camada => {
     if (camada.selected) {
 
-      flipCard(thisComp.time, camada)
       addMarkerToLayer(camada, thisComp.time, { title: "Flip", label: 2 })
+      flipCard(thisComp.time, camada)
 
     }
   })
 
 }
 
-export const flipCard = (time: number, layer: Layer) => {
-  const essentialProperties = getLayerProp(layer, flipCardEssPropPath) as any
-  const firstKeyTime = time
-  const secondKeyTime = firstKeyTime + frameDuration(15)
-
-  setKeyframeToLayer(essentialProperties, firstKeyTime, 0, anticipationLabelColor)
-  setKeyframeToLayer(essentialProperties, secondKeyTime, 100, anticipationLabelColor)
+export const flipCard = (_time: number, layer: Layer) => {
+  const essentialProperties = getLayerProp(layer, flipCardEssPropPath)
+  essentialProperties.expression = ""
+  removePropertyKeyframesByLabel(essentialProperties, actionLabelColor)
+  removePropertyKeyframesByLabel(essentialProperties, anticipationLabelColor)
+  setExpressionSafely(essentialProperties, expFlipCard)
 }
 
 export const turnCards = () => {
-  const thisComp = getActiveComp()
+  const thisComp = requireActiveComp("Turn Cards");
+  if (!thisComp) return;
+
   forEachLayer(thisComp, camada => {
     if (camada.selected) {
       const essentialProperties = getLayerProp(camada, flipCardEssPropPath)
@@ -501,10 +1450,17 @@ export const turnCards = () => {
   })
 }
 
-export const duplicateCards = (numCopies: number, adjustPos: number[]) => {
+export const duplicateCards = (numCopies: number, adjustPos: number[], controlPresetPath?: string) => {
 
-  const thisComp = getActiveComp();
+  const thisComp = requireActiveComp("Duplicate Cards");
+  if (!thisComp) return;
+
   const camada = thisComp.selectedLayers[0]
+  if (!camada) {
+    alert("Please select one card layer before duplicating.")
+    return
+  }
+
   const mainPos = getLayerProp(camada, posPropPath).value
 
   let lastDuplicated = camada
@@ -521,53 +1477,58 @@ export const duplicateCards = (numCopies: number, adjustPos: number[]) => {
     lastDuplicated.selected = true
   }
 
+  ensureCardsControlsLayer(thisComp, controlPresetPath)
 }
 
 export const changeCard = (deckName: string, card: number, cardName: string) => {
-  const thisComp = getActiveComp();
+  const thisComp = requireActiveComp("Change Card");
+  if (!thisComp) return;
+
   const cardsSet = getItemByName(deckName) as any
-  const camadas = thisComp.selectedLayers
-
-  // deseleciona as camadas selecionadas para utilizar o replaceSource em cada uma delas
-  deselectAllSelectedLayers(camadas)
-
-  for (let k = 0; k < camadas.length; k++) {
-    const camada = camadas[k] as any
-
-    camada.replaceSource(cardsSet, false)
-    const cardOption = getLayerProp(camada, cardOptionEPPath)
-    cardOption.setValue(card)
-
-    const tagsList = ["TARGET", "STOCK", "TABLEAU"]
-    const pattern = tagsList.join("|")
-    const tagPattern = new RegExp(`\\[(${pattern})\\]`, "g")
-
-    const zoneMatch = tagPattern.exec(camada.name);
-    const existingZoneTag = zoneMatch ? zoneMatch[1] : null;
-
-    camada.name = existingZoneTag ? `${cardName} [${existingZoneTag}]` : cardName;
-
+  if (!cardsSet) {
+    alert(`Project item "${deckName}" was not found.`)
+    return
   }
 
-  // reseleciona as camadas selecionadas para utilizar o replaceSource em cada uma delas
-  selectAllSelectedLayers(camadas)
+  const camadas = thisComp.selectedLayers
+  const compSnapshot = captureCompState(thisComp)
+
+  try {
+    // Temporarily deselect selected layers so replaceSource can run cleanly on each one.
+    deselectAllSelectedLayers(camadas)
+
+    for (let k = 0; k < camadas.length; k++) {
+      const camada = camadas[k] as any
+
+      camada.replaceSource(cardsSet, false)
+      const cardOption = getLayerProp(camada, cardOptionEPPath)
+      cardOption.setValue(card)
+
+      const existingZoneTag = getLayerCardTag(camada.name);
+
+      camada.name = existingZoneTag ? `${cardName} [${existingZoneTag}]` : cardName;
+
+    }
+
+    // Keep legacy behavior inside the action; the comp snapshot restores the final selection.
+    selectAllSelectedLayers(camadas)
+  } finally {
+    restoreCompState(thisComp, compSnapshot)
+  }
 
 }
 
-export const addCardToPrecomp = (deckName: string, card: number, cardName: string) => {
+export const addCardToPrecomp = (deckName: string, card: number, cardName: string, controlPresetPath?: string) => {
 
   try {
-    const thisComp = getActiveComp()
-
-    if (!thisComp) {
-      alert("No active composition found.\nPlease open a composition to add the card.");
-      return
-    }
+    const thisComp = requireActiveComp("Add Card")
+    if (!thisComp) return
 
     if (card === 15) {
       const plusCardSource = getItemByName("Plus_Card") as CompItem
-      const plusCard = thisComp.layers.add(plusCardSource)
+      thisComp.layers.add(plusCardSource)
       thisComp.layer("Plus_Card").label = keyLabel.purple
+      ensureCardsControlsLayer(thisComp, controlPresetPath)
 
       return
     }
@@ -583,84 +1544,83 @@ export const addCardToPrecomp = (deckName: string, card: number, cardName: strin
     cardLayer.name = cardName
     const cardOption = getLayerProp(cardLayer, cardOptionEPPath)
     cardOption.setValue(card)
+    ensureCardsControlsLayer(thisComp, controlPresetPath)
 
   } catch (e) {
-    alertError(e, 479, "AddCardToPrecomp", "actions.ts")
+    alertError(e, 558, "AddCardToPrecomp", "actions.ts")
   }
 }
 
 export const resetCardsAnimation = (presetMatchName: string) => {
-  // 1. O Try Externo protege contra falhas globais (ex: findCardLayers quebra)
+  // Outer try protects against global failures, such as findCardLayers throwing.
   try {
-    const thisComp = app.project.activeItem as CompItem
-    const selectedLayers = thisComp.selectedLayers
+    const thisComp = requireActiveComp("Reset Cards Animation")
+    if (!thisComp) return
 
-    const cardsList: Layer[] = selectedLayers.length > 0
-      ? thisComp.selectedLayers
-      : findCardLayers()
+    const compSnapshot = captureCompState(thisComp)
 
-    for (let layer of cardsList) {
-      // --- BLOCO 1: Propriedades e Expressões ---
-      // Agrupamos a obtenção E o uso da propriedade no mesmo bloco seguro
-      try {
-        // Se falhar ao pegar a prop, ele nem tenta limpar a expressão, o que é correto.
-        const zPosProp = getLayerProp(layer, zRotPropPath)
-        const posProp = getLayerProp(layer, posPropPath)
+    try {
+      const selectedLayers = thisComp.selectedLayers
 
-        // Só executa se as variáveis acima foram definidas com sucesso
-        posProp.expression = ""
-        zPosProp.expression = ""
+      const cardsList: Layer[] = selectedLayers.length > 0
+        ? thisComp.selectedLayers
+        : findCardLayers()
 
-        // --- BLOCO 3: Keyframes (Depende das props existirem) ---
-        // Podemos aninhar ou colocar logo abaixo. 
-        // Se as props existem, tentamos limpar as keys.
+      resetCardLayerOutPoints(thisComp, cardsList)
+
+      for (let i = 0; i < cardsList.length; i++) {
+        const layer = cardsList[i]
         try {
+          const zPosProp = getLayerProp(layer, zRotPropPath)
+          const posProp = getLayerProp(layer, posPropPath)
           const scaleProp = getLayerProp(layer, scalePropPath)
-          const flipCardProp = getLayerProp(layer, flipCardEssPropPath)
 
-          removePropertyKeyframesByLabel(posProp, 9)
-          removePropertyKeyframesByLabel(posProp, 2)
-          removePropertyKeyframesByLabel(scaleProp, 9)
-          removePropertyKeyframesByLabel(flipCardProp, 2)
-          removePropertyKeyframesByLabel(zPosProp, 9)
-          removePropertyKeyframesByLabel(flipCardProp, 9)
-        } catch (errKey) {
-          // Erro ao limpar keys não deve parar o resto
-          $.writeln("Erro ao limpar keys na layer " + layer.name)
+          posProp.expression = ""
+          zPosProp.expression = ""
+          scaleProp.expression = ""
+
+          removePropertyKeyframesByLabel(posProp, actionLabelColor)
+          removePropertyKeyframesByLabel(posProp, anticipationLabelColor)
+          removePropertyKeyframesByLabel(zPosProp, actionLabelColor)
+          removePropertyKeyframesByLabel(scaleProp, actionLabelColor)
+
+          try {
+            const flipCardProp = getLayerProp(layer, flipCardEssPropPath)
+            flipCardProp.expression = ""
+            removePropertyKeyframesByLabel(flipCardProp, actionLabelColor)
+            removePropertyKeyframesByLabel(flipCardProp, anticipationLabelColor)
+          } catch (_) { }
+
+        } catch (e) {
+          $.writeln("Could not access layer properties: " + layer.name)
         }
 
-      } catch (e) {
-        // Se falhou ao pegar as propriedades principais, não dá pra fazer nada nessa parte
-        // Mas não travamos o loop para a próxima layer.
-        // DICA: Evite 'alert' dentro de loop. Use $.writeln para não ter que clicar em OK 50 vezes.
-        $.writeln("Erro ao acessar propriedades da layer: " + layer.name)
       }
 
-      // --- BLOCO 2: Efeitos (Independente das propriedades) ---
-      // Este bloco fica separado. Se o BLOCO 1 falhar, este AINDA RODA.
-      try {
-        const effectExists = fxExistsByMatchName(layer, presetMatchName)
-        if (effectExists) {
-          removeFxByMatchName(layer, presetMatchName)
-        }
-      } catch (e) {
-        $.writeln("Erro ao remover efeitos da layer: " + layer.name)
-      }
+      clearFxPrecompLayers()
+      clearCoinVfxLayers(thisComp)
+    } finally {
+      restoreCompState(thisComp, compSnapshot)
     }
 
-    // clearSfxPrecompLayers()
-
   } catch (e) {
-    // Erro crítico: algo impediu o script de sequer começar a processar a lista
-    alertError(e, 549, "resetCardsAnimation", "actions.ts")
+    alertError(e, 591, "resetCardsAnimation", "actions.ts")
   }
 }
 
-export const restoreCardsAnimation = (presetPath: string, presetMatchName: string) => {
+export const restoreCardsAnimation = (
+  presetPath: string,
+  presetMatchName: string,
+  expressionLibPath?: string,
+  coinFilePath?: string,
+  sfxFolderPath?: string,
+  controlPresetPath?: string,
+  trimCoveredCards: boolean = false
+) => {
 
-  // clearSfxPrecompLayers()
+  const thisComp = requireActiveComp("Restore Cards Animation")
+  if (!thisComp) return
 
-  const thisComp = getActiveComp()
   const cardsLayers = findCardLayers()
 
   const markers: LayerMarkerMeta[] = []
@@ -671,53 +1631,99 @@ export const restoreCardsAnimation = (presetPath: string, presetMatchName: strin
 
     // only layers cards that have markers
     if (layerMarkers.length > 0) {
-      markers.push(...layerMarkers)
+      for (let j = 0; j < layerMarkers.length; j++) {
+        markers.push(layerMarkers[j])
+      }
     }
 
   }
-  // retorna todos os dados de marcadores
-
   const greenJumpMarkers = filterLayerMarkersByLabelAndComment(markers, keyLabel.green, "Jump")
   const yellowFlipMarkers = filterLayerMarkersByLabelAndComment(markers, keyLabel.yellow, "Flip")
   const yellowFlipStockMarkers = filterLayerMarkersByLabelAndComment(markers, keyLabel.yellow, "Flip Stock")
 
-  const cardsMarkers = [...greenJumpMarkers, ...yellowFlipMarkers, ...yellowFlipStockMarkers]
-  cardsMarkers.sort((a, b) => a.time - b.time)
+  const cardsMarkers: LayerMarkerMeta[] = []
 
-  // aqui vem a aplicação
+  for (let i = 0; i < greenJumpMarkers.length; i++) {
+    cardsMarkers.push(greenJumpMarkers[i])
+  }
+
+  for (let i = 0; i < yellowFlipMarkers.length; i++) {
+    cardsMarkers.push(yellowFlipMarkers[i])
+  }
+
+  for (let i = 0; i < yellowFlipStockMarkers.length; i++) {
+    cardsMarkers.push(yellowFlipStockMarkers[i])
+  }
+
+  cardsMarkers.sort(compareLayerMarkersByTime)
+
   const targetLayer = getTargetLayer() as Layer
-  const currentTime = thisComp.time
-  thisComp.time = 0
+  const compSnapshot = captureCompState(thisComp)
 
-  deselectAllSelectedLayers(cardsMarkers)
+  if (markersRequireTarget(cardsMarkers) && !targetLayer) {
+    alert('Please set a target layer before restoring "Jump" or "Flip Stock" actions.')
+    return
+  }
 
-  for (let card of cardsMarkers) {
-    if (card.comment === "Jump") {
+  try {
+    ensureCardsControlsLayer(thisComp, controlPresetPath)
+    clearFxPrecompLayers()
+    clearCoinVfxLayers(thisComp)
+    recalculateCoveredCardTrims(thisComp, false)
 
-      card.layer.selected = true
-      if (!fxExistsByMatchName(card.layer, presetMatchName)) card.layer.applyPreset(new File(presetPath))
-      jumpPos(card.time, card.layer, targetLayer)
-      jumpScale(card.time, card.layer)
-      jumpRotation(card.time, card.layer)
-      card.layer.selected = false
+    thisComp.time = 0
 
-      card.layer
-        .property("ADBE Effect Parade")
-        .property(cardFxMatchName)
-        .property("Target Layer")
-        .setValue(targetLayer.index)
-
-      // applySfx(thisComp, card.time, "jump_sfx_01.wav", keyLabel.green)
-
-    } else if (card.comment === "Flip") {
-      flipCard(card.time, card.layer)
-    } else if (card.comment === "Flip Stock") {
-      thisComp.time = card.time
-      flipStockCards(card.layer)
+  for (let i = 0; i < cardsMarkers.length; i++) {
+    const cardAction = getMarkerActionName(cardsMarkers[i])
+    if (cardAction === "Flip Stock") {
+      ensureStockSpacingX(thisComp, 0, cardsMarkers[i].layer)
+      break
     }
   }
 
-  thisComp.time = currentTime
+  const cardMarkerLayers: Layer[] = []
+  for (let i = 0; i < cardsMarkers.length; i++) {
+    cardMarkerLayers.push(cardsMarkers[i].layer)
+  }
+
+  deselectAllSelectedLayers(cardMarkerLayers)
+
+  let jumpSfxSequenceIndex = 1
+
+  for (let i = 0; i < cardsMarkers.length; i++) {
+    const card = cardsMarkers[i]
+    const cardAction = getMarkerActionName(card)
+
+    if (cardAction === "Jump") {
+
+      card.layer.selected = true
+
+      if (!fxExistsByMatchName(card.layer, presetMatchName)) card.layer.applyPreset(new File(presetPath))
+      jumpPos(card.layer)
+      jumpScale(card.layer)
+      jumpRotation(card.layer)
+      setJumpTargetLayer(card.layer, targetLayer)
+      applyCoin(card.layer, coinFilePath, card.time)
+      applyJumpSfx(thisComp, card.time, sfxFolderPath, jumpSfxSequenceIndex)
+      jumpSfxSequenceIndex++
+
+      card.layer.selected = false
+
+    } else if (cardAction === "Flip") {
+      flipCard(card.time, card.layer)
+    } else if (cardAction === "Flip Stock") {
+      thisComp.time = card.time
+      flipStockCards(card.layer, expressionLibPath, sfxFolderPath, controlPresetPath)
+      jumpSfxSequenceIndex = 1
+    }
+  }
+
+  recalculateCoveredCardTrims(thisComp, trimCoveredCards === true)
+
+  } finally {
+    ensureCardsControlsLayer(thisComp, controlPresetPath)
+    restoreCompState(thisComp, compSnapshot)
+  }
 
 }
 

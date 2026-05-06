@@ -1,0 +1,61 @@
+Cards Gameplay v1.0.0
+
+Git Source
+- Version bump commit: 6a17ac2
+- Commit date: 2026-01-28
+- Commit range used for reconstruction: after c8441e7 through 6a17ac2
+- package.json changed from 0.1.2 to 1.0.0 at this point.
+
+Overview
+This version stabilized the card animation workflow and added the first tutorial flyout, progress bar action, and SFX support for gameplay actions.
+
+Highlights
+- Added the flyout tutorial menu.
+- Added Google Drive tutorial links for Project, Cards Manager, and Copies.
+- Added placeholder tutorial items for Actions, Layouts, and VFX.
+- Added card suit symbols in the card dropdown.
+- Added progress bar assets.
+- Added an Add Progress Bar action.
+- Added card animation SFX support.
+- Added SFX handling for Jump and Flip Stock actions.
+- Reimplemented the FX precomp workflow with SFX and VFX support.
+
+Progress Bar
+- Added a progress bar preset workflow.
+- Added a Progress Bar button in the Actions panel.
+- Added resolution-aware positioning and scaling for the progress bar.
+- Added a linked percentage text layer.
+- Added expressions for progress bar control and percentage display.
+- Added alerts when there is no active composition.
+
+SFX And Animation
+- Added jump SFX application.
+- Added flip-stock SFX application.
+- Added automatic SFX Precomp creation and reuse.
+- Added cleanup of SFX layers during reset/restore flows.
+- Improved SFX behavior when resetting, restoring, and applying specific card actions.
+- Fixed duplicated SFX when applying Flip Stock.
+
+Cards And Actions
+- Improved restore card animation behavior so restoration happens at the end of the composition duration, preserving manual keyframes in place.
+- Improved card action handling around selected layers.
+- Fixed effect verification and removal to use matchName.
+- Improved the AEPX project structure.
+- Cleaned SFX assets from the AEPX project where needed.
+
+Tutorials And Flyout
+- Added flyout menu items for tutorials.
+- Added a Website item in the flyout menu.
+- Added a Refresh item in the flyout menu.
+- Added version/company informational flyout entries.
+
+Fixes
+- Fixed restore timing issues that could disturb manual keyframes.
+- Fixed SFX duplication on Flip Stock.
+- Fixed effect cleanup by using preset matchName instead of display name.
+
+Notes
+- Tutorial items still opened external web/Google Drive links in this version.
+- Tutorial files were not yet loaded dynamically from a local video-tutorials folder.
+- Assets were still bundled with the extension in this version.
+- SQLite layout cache, shared-drive paths, dynamic local tutorials, release update checks, and release-notes comparison were added later.

@@ -1,17 +1,25 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { csi, evalTS } from "../../../lib/utils/bolt";
+import { evalTS } from "../../../lib/utils/bolt";
 import { fs } from "../../../lib/cep/node";
+import { AssetPathBundle, ensureAssetsReadyOrAlert, joinAssetPath } from "../../assetPaths";
+import "./CardPickerPanel.scss";
 
 type Props = {
   deck: string;
   setDeck: (v: string) => void;
   cardNumber: number;
   setCardNumber: (v: number) => void;
-  cardProject: string;
+  assetEntryPoint: string;
+  assetPaths: AssetPathBundle;
+  coinValue: string;
+  setCoinValue: (v: string) => void;
 };
 
-export const CardPickerPanel: React.FC<Props> = ({ deck, setDeck, cardNumber, setCardNumber, cardProject }) => {
+export const CardPickerPanel: React.FC<Props> = ({ 
+  deck, setDeck, cardNumber, setCardNumber, assetEntryPoint, assetPaths, coinValue, setCoinValue 
+}) => {
   const [cardSrc, setCardSrc] = useState<string | null>(null);
+  const [coinIconSrc, setCoinIconSrc] = useState<string | null>(null); // NOVO: Estado para o ícone da moeda
 
   const deckPrefix = useMemo(() => deck.split("_")[0], [deck]);
   const turnCards = async () => await evalTS("handleTurnCards");
@@ -47,25 +55,39 @@ export const CardPickerPanel: React.FC<Props> = ({ deck, setDeck, cardNumber, se
 
   const suitLabel = suitLabelMap[deckPrefix] ?? deckPrefix;
 
-  // Determina se é uma carta que não pertence a um naipe específico
   const isSpecialCard = safeCard.fileImg === "wild_card.png" || safeCard.fileImg === "plus_card.png";
-
-  // Ajusta o título: Se for especial, mostra apenas o nome (ex: "Wild"). Se não, mostra "A - Hearts"
   const cardTitle = isSpecialCard ? safeCard.name : `${safeCard.name} - ${suitLabel}`;
 
-  const assets = `${csi.getSystemPath("extension")}/assets`;
-  const cardsDeckPath = `${assets}/cards-deck`;
+  const cardsDeckPath = assetPaths.cardsDeckPath;
+  const coinIconPath = assetPaths.coinIconPath; // NOVO: Caminho do ícone
 
-  // Define o caminho: Cartas especiais ficam na raiz de /cards-deck/, as outras dentro da pasta do Deck
-  const cardImage = isSpecialCard
-    ? `${cardsDeckPath}/${safeCard.fileImg}`
-    : `${cardsDeckPath}/${deck}/${safeCard.fileImg}`;
+  const cardImage = cardsDeckPath
+    ? (
+      isSpecialCard
+        ? joinAssetPath(cardsDeckPath, safeCard.fileImg)
+        : joinAssetPath(cardsDeckPath, deck, safeCard.fileImg)
+    )
+    : "";
 
-  const changeCard = async () =>
+  const changeCard = async () => {
+    const readyAssets = await ensureAssetsReadyOrAlert(assetEntryPoint);
+    if (!readyAssets) return;
+
     await evalTS("handleChangeCard", deck, cardNumber, cardTitle);
+  };
 
   const handleAddCard = async () => {
-    await evalTS("handleAddCard", deck, cardNumber, cardTitle, cardProject);
+    const readyAssets = await ensureAssetsReadyOrAlert(assetEntryPoint);
+    if (!readyAssets) return;
+
+    await evalTS(
+      "handleAddCard",
+      deck,
+      cardNumber,
+      cardTitle,
+      readyAssets.cardProject,
+      readyAssets.cardsControlPresetPath
+    );
   };
 
   const handlePreviewClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -76,6 +98,7 @@ export const CardPickerPanel: React.FC<Props> = ({ deck, setDeck, cardNumber, se
     }
   };
 
+  // useEffect para a carta
   useEffect(() => {
     if (!safeCard.fileImg || !fs.existsSync(cardImage)) {
       setCardSrc(null);
@@ -96,13 +119,35 @@ export const CardPickerPanel: React.FC<Props> = ({ deck, setDeck, cardNumber, se
     }
   }, [cardImage, safeCard.fileImg]);
 
+  // NOVO: useEffect para o ícone da moeda
+  useEffect(() => {
+    if (!fs.existsSync(coinIconPath)) {
+      setCoinIconSrc(null);
+      return;
+    }
+
+    try {
+      const buffer = fs.readFileSync(coinIconPath) as Buffer;
+      const uint8Array = new Uint8Array(buffer);
+      const blob = new Blob([uint8Array], { type: "image/png" });
+      const url = URL.createObjectURL(blob);
+      setCoinIconSrc(url);
+
+      return () => URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Erro ao ler arquivo de ícone da moeda:", err);
+      setCoinIconSrc(null);
+    }
+  }, [coinIconPath]);
+
+  const coinOptions = ["02", "04", "06", "08", "10", "15", "20", "25"];
+
   return (
     <section className="panel-section">
       <h1 className="panel-title">{cardTitle}</h1>
 
       <div className="field-row">
         <div className="field-input-group">
-          {/* O seletor de Deck pode ser desabilitado visualmente para cartas especiais se desejar */}
           <select
             value={deck}
             onChange={(e) => setDeck(e.target.value)}
@@ -145,16 +190,40 @@ export const CardPickerPanel: React.FC<Props> = ({ deck, setDeck, cardNumber, se
 
       <section className="panel-section panel-preview">
         {cardSrc && (
-          <div
-            className="card-preview"
-            onClick={handlePreviewClick}
-            style={{ cursor: "pointer" }}
-            title="Click to Change | Ctrl + Click to Add"
-          >
-            <img className="card-image" src={cardSrc} alt={cardTitle} />
-            <span className="card-hint">
-              Click to change / Ctrl+Click to add
-            </span>
+          <div className="preview-container">
+            <div
+              className="card-preview"
+              onClick={handlePreviewClick}
+              style={{ cursor: "pointer" }}
+              title="Click to Change | Ctrl + Click to Add"
+            >
+              <img className="card-image" src={cardSrc} alt={cardTitle} />
+              <span className="card-hint">
+                Click to change / Ctrl+Click to add
+              </span>
+            </div>
+
+            <div className="coin-controls">
+              {/* NOVO: Ícone substitui o texto span */}
+              {coinIconSrc && (
+                <img 
+                  src={coinIconSrc} 
+                  alt="Coin" 
+                  title="Coin Value"
+                  style={{ width: "25px", height: "25px", objectFit: "contain" }} 
+                />
+              )}
+              
+              <select
+                value={coinValue}
+                onChange={(e) => setCoinValue(e.target.value)}
+                className="field-input field-input--compact"
+              >
+                {coinOptions.map((val) => (
+                  <option key={val} value={val}>+{val}</option>
+                ))}
+              </select>
+            </div>
           </div>
         )}
       </section>

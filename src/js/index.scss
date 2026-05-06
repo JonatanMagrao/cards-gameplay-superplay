@@ -23,10 +23,10 @@ code {
   background-color: #181a1f;
   text-align: left;
   font-family: inherit;
+  min-height: 100vh;
 }
 
 .app-header {
-  min-height: 100vh;
   display: flex;
   align-items: flex-start; // topo
   justify-content: flex-start; // esquerda

@@ -1,11 +1,5 @@
 import { getActiveComp } from "./aeft-utils";
-import { alertError } from "./errors";
-
-interface MarkerProps {
-  title?: string,
-  label?: number,
-  duration?: number
-}
+import { createMarkerValue, getMarkerCommentTitle, MarkerProps } from "./markers";
 
 export const forEachSelectedLayer = (
   comp: CompItem,
@@ -102,17 +96,33 @@ export const getLayerProp = (camada: any, properties: string[]) => {
   return myLayerProps
 }
 
+export const getPropertyBaseValueAtTime = (prop: Property, sampleTime: number): any => {
+  if (!prop) return null;
+
+  try {
+    return prop.valueAtTime(sampleTime, true);
+  } catch (_) { }
+
+  return prop.value;
+}
+
+export const setExpressionSafely = (prop: any, expression: string) => {
+  if (!prop) return
+
+  try {
+    prop.expression = ""
+  } catch (_) { }
+
+  prop.expression = expression
+
+  try {
+    prop.expressionEnabled = true
+  } catch (_) { }
+}
+
 export const addMarkerToLayer = (myLayer: Layer, markerTime: number, markerProps: MarkerProps) => {
+  const myMarker = createMarkerValue(markerProps)
 
-  const { markerName, markerLabel, markerDuration } = {
-    markerName: markerProps.title || "",
-    markerLabel: markerProps.label || 0,
-    markerDuration: markerProps.duration || 0
-  }
-
-  const myMarker = new MarkerValue(markerName)
-  myMarker.label = markerLabel
-  myMarker.duration = markerDuration
   const markerProp = myLayer.property("ADBE Marker") as Property
   markerProp.setValueAtTime(markerTime, myMarker)
 
@@ -185,6 +195,7 @@ export type LayerMarkerMeta = {
   layer: Layer;
   time: number;
   label: number;
+  title: string;
   comment: string;
   duration: number;
 }
@@ -199,6 +210,7 @@ export const getLayerMarkersMetadata = (layer: Layer): LayerMarkerMeta[] => {
 
     const markerTime = markerProp.keyTime(i)
     const markerComment = thisMarkerValue.comment;
+    const markerTitle = getMarkerCommentTitle(markerComment);
     const markerLabel = thisMarkerValue.label;
     const markerDuration = thisMarkerValue.duration;
     const markerLayer = layer //! não retornar para o front! layer aqui é um objeto. dará erro
@@ -207,6 +219,7 @@ export const getLayerMarkersMetadata = (layer: Layer): LayerMarkerMeta[] => {
       layer: markerLayer,
       time: markerTime,
       label: markerLabel,
+      title: markerTitle,
       comment: markerComment,
       duration: markerDuration
     })
@@ -242,8 +255,7 @@ export const removeFxByMatchName = (camada: Layer, fxMatchName: string) => {
   }
 }
 
-export const getFootageByName = (name: string): CompItem | null => {
-  // todo adicionar na função uma busca por tipo. atualmente está buscando apenas CompItem
+export const getFootageByName = (name: string): FootageItem | null => {
   for (var i = 1; i <= app.project.numItems; i++) {
     const item = app.project.item(i);
 

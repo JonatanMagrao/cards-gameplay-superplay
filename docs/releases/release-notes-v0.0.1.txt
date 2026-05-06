@@ -1,0 +1,49 @@
+Cards Gameplay v0.0.1
+
+Git Source
+- Initial commit: be41d81
+- Commit date: 2025-11-25
+- package.json version at this point: 0.0.1
+
+Overview
+Initial Cards Gameplay extension for After Effects, built as a CEP panel with React, Vite, TypeScript, and ExtendScript integration.
+
+Highlights
+- Added the first CEP extension shell for After Effects.
+- Added the initial React panel interface.
+- Added the first ExtendScript bridge between the panel and After Effects.
+- Added bundled card artwork and After Effects project assets.
+- Added card deck selection by suit.
+- Added card value selection and image preview.
+- Added click-to-change-card behavior for selected card layers.
+- Added the first Disney Solitaire Cards project import flow.
+- Added the first Cards Gameplay SuperPlay preset workflow.
+
+Card Assets
+- Included card decks for Clubs, Diamonds, Hearts, and Spades.
+- Included card back artwork.
+- Included wild card artwork.
+- Included the initial disney_solitaire_cards.aepx project.
+- Included the initial cards_gameplay_superplay.ffx preset.
+
+Actions
+- Added Import.
+- Added Set Target.
+- Added Apply Jump.
+- Added Flip Card.
+- Added Turn Cards.
+- Added Adjust Z Pos.
+- Added Flip Stock Cards.
+- Added Duplicate Cards with copy count and X/Y offset fields.
+
+After Effects Workflow
+- The extension could import the card project into the active After Effects project.
+- Selected layers could be replaced with the selected card source.
+- Jump actions created position, scale, and rotation keyframes.
+- Target layers were marked with a [TARGET] name tag.
+- Card flip actions controlled the Flip Card essential property.
+- Duplicate actions created repeated card layers with position offsets.
+
+Notes
+- Assets were bundled directly inside the extension at this stage.
+- Layout save/apply, tutorials, local paths, update checks, SQLite cache, and release notes support were added in later versions.

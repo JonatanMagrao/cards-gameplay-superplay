@@ -1,21 +1,26 @@
 import React, { useState, useEffect } from "react";
 import { evalTS } from "../../../lib/utils/bolt";
+import { ensureAssetsReadyOrAlert } from "../../assetPaths";
 import "./DuplicatePanel.scss";
 
 // --- CAMADA DE SERVIÇO (API) ---
 const aeService = {
-  getCompSize: async () => {
-    const result = await evalTS("getCompSize");
+  getCompSize: async (showAlert = true) => {
+    const result = await evalTS("getCompSize", showAlert);
     return typeof result === 'string' ? JSON.parse(result) : result;
   },
   distribute: (x: number, y: number, reverse: boolean) => 
     evalTS("handleDistributeLayers", x, y, reverse),
     
-  duplicate: (copies: number, pos: number[]) => 
-    evalTS("handleDuplicateCards", copies, pos),
+  duplicate: (copies: number, pos: number[], controlPresetPath?: string) =>
+    evalTS("handleDuplicateCards", copies, pos, controlPresetPath),
 };
 
-export const DuplicatePanel = () => {
+type DuplicatePanelProps = {
+  assetEntryPoint: string;
+};
+
+export const DuplicatePanel: React.FC<DuplicatePanelProps> = ({ assetEntryPoint }) => {
   const [numCopies, setNumCopies] = useState("5");
   const [cardDistance, setCardDistance] = useState(["0", "0"]);
   const [isPrecisionMode, setPrecisionMode] = useState(false);
@@ -27,8 +32,8 @@ export const DuplicatePanel = () => {
     let isMounted = true;
     const fetchSize = async () => {
       try {
-        const size = await aeService.getCompSize();
-        if (isMounted && Array.isArray(size) && size.length >= 2) {
+        const size = await aeService.getCompSize(false);
+        if (isMounted && Array.isArray(size) && size.length >= 2 && size[0] > 0 && size[1] > 0) {
           setLimits({ x: size[0] / 2, y: size[1] / 2 });
         }
       } catch (e) { console.error(e); }
@@ -93,7 +98,10 @@ export const DuplicatePanel = () => {
     const x = Number(cardDistance[0].replace(",", ".") || "0");
     const y = Number(cardDistance[1].replace(",", ".") || "0");
     if (copies > 0 && Number.isFinite(x) && Number.isFinite(y)) {
-      await aeService.duplicate(copies, [x, y]);
+      const readyAssets = await ensureAssetsReadyOrAlert(assetEntryPoint);
+      if (!readyAssets) return;
+
+      await aeService.duplicate(copies, [x, y], readyAssets.cardsControlPresetPath);
     }
   };
 
