@@ -4,12 +4,28 @@ try {
         return String(marker.comment || "").split(/\\r\\n|\\n|\\r/)[0];
     };
 
-    const findMarkerTime = function(layer, markerTitle) {
+    const getMarkerData = function(marker) {
+        const markerComment = String(marker.comment || "");
+        const lineBreakMatch = /\\r\\n|\\n|\\r/.exec(markerComment);
+        if (!lineBreakMatch) return null;
+
+        const dataStart = lineBreakMatch.index + lineBreakMatch[0].length;
+        const rawData = markerComment.substring(dataStart);
+        if (!rawData) return null;
+
+        try {
+            return JSON.parse(rawData);
+        } catch (err) {
+            return null;
+        }
+    };
+
+    const findMarker = function(layer, markerTitle) {
         if (layer.marker.numKeys < 1) return null;
 
         for (let i = 1; i <= layer.marker.numKeys; i++) {
             const marker = layer.marker.key(i);
-            if (getMarkerTitle(marker) === markerTitle) return marker.time;
+            if (getMarkerTitle(marker) === markerTitle) return marker;
         }
 
         return null;
@@ -36,7 +52,8 @@ try {
         return fallbackValue;
     };
 
-    const jumpMarkerTime = findMarkerTime(thisLayer, "Jump");
+    const jumpMarker = findMarker(thisLayer, "Jump");
+    const jumpMarkerTime = jumpMarker === null ? null : jumpMarker.time;
 
     if (jumpMarkerTime === null) {
         value;
@@ -73,7 +90,11 @@ try {
             const offsetX = Math.cos(rad) * targetOffset;
             const offsetY = Math.sin(rad) * targetOffset;
 
-            const getActionOrderAt = function(actionTime) {
+            const getActionOrderAt = function(actionTime, actionMarker) {
+                const markerData = getMarkerData(actionMarker);
+                const markerOrder = parseFloat(markerData && markerData.actionOrder);
+                if (!isNaN(markerOrder) && markerOrder > 0) return markerOrder;
+
                 let order = 0;
                 const tolerance = thisComp.frameDuration / 10;
 
@@ -96,7 +117,7 @@ try {
                 return Math.max(order, 1);
             };
 
-            const zOffset = -(getActionOrderAt(jumpMarkerTime) * zStep);
+            const zOffset = -(getActionOrderAt(jumpMarkerTime, jumpMarker) * zStep);
 
             if (time < jumpMarkerTime) {
                 value;

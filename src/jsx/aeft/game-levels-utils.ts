@@ -429,9 +429,7 @@ export const createCardLayersFromLayout = (
   cardsLayout: CardLayout[],
   comp: CompItem
 ): void => {
-  let previousLayer: AVLayer | null = null;
-
-  for (let i = 0; i < cardsLayout.length; i++) {
+  for (let i = cardsLayout.length - 1; i >= 0; i--) {
     const cardLayout = cardsLayout[i];
 
     if (!cardLayout.deckName) continue;
@@ -499,10 +497,6 @@ export const createCardLayersFromLayout = (
     } catch (e) {
       // Ignore layers without essential property overrides.
     }
-
-    // Stacking
-    if (previousLayer) cardLayer.moveAfter(previousLayer);
-    previousLayer = cardLayer;
   }
 };
 

@@ -4,7 +4,6 @@ import { posPropPath, scalePropPath, anchorPropPath, textPropPath, progressBarEP
 import { expProgressBar } from "../utils/expressions";
 import { keyLabel } from "./actions";
 
-const progressBarFxMatchName = "Pseudo/cards_gameplay_progressbar"
 const progressDelayFramesSliderName = "Progress Delay Frames"
 
 type ProgressBarProp = {
@@ -40,6 +39,10 @@ const setTextLayerFont = (textLayer: Layer) => {
   const textDocument = textProp.value as TextDocument;
   const fontCandidates = ["Arial-Black", "Arial Black", "Arial-BlackMT", "ArialMT"];
 
+  try { (textDocument as any).applyFill = true; } catch (_) { }
+  try { (textDocument as any).fillColor = [1, 1, 1]; } catch (_) { }
+  try { (textDocument as any).applyStroke = false; } catch (_) { }
+
   for (let i = 0; i < fontCandidates.length; i++) {
     try {
       textDocument.font = fontCandidates[i];
@@ -47,6 +50,10 @@ const setTextLayerFont = (textLayer: Layer) => {
       return;
     } catch (_) { }
   }
+
+  try {
+    textProp.setValue(textDocument);
+  } catch (_) { }
 }
 
 const progressBarText = (thisComp: CompItem, parentLayer: Layer, startTime: number) => {

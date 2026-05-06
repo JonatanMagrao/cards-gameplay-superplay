@@ -1,6 +1,6 @@
 import { alertError } from "./errors"
 import { expFlipCard, expPos, expRot, expScale, expStockFlip, expStockPos } from "../utils/expressions"
-import { captureCompState, findCompItemByName, findFootageItemByName, getActiveComp, forEachLayer, getItemByName, requireActiveComp, restoreCompState } from "./aeft-utils"
+import { captureCompState, findAvItemByName, findCompItemByName, findFolderItemByName, findFootageItemByName, getActiveComp, forEachLayer, requireActiveComp, restoreCompState } from "./aeft-utils"
 import {
   getTargetLayer,
   targetExist,
@@ -22,7 +22,7 @@ import {
   getLayerMarkersMetadata,
   setExpressionSafely,
 } from "./aeft-utils-jonatan"
-import { parseMarkerComment } from "./markers"
+import { buildMarkerComment, parseMarkerComment } from "./markers"
 
 
 export const keyLabel = {
@@ -49,6 +49,7 @@ export const cardsControlFxMatchName = "Pseudo/cards_gameplay_control"
 export const cardsControlPresetFileName = "cards-gameplay-control.ffx"
 const fxPrecompName = "FX Precomp"
 const legacySfxPrecompName = "SFX Precomp"
+const cardsAssetsFolderName = "Disney Solitaire Cards"
 const expressionLibName = "superplay-expression-lib.jsx"
 const cardsControlsLayerName = "Cards Controls"
 const cardsControlFxDisplayName = "Cards Gameplay Control"
@@ -136,6 +137,15 @@ const syncFxPrecompSettings = (fxPrecomp: CompItem, parentComp: CompItem) => {
   try { fxPrecomp.frameRate = parentComp.frameRate; } catch (_) { }
 }
 
+const moveProjectItemToFolderIfExists = (projectItem: any, folderName: string): void => {
+  if (!projectItem) return;
+
+  try {
+    const folder = findFolderItemByName(folderName, false);
+    if (folder && projectItem.parentFolder !== folder) projectItem.parentFolder = folder;
+  } catch (_) { }
+}
+
 const ensureFxPrecomp = (parentComp?: CompItem): CompItem => {
   const thisComp = parentComp || getActiveComp() as CompItem;
   let fxPrecomp = findCompItemByName(fxPrecompName, false) as CompItem
@@ -152,6 +162,8 @@ const ensureFxPrecomp = (parentComp?: CompItem): CompItem => {
   } else {
     syncFxPrecompSettings(fxPrecomp, thisComp);
   }
+
+  moveProjectItemToFolderIfExists(fxPrecomp, cardsAssetsFolderName);
 
   return fxPrecomp
 }
@@ -276,6 +288,15 @@ const ensureFootageItem = (filePath: string, missingLabel: string): FootageItem 
   return importedItem;
 }
 
+const footageItemUsesFile = (item: FootageItem, file: File): boolean => {
+  try {
+    const itemFile = (item as any).file as File;
+    return !!(itemFile && itemFile.fsName === file.fsName);
+  } catch (_) { }
+
+  return false;
+}
+
 const ensureFxPrecompLayer = (comp: CompItem): AVLayer => {
   const fxPrecomp = ensureFxPrecomp(comp);
   let fxPrecompRef = findPrecompBySourceItem(comp, fxPrecomp);
@@ -296,7 +317,6 @@ const ensureFxPrecompLayer = (comp: CompItem): AVLayer => {
   fxPrecompRef.selected = false;
   fxPrecompRef.startTime = 0;
   try { fxPrecompRef.threeDLayer = false; } catch (_) { }
-  fxPrecompRef.moveToBeginning();
   fxPrecompRef.locked = true;
 
   return fxPrecompRef;
@@ -357,6 +377,18 @@ const getMarkerActionName = (marker: LayerMarkerMeta): string => {
   return marker.title || getMarkerCommentTitle(marker.comment);
 }
 
+const parseMarkerCommentDataObject = (comment: string): any => {
+  const parsedComment = parseMarkerComment(comment || "");
+  if (!parsedComment.data) return {};
+
+  try {
+    const parsedData = JSON.parse(parsedComment.data) as any;
+    if (parsedData && typeof parsedData === "object") return parsedData;
+  } catch (_) { }
+
+  return {};
+}
+
 const compareLayerMarkersByTime = (a: LayerMarkerMeta, b: LayerMarkerMeta): number => {
   const timeDiff = a.time - b.time;
   if (Math.abs(timeDiff) > markerTimeTolerance) return timeDiff;
@@ -364,7 +396,7 @@ const compareLayerMarkersByTime = (a: LayerMarkerMeta, b: LayerMarkerMeta): numb
   return a.layer.index - b.layer.index;
 }
 
-const getJumpSfxSequenceMarkers = (): LayerMarkerMeta[] => {
+const getActionSequenceMarkers = (): LayerMarkerMeta[] => {
   const cardsLayers = findCardLayers();
   const sequenceMarkers: LayerMarkerMeta[] = [];
 
@@ -386,8 +418,47 @@ const getJumpSfxSequenceMarkers = (): LayerMarkerMeta[] => {
   return sequenceMarkers;
 }
 
+const getLayerMarkerKeyIndexAtTimeAndAction = (layer: Layer, markerTime: number, markerAction: string): number | null => {
+  const markerProp = layer.property(markerPropPath) as Property;
+  if (!markerProp || markerProp.numKeys < 1) return null;
+
+  for (let i = 1; i <= markerProp.numKeys; i++) {
+    const keyTime = markerProp.keyTime(i);
+    if (Math.abs(keyTime - markerTime) > markerTimeTolerance) continue;
+
+    const markerValue = markerProp.keyValue(i) as MarkerValue;
+    if (getMarkerCommentTitle(markerValue.comment) === markerAction) return i;
+  }
+
+  return null;
+}
+
+const writeActionOrderToMarker = (marker: LayerMarkerMeta, actionOrder: number): void => {
+  const markerAction = getMarkerActionName(marker);
+  const markerProp = marker.layer.property(markerPropPath) as Property;
+  if (!markerProp) return;
+
+  const markerIndex = getLayerMarkerKeyIndexAtTimeAndAction(marker.layer, marker.time, markerAction);
+  if (markerIndex === null) return;
+
+  const markerValue = markerProp.keyValue(markerIndex) as MarkerValue;
+  const markerData = parseMarkerCommentDataObject(markerValue.comment);
+  markerData.actionOrder = actionOrder;
+  markerValue.comment = buildMarkerComment(markerAction, JSON.stringify(markerData));
+
+  markerProp.setValueAtKey(markerIndex, markerValue);
+}
+
+const stampActionMarkerOrders = (): void => {
+  const actionMarkers = getActionSequenceMarkers();
+
+  for (let i = 0; i < actionMarkers.length; i++) {
+    writeActionOrderToMarker(actionMarkers[i], i + 1);
+  }
+}
+
 const getNextJumpSfxSequenceIndexAtTime = (time: number): number => {
-  const sequenceMarkers = getJumpSfxSequenceMarkers();
+  const sequenceMarkers = getActionSequenceMarkers();
   let sequenceIndex = 1;
 
   for (let i = 0; i < sequenceMarkers.length; i++) {
@@ -721,6 +792,7 @@ export const applyJumpOnSelectedlayers = (
       jumpSfxSequenceIndex++
     }
 
+    stampActionMarkerOrders()
     recalculateCoveredCardTrims(thisComp, trimCoveredCards === true)
 
   } catch (e) {
@@ -740,7 +812,7 @@ const ensureExpressionLibProjectItem = (expressionLibPath?: string): FootageItem
     if (expressionLibPath) {
       try {
         const libFile = new File(expressionLibPath);
-        if (libFile.exists) {
+        if (libFile.exists && !footageItemUsesFile(existingItem, libFile)) {
           (existingItem as any).replace(libFile);
           existingItem.name = expressionLibName;
         }
@@ -765,6 +837,76 @@ const ensureExpressionLibProjectItem = (expressionLibPath?: string): FootageItem
   return importedItem;
 }
 
+const getRestoreActionRequirements = (): { hasJump: boolean; hasFlipStock: boolean } => {
+  const requirements = {
+    hasJump: false,
+    hasFlipStock: false,
+  };
+
+  const thisComp = requireActiveComp("Prepare Restore Assets", false);
+  if (!thisComp) return requirements;
+
+  const cardsLayers = findCardLayers();
+
+  for (let i = 0; i < cardsLayers.length; i++) {
+    const layerMarkers = getLayerMarkersMetadata(cardsLayers[i]);
+
+    for (let j = 0; j < layerMarkers.length; j++) {
+      const markerAction = getMarkerActionName(layerMarkers[j]);
+
+      if (markerAction === "Jump") requirements.hasJump = true;
+      if (markerAction === "Flip Stock") requirements.hasFlipStock = true;
+      if (requirements.hasJump && requirements.hasFlipStock) return requirements;
+    }
+  }
+
+  return requirements;
+}
+
+const prepareJumpSfxItems = (sfxFolderPath?: string): boolean => {
+  const variationCount = getJumpSfxVariationCount(sfxFolderPath);
+  let ready = true;
+
+  for (let i = 1; i <= variationCount; i++) {
+    const fileName = getNumberedSfxFileName(jumpSfxFilePrefix, i);
+    if (!ensureFootageItem(joinPath(sfxFolderPath, fileName), "SFX")) ready = false;
+  }
+
+  return ready;
+}
+
+const prepareFlipStockSfxItem = (sfxFolderPath?: string): boolean => {
+  return !!ensureFootageItem(joinPath(sfxFolderPath, flipStockSfxFileName), "SFX");
+}
+
+export const prepareRestoreCardsAnimationAssets = (
+  expressionLibPath?: string,
+  coinFilePath?: string,
+  sfxFolderPath?: string
+): boolean => {
+  const thisComp = requireActiveComp("Prepare Restore Assets", false);
+  if (!thisComp) return true;
+
+  const requirements = getRestoreActionRequirements();
+  let ready = true;
+
+  if (requirements.hasJump || requirements.hasFlipStock) {
+    ensureFxPrecomp(thisComp);
+  }
+
+  if (requirements.hasJump) {
+    if (coinFilePath && !ensureFootageItem(coinFilePath, "Coin VFX")) ready = false;
+    if (!prepareJumpSfxItems(sfxFolderPath)) ready = false;
+  }
+
+  if (requirements.hasFlipStock) {
+    if (!ensureExpressionLibProjectItem(expressionLibPath)) ready = false;
+    if (!prepareFlipStockSfxItem(sfxFolderPath)) ready = false;
+  }
+
+  return ready;
+}
+
 const ensureExpressionLibLayer = (comp: CompItem, expressionLibPath?: string): AVLayer | null => {
   const libItem = ensureExpressionLibProjectItem(expressionLibPath);
   if (!libItem) return null;
@@ -783,7 +925,6 @@ const ensureExpressionLibLayer = (comp: CompItem, expressionLibPath?: string): A
   libLayer.shy = true;
   libLayer.selected = false;
   libLayer.startTime = 0;
-  libLayer.moveToEnd();
   libLayer.locked = wasLocked || true;
   comp.hideShyLayers = true;
 
@@ -903,7 +1044,6 @@ export const ensureCardsControlsLayer = (comp: CompItem, presetPath?: string): A
     controlsLayer.threeDLayer = false;
     ensureCardsControlEffect(controlsLayer, presetPath);
     controlsLayer.name = cardsControlsLayerName;
-    controlsLayer.moveToBeginning();
     controlsLayer.selected = false;
   } finally {
     controlsLayer.locked = false;
@@ -1015,7 +1155,7 @@ const isCardsLayoutOriginMarkerComment = (comment: string): boolean => {
   if (!parsedComment.data) return false;
 
   try {
-    const parsedData = JSON.parse(parsedComment.data);
+    const parsedData = JSON.parse(parsedComment.data) as any;
     return !!(parsedData && parsedData.schema === cardsLayoutOriginSchema);
   } catch (_) { }
 
@@ -1349,6 +1489,7 @@ export const flipStockCards = (
       label: 2,
     })
 
+    stampActionMarkerOrders()
     applyStockExpressions(thisComp, expressionLibPath, firstSelectedLayer, controlPresetPath)
 
     applySfx(thisComp, markerTime, joinPath(sfxFolderPath, flipStockSfxFileName), keyLabel.yellow)
@@ -1484,7 +1625,7 @@ export const changeCard = (deckName: string, card: number, cardName: string) => 
   const thisComp = requireActiveComp("Change Card");
   if (!thisComp) return;
 
-  const cardsSet = getItemByName(deckName) as any
+  const cardsSet = findAvItemByName(deckName, false)
   if (!cardsSet) {
     alert(`Project item "${deckName}" was not found.`)
     return
@@ -1525,7 +1666,12 @@ export const addCardToPrecomp = (deckName: string, card: number, cardName: strin
     if (!thisComp) return
 
     if (card === 15) {
-      const plusCardSource = getItemByName("Plus_Card") as CompItem
+      const plusCardSource = findAvItemByName("Plus_Card", false)
+      if (!plusCardSource) {
+        alert('Project item "Plus_Card" was not found.')
+        return
+      }
+
       thisComp.layers.add(plusCardSource)
       thisComp.layer("Plus_Card").label = keyLabel.purple
       ensureCardsControlsLayer(thisComp, controlPresetPath)
@@ -1533,10 +1679,10 @@ export const addCardToPrecomp = (deckName: string, card: number, cardName: strin
       return
     }
 
-    const deck = getItemByName(deckName)
+    const deck = findAvItemByName(deckName, false)
 
     if (!deck) {
-      alert(`Item "${deck}" not found on project!`)
+      alert(`Project item "${deckName}" was not found.`)
       return
     }
 
@@ -1667,6 +1813,7 @@ export const restoreCardsAnimation = (
 
   try {
     ensureCardsControlsLayer(thisComp, controlPresetPath)
+    stampActionMarkerOrders()
     clearFxPrecompLayers()
     clearCoinVfxLayers(thisComp)
     recalculateCoveredCardTrims(thisComp, false)

@@ -1,6 +1,7 @@
 | feature                                                                                                                           | status |
 |-----------------------------------------------------------------------------------------------------------------------------------|--------|
 | continue from fase 3 of technical review                                                                                          | ⬜      |
+| phase 3: add precomputed action order metadata to action markers                                                                  | ✅      |
 | create documentation                                                                                                              | ⬜      |
 | ------------------------------------------------------------------------------                                                    | ⬜      |
 | implement the personalized pseudo effects                                                                                         | ⬜      |

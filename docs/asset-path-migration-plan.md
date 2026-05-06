@@ -1,5 +1,7 @@
 # Asset Path Migration Plan
 
+Status: implementado. Mantido como registro da migracao e referencia para suporte.
+
 ## Objetivo
 
 Migrar os assets de runtime do app para uma pasta externa configurada por usuario, sem fallback para os assets empacotados na extensao.
@@ -18,9 +20,9 @@ H:\Drives compartilhados\Creative_Marketing_Assets\GENERAL-ASSETS\Plugins\Cards 
 
 Quando o entrypoint nao estiver configurado, qualquer acao que dependa de assets deve avisar o usuario com um alert do ExtendScript em ingles e interromper a acao.
 
-## Estado atual
+## Estado anterior da migracao
 
-Hoje os assets sao resolvidos a partir da propria extensao:
+Antes da migracao, os assets eram resolvidos a partir da propria extensao:
 
 ```ts
 `${csi.getSystemPath("extension")}/assets`
@@ -33,7 +35,7 @@ Pontos principais:
 - `src/js/main/components/CardPickerPanel/CardPickerPanel.tsx`: monta preview de cartas e icone de moeda.
 - `src/jsx/aeft/aeft.ts`: `getCardsControlPresetPath` deriva o preset control procurando o token `/assets/`.
 
-A migracao deve centralizar essa resolucao para evitar que cada componente continue sabendo onde fica a raiz de assets.
+A implementacao atual centraliza a resolucao em `src/js/main/assetPaths.ts`, usa paths configuraveis e mantem `copyAssets: []` em `cep.config.ts`.
 
 ## Configuracao
 

@@ -117,20 +117,6 @@ export const restoreCompState = (comp: CompItem, snapshot: CompStateSnapshot) =>
 }
 
 // Project Item Helpers
-export const getItemByName = (name: string): CompItem | null => {
-  // todo adicionar na função uma busca por tipo. atualmente está buscando apenas CompItem
-  // Percorre todos os itens na raiz do projeto
-  for (var i = 1; i <= app.project.numItems; i++) {
-    const item = app.project.item(i);
-
-    // Verifica se o nome bate E se é uma Composição
-    if (item.name === name && item instanceof CompItem) {
-      return item;
-    }
-  }
-  return null;
-};
-
 export const findProjectItemByName = (itemName: string, advice: boolean = true) : Item | null => {
   var project = app.project;
   for (var i = 1; i <= project.numItems; i++) {

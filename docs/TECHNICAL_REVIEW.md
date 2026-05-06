@@ -1,6 +1,7 @@
 # Revisao Tecnica do Cards Gameplay
 
 Data da revisao: 2026-04-26
+Ultima atualizacao: 2026-05-06
 
 Este documento resume uma revisao ampla da extensao CEP Cards Gameplay, cobrindo arquitetura, performance, fluxos de layout, manutenibilidade e provaveis fontes de bugs. Ele reflete a direcao atual do projeto: marcadores como historico de acoes, expressoes para estado visual, `FX Precomp` para audio/VFX gerados, e restore/reset como principal fluxo de seguranca.
 
@@ -18,22 +19,24 @@ As maiores melhorias agora nao sao novos recursos. Sao consolidacao e previsibil
 
 ## Comandos Atuais de Validacao
 
-Estes checks passaram durante a revisao:
+Estes checks devem passar antes de avancar fases tecnicas:
 
 - `yarn -s tsc -p src/jsx/aeft/tsconfig.json --noEmit --target ES5`
 - `yarn -s tsc -p tsconfig-build.json --noEmit`
 - varredura do lado ExtendScript para APIs modernas de JS arriscadas em `src/jsx/aeft`
-- check de sintaxe para `src/assets/expressions/superplay-expression-lib.jsx`
+- quando disponivel localmente, check de sintaxe para a biblioteca externa `assets/expressions/superplay-expression-lib.jsx` no Assets Path configurado.
 
 Observacao: `--target ES5` e necessario atualmente porque o TypeScript 5 nao aceita mais `target: "es3"` no `tsconfig`.
 
 ## Mapa do Projeto
 
 - `src/js/main`: UI do painel CEP em React.
+- `src/js/main/assetPaths.ts`: resolucao dos caminhos configuraveis de assets, levels, tutoriais, cache e releases.
 - `src/jsx/aeft`: acoes do After Effects, helpers e entrypoints de `evalTS`.
 - `src/jsx/utils/expressions.ts`: strings de expressoes aplicadas nas propriedades das camadas.
-- `src/assets/expressions/superplay-expression-lib.jsx`: biblioteca externa de expressoes carregada com `footage(...).sourceData`.
-- `src/assets`: decks, presets, coin VFX, SFX, assets de progress bar e o projeto fonte `.aepx`.
+- `assets/expressions/superplay-expression-lib.jsx`: biblioteca externa de expressoes, carregada do Assets Path configurado com `footage(...).sourceData`.
+- Assets pesados como decks, presets, coin VFX, SFX, progress bar e projeto `.aepx` ficam fora do pacote da extensao, no Google Drive/Shared Drive configurado pelo usuario.
+- `levels`, `video-tutorials` e `extension-releases`: pastas irmas de `assets` usadas para layouts salvos, tutoriais locais e releases instalaveis.
 - `docs/card-animation-tutorials.md`: tutorial de uso voltado ao usuario.
 - `README.md` e `CHANGELOG.md`: ainda estao majoritariamente como boilerplate do Bolt CEP.
 
@@ -49,10 +52,13 @@ Estas sao as primeiras melhorias a priorizar:
 
 ## Atualizacao de Implementacao
 
-Status em 2026-04-26:
+Status em 2026-05-06:
 
 - Fase 1 aplicada: checks de tags sem estado, guardas de composicao ativa, restore transacional e mensagens voltadas ao usuario em ingles.
-- Fase 2 iniciada: helpers reutilizaveis de snapshot de composicao/selecao, helpers de marcador, lookups tipados de itens do projeto e save de layout lendo valores base/pre-expression.
+- Fase 2 fechada operacionalmente: helpers reutilizaveis de snapshot de composicao/selecao, helpers de marcador, lookups tipados de itens do projeto, remocao do helper legado `getItemByName`, save de layout lendo valores base/pre-expression e typecheck ExtendScript passando.
+- A divisao fisica completa dos modulos `aeft-utils.ts` e `aeft-utils-jonatan.ts` continua sendo uma melhoria de baixo risco para uma fase futura, mas os principais contratos reutilizaveis da Fase 2 ja estao em uso.
+- Fase 3 iniciada: markers de acoes `Jump` e `Flip Stock` agora recebem metadata `actionOrder`, permitindo que a expressao de posicao do Jump evite varrer todas as camadas por frame em layouts novos/restaurados.
+- Decisao de Fase 3: o Progress Bar permanece dinamico e continua lendo os markers `Jump` da composicao alvo. A tentativa de gravar markers `Progress Trigger` no layer do Progress Bar foi descartada para evitar metadata artificial e manter edicoes manuais de markers refletidas automaticamente.
 
 ## Achados de Alta Prioridade
 
@@ -180,7 +186,7 @@ Proximos candidatos para mover:
 - helpers de titulo de marcador;
 - helpers de sliders de controle;
 - helpers de ordenacao de acoes de jump;
-- helpers de trigger de progress bar.
+- helpers de trigger dinamico de progress bar.
 
 ## Fluxo de Layout
 
@@ -256,15 +262,25 @@ Os valores de moeda atualmente estao hardcoded em `CardPickerPanel`. Uma opcao m
 
 Esses arquivos nao foram encontrados em `src/assets`. Isso pode afetar o polimento de pacote/manifest.
 
-### Arquivo de Auto-Save Nao Deve Ser Distribuido
+### Assets Pesados Nao Sao Mais Distribuidos no Pacote
 
-`src/assets/Adobe After Effects Auto-Save/disney_solitaire_cards auto-save 1.aepx` e grande e provavelmente nao deve ser copiado para builds.
+Os decks, presets, SFX, VFX, progress bar, biblioteca externa de expressoes e projeto `.aepx` foram movidos para fora da extensao. O painel agora usa paths configuraveis para encontrar esses recursos no Shared Drive.
 
-Como `copyAssets: ["assets"]` copia a pasta inteira de assets, isso deve ser excluido ou movido para fora dos assets distribuiveis.
+`copyAssets` esta vazio, entao o build da extensao nao deve carregar a pasta antiga de assets pesados.
 
-### Assets AEPX e MOV Sao Grandes
+### Pastas Operacionais Externas
 
-O projeto inclui um `.aepx` grande e varios arquivos `.mov`. Isso pode ser necessario, mas deve ser intencional e documentado.
+Estrutura operacional recomendada no Shared Drive:
+
+```text
+Cards Gameplay/
+  assets/
+  levels/
+  video-tutorials/
+  extension-releases/
+```
+
+`assets`, `levels` e `video-tutorials` devem ficar disponiveis offline quando o usuario precisar trabalhar sem internet. `extension-releases` e opcional para uso offline.
 
 ## Documentacao
 
@@ -306,16 +322,33 @@ O changelog deve rastrear mudancas do Cards Gameplay. Bolt CEP pode ser menciona
 
 ### Fase 2
 
-- Consolidar helpers de AE por responsabilidade.
-- Criar helpers de parsing/escrita de marcadores.
-- Tipar busca de itens do projeto pelo tipo esperado.
-- Adicionar helpers de snapshot de selecao em todos os lugares onde acoes mutam camadas.
+Status: fechada operacionalmente em 2026-05-06.
+
+- Helpers de snapshot/restauracao de tempo e selecao foram adicionados.
+- Helpers de parsing/escrita de marcadores foram adicionados em `markers.ts`.
+- Busca de itens do projeto passou a usar helpers tipados por `CompItem`, `FootageItem`, `AVItem` e `FolderItem`.
+- O helper legado `getItemByName` foi removido.
+- Acoes destrutivas principais usam `requireActiveComp`, snapshots e restauracao em `finally`.
+- Save de layout le valores base/pre-expression para evitar capturar estado visual animado como layout base.
 
 ### Fase 3
 
 - Medir performance de expressoes em composicoes grandes.
 - Mover mais helpers de expressao para a biblioteca externa.
 - Considerar dados gerados de timeline de acoes se as varreduras dinamicas ficarem lentas.
+
+Primeira entrega aplicada:
+
+- `Jump` e `Flip Stock` gravam `actionOrder` no JSON do comentario do marker.
+- `restoreCardsAnimation` atualiza `actionOrder` em markers existentes antes de reconstruir a animacao.
+- `expPos` usa `actionOrder` quando presente e mantem fallback dinamico para layouts/markers antigos.
+- `expProgressBar` permanece dinamico e le os markers `Jump` da comp alvo, sem gravar markers auxiliares no layer do progress bar.
+
+Proximos alvos da Fase 3:
+
+- Medir uma composicao real com muitas cartas e markers antes/depois do `actionOrder`.
+- Avaliar mover helpers repetidos de `getMarkerTitle`, parsing de marker data e leitura de controles para a biblioteca externa de expressoes.
+- Testar `Jump` e `Flip Stock` em After Effects com comp real para validar ordem visual, SFX e compatibilidade com restore.
 
 ### Fase 4
 

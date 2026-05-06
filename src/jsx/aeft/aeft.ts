@@ -11,6 +11,7 @@ import {
   addCardToPrecomp,
   resetCardsAnimation,
   restoreCardsAnimation,
+  prepareRestoreCardsAnimationAssets,
   groupCardsToControl,
   clearCardsLevel
 } from "./actions";
@@ -72,11 +73,11 @@ export const handleShowTextDialog = (title: string, text: string) => {
     dialog.margins = 12;
     dialog.spacing = 10;
 
-    const textBox = dialog.add("edittext", undefined, String(text || ""), {
+    const textBox = (dialog as any).add("edittext", undefined, String(text || ""), {
       multiline: true,
       scrolling: true,
       readonly: true
-    });
+    }) as any;
     textBox.alignment = ["fill", "fill"];
     textBox.preferredSize = [620, 420];
     textBox.minimumSize = [360, 220];
@@ -106,6 +107,14 @@ export const handleShowTextDialog = (title: string, text: string) => {
 }
 
 export const handleApplyCardsLayout = (layoutData: CardsLayoutJson, filePath: string, options?: ApplyCardsLayoutOptions) => {
+  try {
+    importFilesAndCompsForCards(filePath, cardsFolderName)
+  } catch (e) {
+    //@ts-ignore
+    alert("Error importing card assets: " + e.toString());
+    return "ERROR";
+  }
+
   app.beginUndoGroup("Apply Cards Layout");
   try {
     const applyOptions: ApplyCardsLayoutOptions = options || {};
@@ -113,7 +122,6 @@ export const handleApplyCardsLayout = (layoutData: CardsLayoutJson, filePath: st
       alert("Cards control preset path is missing.");
       return "ERROR";
     }
-    importFilesAndCompsForCards(filePath, cardsFolderName)
     return applyCardsLayoutFromObject(layoutData, applyOptions);
   } catch (e) {
     //@ts-ignore
@@ -259,7 +267,7 @@ export const handleShowSaveLayoutDialog = (imagePath: string, defaults?: { name?
       group.spacing = 4;
       group.add("statictext", undefined, label);
 
-      const input = group.add("edittext", undefined, defaultValue || "", multiline ? { multiline: true, scrolling: true } : undefined);
+      const input = (group as any).add("edittext", undefined, defaultValue || "", multiline ? { multiline: true, scrolling: true } : undefined) as any;
       input.alignment = ["fill", "top"];
       input.preferredSize = multiline ? [previewWidth, 70] : [previewWidth, 24];
 
@@ -470,8 +478,13 @@ export const handleImportFilesAndComps = (filePath: string) => {
 
 export const handleChangeCard = (deckName: string, card: number, cardName: string) => {
   app.beginUndoGroup("Update Cards")
-  changeCard(deckName, card, cardName)
-  app.endUndoGroup()
+  try {
+    changeCard(deckName, card, cardName)
+  } catch (e) {
+    alertError(e, 171, "handleChangeCard", "aeft.ts")
+  } finally {
+    app.endUndoGroup()
+  }
 }
 
 export const handleAddCard = (
@@ -496,8 +509,13 @@ export const handleAddCard = (
 
 export const handleResetCardsAnimation = () => {
   app.beginUndoGroup("Reset Cards Animation")
-  resetCardsAnimation(presetMatchName)
-  app.endUndoGroup()
+  try {
+    resetCardsAnimation(presetMatchName)
+  } catch (e) {
+    alertError(e, 200, "handleResetCardsAnimation", "aeft.ts")
+  } finally {
+    app.endUndoGroup()
+  }
 }
 
 export const handleRestoreCardsAnimation = (
@@ -508,17 +526,30 @@ export const handleRestoreCardsAnimation = (
   controlPresetPath?: string,
   trimCoveredCards?: boolean
 ) => {
+  try {
+    const assetsReady = prepareRestoreCardsAnimationAssets(expressionLibPath, coinFilePath, sfxFolderPath)
+    if (!assetsReady) return "ERROR"
+  } catch (e) {
+    alertError(e, 214, "prepareRestoreCardsAnimationAssets", "aeft.ts")
+    return "ERROR"
+  }
+
   app.beginUndoGroup("Restore Cards Animation by Layout")
-  restoreCardsAnimation(
-    presetPath,
-    presetMatchName,
-    expressionLibPath,
-    coinFilePath,
-    sfxFolderPath,
-    controlPresetPath,
-    trimCoveredCards === true
-  )
-  app.endUndoGroup()
+  try {
+    restoreCardsAnimation(
+      presetPath,
+      presetMatchName,
+      expressionLibPath,
+      coinFilePath,
+      sfxFolderPath,
+      controlPresetPath,
+      trimCoveredCards === true
+    )
+  } catch (e) {
+    alertError(e, 214, "handleRestoreCardsAnimation", "aeft.ts")
+  } finally {
+    app.endUndoGroup()
+  }
 }
 
 export const handleAddProgressBar = (presetPath: string) => {
