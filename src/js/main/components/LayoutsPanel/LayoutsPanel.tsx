@@ -32,6 +32,7 @@ const THUMBNAIL_JPEG_QUALITY = 0.82;
 const LAYOUT_ORIGIN_SCHEMA = "cards-gameplay.layout-origin.v1";
 const CANONICAL_LAYOUT_JSON_NAME = "layout.json";
 const CANONICAL_THUMBNAIL_NAME = "thumbnail.jpg";
+const LEGACY_DEFAULT_LEVELS_DIR = path.join(HOME_DIR, "Documents", "cards-level-layouts").replace(/\\/g, "/");
 
 // Helpers
 const loadConfig = () => {
@@ -232,9 +233,6 @@ type LevelJsonPath = {
 type CardsLayoutOriginMetadata = {
   schema?: string;
   levelFolder?: string;
-  rootPath?: string;
-  levelFolderPath?: string;
-  targetResolution?: string;
 };
 
 type SaveLayoutDialogResult = {
@@ -245,19 +243,10 @@ type SaveLayoutDialogResult = {
   title?: string;
 };
 
-type UpdateLayoutTargetDialogResult = {
-  cancelled?: boolean;
-  target?: "applied" | "selected";
-  error?: string;
-};
-
-type UpdateLayoutTarget = {
-  levelFolderName: string;
-  levelFolderPath: string;
-  rootPath: string;
-  indexedEntry: LayoutIndexEntry | null;
-  label: string;
-  thumbnailPath: string;
+type ExistingLayoutMetadata = {
+  name: string;
+  description: string;
+  tags: string[];
 };
 
 const normalizePath = (value: string): string => String(value || "").replace(/\\/g, "/");
@@ -272,12 +261,6 @@ const getLevelLabelFromFolderName = (levelFolder: string): string => {
   return String(levelFolder || "").replace(/^lvl_/, "");
 };
 
-const getRootPathFromLevelFolderPath = (levelFolderPath: string): string => {
-  const normalized = normalizePath(levelFolderPath);
-  const lastSlash = normalized.lastIndexOf("/");
-  return lastSlash > -1 ? normalized.substring(0, lastSlash) : "";
-};
-
 const isLayoutOriginMetadata = (value: any): value is CardsLayoutOriginMetadata => {
   return !!(
     value &&
@@ -285,29 +268,6 @@ const isLayoutOriginMetadata = (value: any): value is CardsLayoutOriginMetadata 
     typeof value.levelFolder === "string" &&
     value.levelFolder !== ""
   );
-};
-
-const getLinkedLevelFolderPath = (origin: CardsLayoutOriginMetadata): string => {
-  const levelFolderPath = normalizePath(origin.levelFolderPath || "");
-  if (levelFolderPath) return levelFolderPath;
-
-  const rootPath = normalizePath(origin.rootPath || "");
-  if (rootPath && origin.levelFolder) return `${rootPath}/${origin.levelFolder}`;
-
-  return "";
-};
-
-const getLayoutThumbnailPath = (
-  rootPath: string,
-  levelFolder: string,
-  entry: LayoutIndexEntry | null,
-  preferredResolution: string
-): string => {
-  const indexedThumbnailPath = entry && entry.thumbnailPath && fs.existsSync(entry.thumbnailPath)
-    ? entry.thumbnailPath
-    : "";
-
-  return indexedThumbnailPath || getLevelPreviewPath(rootPath, levelFolder, preferredResolution) || "";
 };
 
 const parseResolutionString = (value: string): [number, number] | null => {
@@ -441,7 +401,6 @@ export const LayoutsPanel: React.FC<Props> = ({
   const [layoutEntries, setLayoutEntries] = useState<LayoutIndexEntry[]>([]);
   const [query, setQuery] = useState("");
   const [selectedFolder, setSelectedFolder] = useState("");
-  const [saveLevelId, setSaveLevelId] = useState("");
   const [compResolution, setCompResolution] = useState("");
   const [layoutPreviewSrc, setLayoutPreviewSrc] = useState<string | null>(null);
   const [layoutPreviewPath, setLayoutPreviewPath] = useState("");
@@ -459,13 +418,20 @@ export const LayoutsPanel: React.FC<Props> = ({
   // --- INIT ---
   useEffect(() => {
     const config = loadConfig();
-    if (config.savePath) {
-      setPersistentSavePath(config.savePath);
-      setBaseDir(config.savePath);
+    const savedPath = normalizePath(config.savePath || "");
+    const defaultLevelsPath = normalizePath(baseDirDefault || "");
+
+    if (savedPath && savedPath !== LEGACY_DEFAULT_LEVELS_DIR) {
+      setPersistentSavePath(savedPath);
+      setBaseDir(savedPath);
+    } else {
+      setPersistentSavePath(null);
+      setBaseDir(defaultLevelsPath || baseDirDefault);
     }
+
     if (config.cachePath) setCustomCachePath(normalizePath(config.cachePath));
     if (typeof config.trimCoveredCards === "boolean") setTrimCoveredCards(config.trimCoveredCards);
-  }, []);
+  }, [baseDirDefault]);
 
   useEffect(() => {
     let isMounted = true;
@@ -506,7 +472,7 @@ export const LayoutsPanel: React.FC<Props> = ({
 
     try {
       if (!remoteRootPath || !fs.existsSync(remoteRootPath)) {
-        if (showErrors) await showHostAlert("Select a layouts folder before refreshing the local cache.");
+        if (showErrors) await showHostAlert("Select a levels folder before refreshing the local cache.");
         return [];
       }
 
@@ -644,19 +610,40 @@ export const LayoutsPanel: React.FC<Props> = ({
       return;
     }
 
-    const readyAssets = await ensureAssetsReadyOrAlert(assetEntryPoint);
-    if (!readyAssets) return;
-
-    const remoteRoot = remoteRootPath;
-    const cachedLevelFolder = cacheRootPath ? `${cacheRootPath}/${selectedFolder}` : "";
-    const remoteLevelFolder = remoteRoot ? `${remoteRoot}/${selectedFolder}` : "";
-
     const resolution = await evalTS("getCompResolution");
     if (!resolution) {
       await showHostAlert("No active comp found.");
       return;
     }
     setCompResolution(String(resolution));
+
+    let activeLayoutOrigin: CardsLayoutOriginMetadata | null = null;
+    try {
+      await reloadExtendScript();
+      const origin = await evalTS("handleGetActiveCardsLayoutOrigin");
+      if (isLayoutOriginMetadata(origin)) activeLayoutOrigin = origin;
+    } catch (e) {
+      console.error(e);
+    }
+
+    if (activeLayoutOrigin && activeLayoutOrigin.levelFolder && activeLayoutOrigin.levelFolder !== selectedFolder) {
+      const currentLevelLabel = getLevelLabelFromFolderName(activeLayoutOrigin.levelFolder);
+      const selectedLevelLabel = selectedLayoutEntry
+        ? selectedLayoutEntry.name || selectedLayoutEntry.label || getLevelLabelFromFolderName(selectedFolder)
+        : getLevelLabelFromFolderName(selectedFolder);
+      const replaceCurrentLevel = await showHostConfirm(
+        `The active comp already has level "${currentLevelLabel}" applied.\nApply "${selectedLevelLabel}" instead?`
+      );
+
+      if (!replaceCurrentLevel) return;
+    }
+
+    const readyAssets = await ensureAssetsReadyOrAlert(assetEntryPoint);
+    if (!readyAssets) return;
+
+    const remoteRoot = remoteRootPath;
+    const cachedLevelFolder = cacheRootPath ? `${cacheRootPath}/${selectedFolder}` : "";
+    const remoteLevelFolder = remoteRoot ? `${remoteRoot}/${selectedFolder}` : "";
 
     const indexedJsonPath = selectedLayoutEntry && selectedLayoutEntry.jsonPath && fs.existsSync(selectedLayoutEntry.jsonPath)
       ? selectedLayoutEntry.jsonPath
@@ -699,173 +686,6 @@ export const LayoutsPanel: React.FC<Props> = ({
     }
   }, [assetEntryPoint, cacheRootPath, remoteRootPath, selectedFolder, selectedLayoutEntry]);
 
-
-  // -------------------------
-  // SAVE
-  // -------------------------
-  const handleSaveLegacy = useCallback(async () => {
-    await reloadExtendScript();
-
-    let activeLayoutOrigin: CardsLayoutOriginMetadata | null = null;
-
-    try {
-      const origin = await evalTS("handleGetActiveCardsLayoutOrigin");
-      if (isLayoutOriginMetadata(origin)) activeLayoutOrigin = origin;
-    } catch (e) {
-      console.error(e);
-    }
-
-    const linkedLevelFolder = activeLayoutOrigin ? String(activeLayoutOrigin.levelFolder || "") : "";
-    const lvlRaw = linkedLevelFolder ? getLevelLabelFromFolderName(linkedLevelFolder) : safeTrim(saveLevelId);
-    if (!lvlRaw) {
-      await showHostAlert("Type a level ID first (e.g. 001-Boss).");
-      return;
-    }
-
-    const selectTargetRoot = async (): Promise<string | null> => {
-      if (!window.cep) {
-        await showHostAlert("CEP API unavailable.");
-        return null;
-      }
-      const result = window.cep.fs.showOpenDialogEx(false, true, "Select Save Folder", baseDir, []);
-
-      if (result.err !== 0 || !result.data || result.data.length === 0) return null;
-
-      let selectedTarget = result.data[0];
-      if (!selectedTarget) {
-        await showHostAlert("Operation cancelled.")
-        return null
-      }
-      selectedTarget = normalizePath(selectedTarget);
-
-      saveConfig({ savePath: selectedTarget });
-      setPersistentSavePath(selectedTarget);
-      setBaseDir(selectedTarget);
-
-      return selectedTarget;
-    };
-
-    const levelFolderName = linkedLevelFolder || normalizeLevelFolderNameUI(lvlRaw);
-    let levelFolderPath = "";
-
-    // 1. Selecionar Pasta se não houver
-    if (activeLayoutOrigin && linkedLevelFolder) {
-      levelFolderPath = getLinkedLevelFolderPath(activeLayoutOrigin);
-
-      if (!levelFolderPath) {
-        let targetRoot = persistentSavePath ? normalizePath(persistentSavePath) : "";
-        if (!targetRoot) {
-          const selectedRoot = await selectTargetRoot();
-          if (!selectedRoot) return;
-          targetRoot = selectedRoot;
-        }
-
-        levelFolderPath = `${targetRoot}/${levelFolderName}`;
-      } else {
-        levelFolderPath = normalizePath(levelFolderPath);
-        const linkedRootPath = getRootPathFromLevelFolderPath(levelFolderPath);
-        if (linkedRootPath && linkedRootPath !== normalizePath(persistentSavePath || baseDir || "")) {
-          saveConfig({ savePath: linkedRootPath });
-          setPersistentSavePath(linkedRootPath);
-          setBaseDir(linkedRootPath);
-        }
-      }
-    } else {
-      let targetRoot = persistentSavePath ? normalizePath(persistentSavePath) : "";
-      if (!targetRoot) {
-        const selectedRoot = await selectTargetRoot();
-        if (!selectedRoot) return;
-        targetRoot = selectedRoot;
-      }
-
-      levelFolderPath = `${targetRoot}/${levelFolderName}`;
-    }
-
-    // 2. Pegar dados do AE
-    const jsonString = await evalTS("handleSaveCardsLayout", lvlRaw);
-
-    let layoutData;
-    try {
-      layoutData = JSON.parse(jsonString);
-    } catch (e) {
-      await showHostAlert(`Error from AE: ${jsonString}`);
-      return;
-    }
-
-    if (layoutData.error) {
-      await showHostAlert(`Export Failed: ${layoutData.error}`);
-      return;
-    }
-
-    const fileName = `${layoutData.resolution[0]}x${layoutData.resolution[1]}.json`;
-    const finalFilePath = `${levelFolderPath}/${fileName}`;
-    const thumbnailPath = `${levelFolderPath}/${fileName.replace(".json", ".jpg")}`;
-    const legacyThumbnailPath = `${levelFolderPath}/${fileName.replace(".json", ".png")}`;
-    const tempThumbnailPath = `${levelFolderPath}/${fileName.replace(".json", ".preview-temp.png")}`;
-
-    // 4. Cria pasta
-    if (!fs.existsSync(levelFolderPath)) {
-      try {
-        fs.mkdirSync(levelFolderPath, { recursive: true });
-      } catch (e) {
-        await showHostAlert(`Could not create folder: ${levelFolderPath}`);
-        return;
-      }
-    }
-
-    // 5. Overwrite
-    if (fs.existsSync(finalFilePath)) {
-      const actionLabel = activeLayoutOrigin ? "Update linked layout?" : "Overwrite?";
-      const overwrite = await showHostConfirm(`Level: ${levelFolderName.replace("lvl_", "")}\nResolution: ${fileName.replace(".json", "")}\n${actionLabel}`);
-      if (!overwrite) return;
-    }
-
-    // 6. Salvar
-    try {
-      fs.writeFileSync(finalFilePath, JSON.stringify(layoutData, null, 2), "utf-8");
-      deleteFileIfExists(tempThumbnailPath);
-
-      const thumbnailResult = await evalTS(
-        "handleSaveCardsLayoutThumbnail",
-        layoutData,
-        tempThumbnailPath,
-        THUMBNAIL_MAX_SIDE
-      );
-
-      if (thumbnailResult && thumbnailResult !== "OK") {
-        deleteFileIfExists(tempThumbnailPath);
-        await showHostAlert(`${activeLayoutOrigin ? "Updated" : "Saved"}, but thumbnail export failed:\n${thumbnailResult}`);
-      } else {
-        try {
-          const thumbnailReady = await waitForReadableFile(tempThumbnailPath);
-          if (!thumbnailReady) throw new Error("Temporary thumbnail was not created in time.");
-
-          await convertImageToJpeg(
-            tempThumbnailPath,
-            thumbnailPath,
-            THUMBNAIL_MAX_SIDE,
-            THUMBNAIL_JPEG_QUALITY
-          );
-          deleteFileIfExists(tempThumbnailPath);
-          deleteFileIfExists(legacyThumbnailPath);
-          await showHostAlert(`${activeLayoutOrigin ? "Updated!" : "Saved!"}\nLevel: ${levelFolderName.replace("lvl_", "")}\nResolution: ${fileName.replace(".json", "")}`);
-        } catch (thumbnailError) {
-          deleteFileIfExists(tempThumbnailPath);
-          await showHostAlert(`${activeLayoutOrigin ? "Updated" : "Saved"}, but thumbnail conversion failed:\n${thumbnailError}`);
-        }
-      }
-
-      setCompResolution(`${layoutData.resolution[0]}x${layoutData.resolution[1]}`);
-      setSelectedFolder(levelFolderName);
-      setQuery("");
-      setThumbnailVersion(v => v + 1);
-      refreshLevels();
-    } catch (e) {
-      await showHostAlert(`Write error: ${e}`);
-    }
-
-  }, [baseDir, saveLevelId, persistentSavePath, refreshLevels]);
-
   const selectTargetRoot = useCallback(async (dialogTitle: string): Promise<string | null> => {
     if (!window.cep) {
       await showHostAlert("CEP API unavailable.");
@@ -886,9 +706,9 @@ export const LayoutsPanel: React.FC<Props> = ({
   }, [baseDir]);
 
   const getTargetRoot = useCallback(async (dialogTitle: string): Promise<string | null> => {
-    const targetRoot = persistentSavePath ? normalizePath(persistentSavePath) : "";
+    const targetRoot = remoteRootPath ? normalizePath(remoteRootPath) : "";
     return targetRoot || await selectTargetRoot(dialogTitle);
-  }, [persistentSavePath, selectTargetRoot]);
+  }, [remoteRootPath, selectTargetRoot]);
 
   const getActiveLayoutOrigin = useCallback(async (): Promise<CardsLayoutOriginMetadata | null> => {
     try {
@@ -952,7 +772,7 @@ export const LayoutsPanel: React.FC<Props> = ({
     deleteFolderIfEmpty(tempFolderPath);
   }, []);
 
-  const getExistingLayoutMetadata = useCallback((levelFolderPath: string, fallbackEntry: LayoutIndexEntry | null) => {
+  const getExistingLayoutMetadata = useCallback((levelFolderPath: string, fallbackEntry: LayoutIndexEntry | null): ExistingLayoutMetadata => {
     const metadata = {
       name: fallbackEntry ? fallbackEntry.name : "",
       description: fallbackEntry ? fallbackEntry.description : "",
@@ -996,10 +816,9 @@ export const LayoutsPanel: React.FC<Props> = ({
     const thumbnailPath = normalizePath(path.join(levelFolderPath, CANONICAL_THUMBNAIL_NAME));
 
     const folderExists = fs.existsSync(levelFolderPath);
-    const hasExistingContent = folderExists && ((fs.readdirSync(levelFolderPath) as string[]).length > 0);
 
-    if (confirmOverwrite && hasExistingContent) {
-      const overwrite = await showHostConfirm(`Level "${getLevelLabelFromFolderName(levelFolderName)}" already exists.\nOverwrite its canonical layout?`);
+    if (confirmOverwrite && folderExists) {
+      const overwrite = await showHostConfirm(`Level "${getLevelLabelFromFolderName(levelFolderName)}" already exists.\nDo you want to replace it?`);
       if (!overwrite) return false;
     }
 
@@ -1038,66 +857,134 @@ export const LayoutsPanel: React.FC<Props> = ({
     return true;
   }, [customCachePath, refreshLevels]);
 
-  const handleSaveNew = useCallback(async () => {
+  const handleSave = useCallback(async () => {
     let tempThumbnailPath = "";
 
     try {
-      const rootPath = await getTargetRoot("Select Layouts Folder");
+      await reloadExtendScript();
+      const activeCompResolution = await evalTS("getCompResolution");
+      if (!activeCompResolution) {
+        await showHostAlert("No active comp found. Open the level comp you want to save first.");
+        return;
+      }
+
+      const activeLayoutOrigin = await getActiveLayoutOrigin();
+      const selectedLevelFolderName = String(selectedFolder || "");
+      const activeLevelFolderName = activeLayoutOrigin ? String(activeLayoutOrigin.levelFolder || "") : "";
+
+      if (activeLevelFolderName && selectedLevelFolderName && activeLevelFolderName !== selectedLevelFolderName) {
+        const activeLevelLabel = getLevelLabelFromFolderName(activeLevelFolderName);
+        const selectedLevelLabel = selectedLayoutEntry
+          ? selectedLayoutEntry.name || selectedLayoutEntry.label || getLevelLabelFromFolderName(selectedLevelFolderName)
+          : getLevelLabelFromFolderName(selectedLevelFolderName);
+        const saveActiveLevel = await showHostConfirm(
+          `The active comp is linked to "${activeLevelLabel}", but the selected layout is "${selectedLevelLabel}".\nSave "${activeLevelLabel}" instead?`
+        );
+
+        if (!saveActiveLevel) return;
+      }
+
+      const rootPath = await getTargetRoot("Select Levels Folder");
       if (!rootPath) return;
 
-      await reloadExtendScript();
+      const initialLevelFolderName = activeLevelFolderName;
+      const initialEntry = initialLevelFolderName
+        ? layoutEntries.find(entry => entry.folder === initialLevelFolderName) || null
+        : null;
+      const initialLevelFolderPath = initialLevelFolderName
+        ? normalizePath(path.join(rootPath, initialLevelFolderName))
+        : "";
+      const initialMetadata = initialLevelFolderPath && fs.existsSync(initialLevelFolderPath)
+        ? getExistingLayoutMetadata(initialLevelFolderPath, initialEntry)
+        : { name: "", description: "", tags: [] };
+      const initialDefaults: ExistingLayoutMetadata = {
+        name: initialMetadata.name || (initialLevelFolderName ? getLevelLabelFromFolderName(initialLevelFolderName) : ""),
+        description: initialMetadata.description || "",
+        tags: initialMetadata.tags || []
+      };
 
-      const layoutData = await readActiveLayoutData("New Layout");
+      const layoutData = await readActiveLayoutData(initialDefaults.name || "New Layout");
       tempThumbnailPath = await createTemporaryThumbnail(getLayoutCacheRootPath(rootPath, customCachePath) || rootPath, layoutData);
 
-      const dialogResult = await evalTS("handleShowSaveLayoutDialog", tempThumbnailPath, {
-        title: "Save New Layout",
-        name: "",
-        tags: "",
-        description: ""
-      }) as SaveLayoutDialogResult & { error?: string };
+      let dialogDefaults = initialDefaults;
+      let loadedExistingFolderName = initialLevelFolderName && fs.existsSync(initialLevelFolderPath) ? initialLevelFolderName : "";
+      let loadedExistingDefaultName = dialogDefaults.name;
+      let finalDialogResult: SaveLayoutDialogResult | null = null;
+      let finalLevelFolderName = "";
+      let finalLevelExists = false;
 
-      if (dialogResult && dialogResult.error) {
-        await showHostAlert(dialogResult.error);
-        cleanupTemporaryThumbnail(tempThumbnailPath);
-        return;
+      while (true) {
+        const dialogResult = await evalTS("handleShowSaveLayoutDialog", tempThumbnailPath, {
+          title: "Save Layout",
+          name: dialogDefaults.name,
+          tags: dialogDefaults.tags.join(", "),
+          description: dialogDefaults.description
+        }) as SaveLayoutDialogResult & { error?: string };
+
+        if (dialogResult && dialogResult.error) {
+          await showHostAlert(dialogResult.error);
+          cleanupTemporaryThumbnail(tempThumbnailPath);
+          return;
+        }
+
+        if (!dialogResult || dialogResult.cancelled) {
+          cleanupTemporaryThumbnail(tempThumbnailPath);
+          return;
+        }
+
+        const levelName = safeTrim(dialogResult.name);
+        if (!levelName) {
+          cleanupTemporaryThumbnail(tempThumbnailPath);
+          await showHostAlert("Type a level name first.");
+          return;
+        }
+
+        const targetFolderName = loadedExistingFolderName && levelName === loadedExistingDefaultName
+          ? loadedExistingFolderName
+          : normalizeLevelFolderNameUI(levelName);
+        const targetFolderPath = normalizePath(path.join(rootPath, targetFolderName));
+        const targetExists = fs.existsSync(targetFolderPath);
+
+        if (targetExists && targetFolderName !== loadedExistingFolderName) {
+          const existingEntry = layoutEntries.find(entry => entry.folder === targetFolderName) || null;
+          const existingMetadata = getExistingLayoutMetadata(targetFolderPath, existingEntry);
+
+          loadedExistingFolderName = targetFolderName;
+          dialogDefaults = {
+            name: existingMetadata.name || levelName,
+            description: existingMetadata.description || "",
+            tags: existingMetadata.tags || []
+          };
+          loadedExistingDefaultName = dialogDefaults.name;
+          continue;
+        }
+
+        finalDialogResult = dialogResult;
+        finalLevelFolderName = targetFolderName;
+        finalLevelExists = targetExists;
+        break;
       }
 
-      if (!dialogResult || dialogResult.cancelled) {
+      if (!finalDialogResult || !finalLevelFolderName) {
         cleanupTemporaryThumbnail(tempThumbnailPath);
-        return;
-      }
-
-      const levelName = safeTrim(dialogResult.name);
-      if (!levelName) {
-        cleanupTemporaryThumbnail(tempThumbnailPath);
-        await showHostAlert("Type a level name first.");
-        return;
-      }
-
-      const levelFolderName = normalizeLevelFolderNameUI(levelName);
-      const levelFolderPath = normalizePath(path.join(rootPath, levelFolderName));
-      if (fs.existsSync(levelFolderPath)) {
-        cleanupTemporaryThumbnail(tempThumbnailPath);
-        await showHostAlert(`Layout "${getLevelLabelFromFolderName(levelFolderName)}" already exists.\nUse Update to modify an existing layout.`);
         return;
       }
 
       const saved = await writeCanonicalLayout(
         rootPath,
-        levelFolderName,
+        finalLevelFolderName,
         layoutData,
         tempThumbnailPath,
         {
-          name: levelName,
-          tags: parseTags(dialogResult.tags),
-          description: String(dialogResult.description || "")
+          name: safeTrim(finalDialogResult.name),
+          tags: parseTags(finalDialogResult.tags),
+          description: String(finalDialogResult.description || "")
         },
-        false
+        finalLevelExists
       );
 
       cleanupTemporaryThumbnail(tempThumbnailPath);
-      if (saved) await showHostAlert(`Saved!\nLevel: ${getLevelLabelFromFolderName(levelFolderName)}\nResolution: ${getLayoutResolutionString(layoutData)}`);
+      if (saved) await showHostAlert(`Saved!\nLevel: ${getLevelLabelFromFolderName(finalLevelFolderName)}\nResolution: ${getLayoutResolutionString(layoutData)}`);
     } catch (e) {
       cleanupTemporaryThumbnail(tempThumbnailPath);
       await showHostAlert(`Save failed: ${e}`);
@@ -1106,179 +993,11 @@ export const LayoutsPanel: React.FC<Props> = ({
     cleanupTemporaryThumbnail,
     createTemporaryThumbnail,
     customCachePath,
-    getTargetRoot,
-    readActiveLayoutData,
-    writeCanonicalLayout
-  ]);
-
-  const handleUpdate = useCallback(async () => {
-    let tempThumbnailPath = "";
-
-    try {
-      await reloadExtendScript();
-
-      const activeLayoutOrigin = await getActiveLayoutOrigin();
-      const selectedLevelFolderName = String(selectedFolder || "");
-      const selectedLabel = selectedLayoutEntry
-        ? selectedLayoutEntry.name || selectedLayoutEntry.label || getLevelLabelFromFolderName(selectedLevelFolderName)
-        : getLevelLabelFromFolderName(selectedLevelFolderName);
-
-      const resolveSelectedTarget = (): UpdateLayoutTarget => {
-        const indexedEntry = selectedLayoutEntry || null;
-        const rootPath = remoteRootPath;
-        const levelFolderPath = rootPath ? normalizePath(path.join(rootPath, selectedLevelFolderName)) : "";
-
-        return {
-          levelFolderName: selectedLevelFolderName,
-          levelFolderPath,
-          rootPath,
-          indexedEntry,
-          label: selectedLabel,
-          thumbnailPath: getLayoutThumbnailPath(
-            rootPath,
-            selectedLevelFolderName,
-            indexedEntry,
-            compResolution || (indexedEntry ? indexedEntry.sourceResolution : "")
-          )
-        };
-      };
-
-      let updateTarget: UpdateLayoutTarget | null = null;
-
-      if (activeLayoutOrigin) {
-        const activeLevelFolderName = String(activeLayoutOrigin.levelFolder || "");
-        const linkedFolderPath = getLinkedLevelFolderPath(activeLayoutOrigin);
-        const activeRootPath = linkedFolderPath ? getRootPathFromLevelFolderPath(linkedFolderPath) : normalizePath(activeLayoutOrigin.rootPath || "");
-        const activeLevelFolderPath = linkedFolderPath || (activeRootPath ? normalizePath(path.join(activeRootPath, activeLevelFolderName)) : "");
-        const activeEntry = layoutEntries.find(entry => entry.folder === activeLevelFolderName) || null;
-        const activeLabel = activeEntry
-          ? activeEntry.name || activeEntry.label || getLevelLabelFromFolderName(activeLevelFolderName)
-          : getLevelLabelFromFolderName(activeLevelFolderName);
-
-        updateTarget = {
-          levelFolderName: activeLevelFolderName,
-          levelFolderPath: activeLevelFolderPath,
-          rootPath: activeRootPath,
-          indexedEntry: activeEntry,
-          label: activeLabel,
-          thumbnailPath: getLayoutThumbnailPath(
-            activeRootPath,
-            activeLevelFolderName,
-            activeEntry,
-            String(activeLayoutOrigin.targetResolution || compResolution || (activeEntry ? activeEntry.sourceResolution : ""))
-          )
-        };
-
-        if (selectedLevelFolderName && selectedLevelFolderName !== activeLevelFolderName) {
-          const selectedTarget = resolveSelectedTarget();
-          const dialogResult = await evalTS("handleShowUpdateLayoutTargetDialog", {
-            applied: {
-              label: updateTarget.label,
-              thumbnailPath: updateTarget.thumbnailPath
-            },
-            selected: {
-              label: selectedTarget.label,
-              thumbnailPath: selectedTarget.thumbnailPath
-            }
-          }) as UpdateLayoutTargetDialogResult;
-
-          if (dialogResult && dialogResult.error) {
-            await showHostAlert(dialogResult.error);
-            return;
-          }
-
-          if (!dialogResult || dialogResult.cancelled) return;
-          if (dialogResult.target === "selected") updateTarget = selectedTarget;
-        }
-      } else {
-        if (!selectedLevelFolderName) {
-          await showHostAlert("Apply a layout first or select a layout to update.");
-          return;
-        }
-
-        const proceed = await showHostConfirm(
-          `No applied layout marker was found on the active composition.\n\nUpdate selected layout "${selectedLabel}"?`
-        );
-        if (!proceed) return;
-
-        updateTarget = resolveSelectedTarget();
-      }
-
-      if (!updateTarget || !updateTarget.levelFolderName) {
-        await showHostAlert("Could not resolve which layout should be updated.");
-        return;
-      }
-
-      let { levelFolderName, levelFolderPath, rootPath, indexedEntry } = updateTarget;
-
-      if (!rootPath) {
-        const selectedRoot = await getTargetRoot("Select Layouts Folder");
-        if (!selectedRoot) return;
-        rootPath = selectedRoot;
-        levelFolderPath = normalizePath(path.join(rootPath, levelFolderName));
-      }
-
-      if (rootPath && rootPath !== normalizePath(persistentSavePath || baseDir || "")) {
-        saveConfig({ savePath: rootPath });
-        setPersistentSavePath(rootPath);
-        setBaseDir(rootPath);
-      }
-
-      const existingMetadata = getExistingLayoutMetadata(levelFolderPath, indexedEntry);
-      const levelName = existingMetadata.name || getLevelLabelFromFolderName(levelFolderName);
-      const layoutData = await readActiveLayoutData(levelName);
-      tempThumbnailPath = await createTemporaryThumbnail(getLayoutCacheRootPath(rootPath, customCachePath) || rootPath, layoutData);
-
-      const dialogResult = await evalTS("handleShowSaveLayoutDialog", tempThumbnailPath, {
-        title: "Update Layout",
-        name: levelName,
-        tags: existingMetadata.tags.join(", "),
-        description: existingMetadata.description
-      }) as SaveLayoutDialogResult & { error?: string };
-
-      if (dialogResult && dialogResult.error) {
-        await showHostAlert(dialogResult.error);
-        cleanupTemporaryThumbnail(tempThumbnailPath);
-        return;
-      }
-
-      if (!dialogResult || dialogResult.cancelled) {
-        cleanupTemporaryThumbnail(tempThumbnailPath);
-        return;
-      }
-
-      const saved = await writeCanonicalLayout(
-        rootPath,
-        levelFolderName,
-        layoutData,
-        tempThumbnailPath,
-        {
-          name: safeTrim(dialogResult.name) || levelName,
-          tags: parseTags(dialogResult.tags),
-          description: String(dialogResult.description || "")
-        },
-        false
-      );
-
-      cleanupTemporaryThumbnail(tempThumbnailPath);
-      if (saved) await showHostAlert(`Updated!\nLevel: ${getLevelLabelFromFolderName(levelFolderName)}\nResolution: ${getLayoutResolutionString(layoutData)}`);
-    } catch (e) {
-      cleanupTemporaryThumbnail(tempThumbnailPath);
-      await showHostAlert(`Update failed: ${e}`);
-    }
-  }, [
-    baseDir,
-    cleanupTemporaryThumbnail,
-    createTemporaryThumbnail,
-    customCachePath,
     getActiveLayoutOrigin,
     getExistingLayoutMetadata,
     getTargetRoot,
     layoutEntries,
-    persistentSavePath,
     readActiveLayoutData,
-    compResolution,
-    remoteRootPath,
     selectedFolder,
     selectedLayoutEntry,
     writeCanonicalLayout
@@ -1310,7 +1029,7 @@ export const LayoutsPanel: React.FC<Props> = ({
     const result = window.cep.fs.showOpenDialogEx(
       false,
       true,
-      "Select New Save Folder",
+      "Select New Levels Folder",
       baseDir,
       []
     );
@@ -1407,9 +1126,17 @@ export const LayoutsPanel: React.FC<Props> = ({
   };
 
   const handleOpenSavePath = () => {
-    if (!persistentSavePath) return;
+    if (!remoteRootPath) return;
+
+    try {
+      if (!fs.existsSync(remoteRootPath)) fs.mkdirSync(remoteRootPath, { recursive: true });
+    } catch (e) {
+      console.error(e);
+      return;
+    }
+
     let cmd = "";
-    const p = path.normalize(persistentSavePath);
+    const p = path.normalize(remoteRootPath);
     if (process.platform === "win32") {
       cmd = `explorer "${p}"`;
     } else {
@@ -1630,16 +1357,16 @@ export const LayoutsPanel: React.FC<Props> = ({
                 <div className="layouts-settings-row">
                   <span
                     className="layouts-settings-label"
-                    title={persistentSavePath || "Path not set"}
+                    title={remoteRootPath || "Path not set"}
                   >
-                    Folder Path
+                    Levels Path
                   </span>
 
                   <div className="layouts-settings-actions">
                     <button
                       className="btn-open-folder"
                       onClick={handleOpenSavePath}
-                      disabled={!persistentSavePath || !safeTrim(persistentSavePath)}
+                      disabled={!remoteRootPath || !safeTrim(remoteRootPath)}
                     >
                       Open
                     </button>
@@ -1648,7 +1375,7 @@ export const LayoutsPanel: React.FC<Props> = ({
                       className="btn-change"
                       onClick={handleChangePath}
                     >
-                      {persistentSavePath ? "Change" : "Set"}
+                      {remoteRootPath ? "Change" : "Set"}
                     </button>
                   </div>
                 </div>
@@ -1846,11 +1573,8 @@ export const LayoutsPanel: React.FC<Props> = ({
         </div>
         <div className="layouts-card layouts-save-card">
           <div className="button-row layouts-actions layouts-save-actions">
-            <button onClick={handleSaveNew}>
-              {persistentSavePath ? "Save New" : "Save New (Select Folder)"}
-            </button>
-            <button onClick={handleUpdate}>
-              Update
+            <button onClick={handleSave}>
+              Save
             </button>
           </div>
         </div>

@@ -9,10 +9,10 @@ import { LayoutsPanel } from "./components/LayoutsPanel/LayoutsPanel";
 import { DuplicatePanel } from "./components/DuplicatePanel/DuplicatePanel";
 
 import { os, path } from "../lib/cep/node";
-import { getAssetPaths, getSavedAssetEntryPoint } from "./assetPaths";
+import { getAssetPaths, getDefaultLevelsPath, getSavedAssetEntryPoint } from "./assetPaths";
 
-export const getDefaultCardsLevelsDir = () => {
-  return path.join(os.homedir(), "Documents", "cards-level-layouts");
+export const getDefaultCardsLevelsDir = (assetEntryPoint: string) => {
+  return getDefaultLevelsPath(assetEntryPoint) || path.join(os.homedir(), "Documents", "cards-level-layouts");
 };
 
 type TabKey = "cards" | "layouts";
@@ -94,7 +94,7 @@ export const App = () => {
             </>
           ) : (
             <LayoutsPanel
-              baseDirDefault={getDefaultCardsLevelsDir()}
+              baseDirDefault={getDefaultCardsLevelsDir(assetEntryPoint)}
               assetEntryPoint={assetEntryPoint}
               onAssetEntryPointChange={setAssetEntryPoint}
               onSettingsClose={() => setLayoutsSettingsOpen(false)}

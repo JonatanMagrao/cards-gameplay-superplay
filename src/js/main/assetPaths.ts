@@ -3,6 +3,7 @@ import { evalTS } from "../lib/utils/bolt";
 
 export const CONFIG_FILE_NAME = ".cards-layout-config.json";
 export const DEFAULT_ASSETS_RELATIVE_PATH = "Creative_Marketing_Assets/GENERAL-ASSETS/Plugins/Cards Gameplay/assets";
+export const DEFAULT_LEVELS_RELATIVE_PATH = DEFAULT_ASSETS_RELATIVE_PATH.replace(/\/assets$/, "/levels");
 
 export type CardsGameplayConfig = {
   assetEntryPoint?: string;
@@ -168,6 +169,13 @@ export const getAssetRootPath = (assetEntryPoint: string): string => {
   const normalizedEntryPoint = normalizeAssetPath(assetEntryPoint);
   return normalizedEntryPoint
     ? joinAssetPath(normalizedEntryPoint, DEFAULT_ASSETS_RELATIVE_PATH)
+    : "";
+};
+
+export const getDefaultLevelsPath = (assetEntryPoint: string): string => {
+  const normalizedEntryPoint = normalizeAssetPath(assetEntryPoint);
+  return normalizedEntryPoint
+    ? joinAssetPath(normalizedEntryPoint, DEFAULT_LEVELS_RELATIVE_PATH)
     : "";
 };
 
