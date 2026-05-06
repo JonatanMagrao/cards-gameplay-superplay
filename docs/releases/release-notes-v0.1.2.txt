@@ -1,0 +1,70 @@
+Cards Gameplay v0.1.2
+
+Git Source
+- Version bump commit: c8441e7
+- Commit date: 2026-01-26
+- Commit range used for reconstruction: after be41d81 through c8441e7
+- package.json changed from 0.0.1 to 0.1.2 at this point.
+
+Overview
+This version expanded the extension from the first card-action panel into a broader workflow with layout save/apply, smarter project imports, improved card actions, and a more organized interface.
+
+Highlights
+- Added the Cards and Layouts tab structure.
+- Split the original panel into focused components for card picking, actions, layouts, and duplication.
+- Added the first layout save/apply workflow.
+- Added JSON-based layout storage by composition resolution.
+- Added level folders using the lvl_ naming pattern.
+- Added a configurable layout folder path stored in the user config.
+- Added folder open/change controls for the layout save path.
+- Added search and dropdown selection for saved layouts.
+- Added validation when a layout resolution JSON is missing.
+
+Layouts
+- Layouts could be saved from the active comp into local level folders.
+- Layouts could be applied back to the active comp from saved JSON data.
+- Layouts were stored by resolution, such as 1920x1080.json.
+- Level names were normalized into folders like lvl_001-name.
+- Saving could create the level folder automatically.
+- Saving asked for confirmation before overwriting an existing resolution file.
+- Layout data included cards, transforms, and gameplay state needed to rebuild a level.
+- Turn card state could be saved with the layout.
+- Markers could be saved and restored with the layout.
+
+Project Import
+- Added import when applying a layout.
+- Added import when adding a card to a precomp.
+- Improved project import to avoid duplicating the imported card project unnecessarily.
+- Improved the card project and essential property setup.
+
+Cards And Actions
+- Added Add Card behavior for inserting a selected card into the active comp.
+- Improved card changing and source replacement.
+- Added reset and restore based on gameplay markers.
+- Improved stock card functions.
+- Improved Flip Stock behavior.
+- Prevented Jump from being applied twice to the same action marker.
+- Added target validation and helper logic for card actions.
+- Kept the renderer as Classic 3D instead of forcing Advanced 3D.
+
+Duplicate Panel
+- Added a separate duplicate panel.
+- Added controls for copy count and X/Y distribution.
+- Fixed selected-layer position changes during duplicate flows.
+- Fixed reverse button behavior in the duplicate panel.
+
+User Experience
+- Improved layout and styling across the panel.
+- Moved the Turn button into the card picker area.
+- Added SuperPlay website access in the flyout menu.
+- Improved alert error messages with file/function/line context.
+- Refactored code structure and cleaned several error messages.
+
+Fixes
+- Fixed undo groups so import does not create an unintended undo group by default.
+- Fixed the alert shown when a requested layout JSON resolution does not exist.
+- Improved regex and helper logic around target existence.
+
+Notes
+- Assets were still bundled with the extension in this version.
+- Tutorial menu, progress bar, SFX workflow, SQLite cache, external shared-drive assets, and local update checks were added in later versions.

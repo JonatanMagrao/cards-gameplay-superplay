@@ -1,0 +1,97 @@
+Cards Gameplay v2.0.0
+
+Overview
+This version consolidates the extension around shared-drive assets, local level management, tutorial videos, and a safer release/update workflow.
+
+Highlights
+- Moved extension resources to the shared drive workflow.
+- Added configurable Assets Path, Levels Path, Tutorials Path, and local Cache Path.
+- Added local dynamic video tutorials in the flyout menu.
+- Added local extension update detection from extension-releases.
+- Improved the layouts browser, save flow, metadata, and cache behavior.
+- Added support for layout descriptions, tags, favorites, thumbnails, and local SQLite indexing.
+- Added safer dialogs before overwriting or replacing levels.
+- Added release-notes support from the flyout version item when .txt files are available.
+
+Assets And Paths
+- Assets now load from the configured shared-drive entry point instead of being bundled inside the extension.
+- Levels Path defaults to the shared-drive Cards Gameplay/levels folder.
+- Tutorials Path defaults to the shared-drive Cards Gameplay/video-tutorials folder.
+- Cache Path remains local and configurable for faster layout browsing.
+- Settings now include Open and Change controls for the main paths.
+- Path validation warns when required shared-drive assets are missing.
+
+Layouts
+- Removed the separate Update button.
+- Save now works as an upsert: it creates a new level or updates an existing one.
+- Save asks for confirmation before overwriting an existing level.
+- Save loads existing metadata when updating a level, including description and tags.
+- Save validates the active comp against the selected level to reduce accidental overwrite mistakes.
+- Apply asks for confirmation before replacing a different level already applied to the active comp.
+- Layout metadata stored in comp markers was reduced to only the essential origin information.
+- Layout thumbnails now use an After Effects-like gray background.
+- Layout browser now supports cached previews and a refresh progress indicator.
+- Layouts can be indexed locally with SQLite for faster browsing and richer metadata.
+- Layouts support tags, descriptions, favorites, resolution labels, and preview opening.
+- Local cache can be refreshed from the shared Levels Path.
+
+Tutorials
+- The flyout Tutorials menu is now generated dynamically from local files.
+- Tutorial files are read from video-tutorials.
+- Numeric prefixes control order but are hidden from the menu label.
+- Hyphenated names are converted to clean title labels.
+- Example: 01-project.mp4 becomes Project.
+- Example: 02-card-manager.mp4 becomes Card Manager.
+- Old Google Drive tutorial links were removed.
+- Tutorial items open local video files.
+- If no local tutorials are found, the flyout shows a disabled fallback item.
+
+Extension Releases And Updates
+- Added support for an extension-releases folder next to assets, levels, and video-tutorials.
+- Releases are organized directly by version folder.
+- Example: extension-releases/2.0.0/cards-gameplay-v2.0.0.zxp
+- Example: extension-releases/2.0.0/release-notes.txt
+- The panel checks local release folders for a newer .zxp version.
+- When a newer version is available, a top update banner appears.
+- The Update button opens or selects the newer .zxp package.
+- If extension-releases does not exist, the panel simply does not show update information.
+- The flyout version item becomes clickable when release-notes .txt files are available.
+- When both current and newer release notes exist, the flyout dialog shows both sections for comparison.
+
+Cards And Actions
+- Added a configurable Trim Covered Cards preference.
+- Action flows can use shared-drive assets and presets through the configured Assets Path.
+- Added or improved grouping cards to a centralized control/null workflow.
+- Added or improved clearing cards and gameplay controls from a comp.
+- Improved jump/card action behavior and physics.
+- Improved applying layouts across different comp resolutions.
+- Implemented personalized pseudo effects for gameplay controls.
+
+User Experience
+- Added a settings modal accessible from the Layouts tab.
+- Improved the Layouts interface around preview, metadata, search, and actions.
+- Reduced visual clutter around layout controls.
+- Added safer user confirmations for destructive or potentially confusing operations.
+- Added local refresh behavior for flyout menu changes.
+- Updated labels for path configuration, including Levels Path.
+
+Recommended Folder Structure
+Cards Gameplay/
+  assets/
+  levels/
+  video-tutorials/
+  extension-releases/
+    2.0.0/
+      cards-gameplay-v2.0.0.zxp
+      release-notes.txt
+    2.1.0/
+      cards-gameplay-v2.1.0.zxp
+      release-notes.txt
+    2.2.0-beta.1/
+      cards-gameplay-v2.2.0-beta.1.zxp
+      release-notes.txt
+
+Notes
+- Users should mark assets, levels, and video-tutorials as available offline in Google Drive when needed.
+- extension-releases does not need to be available offline unless users need to install or inspect a specific release.
+- Beta versions can be added as version folders directly inside extension-releases.
