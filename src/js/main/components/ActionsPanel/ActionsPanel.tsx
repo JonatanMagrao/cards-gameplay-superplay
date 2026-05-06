@@ -1,12 +1,12 @@
 import React from "react";
-import { csi, evalTS } from "../../../lib/utils/bolt";
+import { evalTS } from "../../../lib/utils/bolt";
 import { fs, os, path } from "../../../lib/cep/node";
+import { ensureAssetsReadyOrAlert, getCoinVfxPath } from "../../assetPaths";
+import ClearIcon from "../../../assets/icons/clear.svg";
+import "./ActionsPanel.scss";
 
 type Props = {
-  cardsPreset?: string;
-  projectRelPath?: string;
-  progressBarPreset?: string;
-  expressionLibRelPath?: string;
+  assetEntryPoint: string;
   coinValue: string; // NOVO: Recebendo a moeda escolhida
 };
 
@@ -24,28 +24,37 @@ const readTrimCoveredCardsPreference = (): boolean => {
   }
 };
 
-export const ActionsPanel: React.FC<Props> = ({
-  cardsPreset = "presets/cards_gameplay_superplay.ffx",
-  progressBarPreset = "presets/cards_gameplay_progressbar.ffx",
-  expressionLibRelPath = "expressions/superplay-expression-lib.jsx",
-  projectRelPath = "disney_solitaire_cards.aepx",
-  coinValue, // Extraindo das props
-}) => {
-  const assets = `${csi.getSystemPath("extension")}/assets`;
+type ActionsGroup = "play" | "setup" | "maintenance";
 
-  const cardPresetPath = `${assets}/${cardsPreset}`;
-  const progressBarPresetPath = `${assets}/${progressBarPreset}`;
-  const expressionLibPath = `${assets}/${expressionLibRelPath}`;
-  const cardProject = `${assets}/${projectRelPath}`;
-  const sfxFolderPath = `${assets}/sfx`;
+export const ActionsPanel: React.FC<Props> = ({ assetEntryPoint, coinValue }) => {
+  const [activeGroup, setActiveGroup] = React.useState<ActionsGroup>("play");
 
-  // NOVO: Montando o caminho do arquivo de moeda baseado no que foi selecionado
-  const coinPath = `${assets}/coins-vfx/coin_plus-${coinValue}.mov`;
+  const applyJump = async () => {
+    const readyAssets = await ensureAssetsReadyOrAlert(assetEntryPoint);
+    if (!readyAssets) return;
 
-  // NOVO: Passando os dois caminhos pro seu ExtendScript
-  const applyJump = async () => await evalTS("handleApplyJump", cardPresetPath, coinPath, sfxFolderPath, readTrimCoveredCardsPreference());
+    await evalTS(
+      "handleApplyJump",
+      readyAssets.cardsPresetPath,
+      getCoinVfxPath(readyAssets, coinValue),
+      readyAssets.sfxFolderPath,
+      readyAssets.cardsControlPresetPath,
+      readTrimCoveredCardsPreference()
+    );
+  };
 
-  const flipStockCards = async () => await evalTS("handleFlipStockCards", expressionLibPath, sfxFolderPath, readTrimCoveredCardsPreference());
+  const flipStockCards = async () => {
+    const readyAssets = await ensureAssetsReadyOrAlert(assetEntryPoint);
+    if (!readyAssets) return;
+
+    await evalTS(
+      "handleFlipStockCards",
+      readyAssets.expressionLibPath,
+      readyAssets.sfxFolderPath,
+      readyAssets.cardsControlPresetPath,
+      readTrimCoveredCardsPreference()
+    );
+  };
   const applyFlipCard = async () => await evalTS("handleFlipCards");
 
   const handleSetTargetLayer = async () => await evalTS("handleSetTargetLayer");
@@ -54,14 +63,34 @@ export const ActionsPanel: React.FC<Props> = ({
     await evalTS("handleSetTableauLayer");
 
   const resetCardsAnimation = async () => await evalTS("handleResetCardsAnimation");
-  const restoreCardsAnimation = async () =>
-    await evalTS("handleRestoreCardsAnimation", cardPresetPath, expressionLibPath, coinPath, sfxFolderPath, readTrimCoveredCardsPreference());
+  const restoreCardsAnimation = async () => {
+    const readyAssets = await ensureAssetsReadyOrAlert(assetEntryPoint);
+    if (!readyAssets) return;
 
-  const handleImportFilesAndComps = async () =>
-    await evalTS("handleImportFilesAndComps", cardProject);
+    await evalTS(
+      "handleRestoreCardsAnimation",
+      readyAssets.cardsPresetPath,
+      readyAssets.expressionLibPath,
+      getCoinVfxPath(readyAssets, coinValue),
+      readyAssets.sfxFolderPath,
+      readyAssets.cardsControlPresetPath,
+      readTrimCoveredCardsPreference()
+    );
+  };
 
-  const handleAddProgressBar = async () =>
-    await evalTS("handleAddProgressBar", progressBarPresetPath);
+  const handleImportFilesAndComps = async () => {
+    const readyAssets = await ensureAssetsReadyOrAlert(assetEntryPoint);
+    if (!readyAssets) return;
+
+    await evalTS("handleImportFilesAndComps", readyAssets.cardProject);
+  };
+
+  const handleAddProgressBar = async () => {
+    const readyAssets = await ensureAssetsReadyOrAlert(assetEntryPoint);
+    if (!readyAssets) return;
+
+    await evalTS("handleAddProgressBar", readyAssets.progressBarPresetPath);
+  };
 
   const handleClearExpressions = async () =>
     await evalTS("handleClearLayerExpressions");
@@ -73,114 +102,153 @@ export const ActionsPanel: React.FC<Props> = ({
     await evalTS("handleClearCardsLevel");
 
   return (
-    <section className="panel-section">
+    <section className="panel-section actions-panel">
       <span className="section-label">Actions</span>
 
-      {/* Row 1: most used actions */}
-      <div className="button-row">
-        <button
-          onClick={applyFlipCard}
-          style={{ border: "1px solid #4AA44C" }}
-          title={"Flip Card"}
-        >
-          Flip
-        </button>
-
-        <button onClick={applyJump}
-          style={{ border: "1px solid #4AA44C" }}
-          title={"Apply Jump with Coin"}
-        >
-          Jump
-        </button>
-
-        <button
-          onClick={flipStockCards}
-          style={{ border: "1px solid #E4D84C" }}
-          title={"Flip Stock Cards"}
-        >
-          Flip Stock
-        </button>
-      </div>
-
-      {/* Row 2: set layers */}
-      <div className="button-row">
-        <button
-          onClick={handleSetTargetLayer}
-          style={{ backgroundColor: "#B53838" }}
-          title={"Set Target Layer"}
-        >
-          Set Target
-        </button>
+      <div className="actions-toolbar">
+        <div className="actions-segmented" role="tablist" aria-label="Action groups">
+          <button
+            type="button"
+            className={`actions-segment ${activeGroup === "play" ? "is-active" : ""}`}
+            onClick={() => setActiveGroup("play")}
+            role="tab"
+            aria-selected={activeGroup === "play"}
+          >
+            Play
+          </button>
+          <button
+            type="button"
+            className={`actions-segment ${activeGroup === "setup" ? "is-active" : ""}`}
+            onClick={() => setActiveGroup("setup")}
+            role="tab"
+            aria-selected={activeGroup === "setup"}
+          >
+            Setup
+          </button>
+          <button
+            type="button"
+            className={`actions-segment ${activeGroup === "maintenance" ? "is-active" : ""}`}
+            onClick={() => setActiveGroup("maintenance")}
+            role="tab"
+            aria-selected={activeGroup === "maintenance"}
+          >
+            Maint.
+          </button>
+        </div>
 
         <button
-          onClick={handleSetStockLayer}
-          style={{ backgroundColor: "#E4D84C", color: "black" }}
-          title={"Set Stock Layers"}
-        >
-          Set Stock
-        </button>
-
-        <button
-          onClick={handleSetTableauLayer}
-          style={{ backgroundColor: "#4AA44C" }}
-          title={"Set Tableau Layers"}
-        >
-          Set Tableau
-        </button>
-      </div>
-
-      {/* Row 3: setup */}
-      <div className="button-row">
-        <button
-          onClick={resetCardsAnimation}
-          style={{ border: "1px solid #677DE0" }}
-          title={"Reset Keyframes and Expressions"}
-        >
-          Reset
-        </button>
-
-        <button
-          onClick={restoreCardsAnimation}
-          style={{ border: "1px solid #677DE0" }}
-          title={"Restore Keyframes and Expressions"}
-        >
-          Restore
-        </button>
-
-        <button
-          onClick={handleGroupCards}
-          style={{ border: "1px solid #677DE0" }}
-          title={"Create a centered null and parent all card layers"}
-        >
-          Group Cards
-        </button>
-
-        <button
+          type="button"
+          className="actions-clear-button"
           onClick={handleClearCardsLevel}
-          style={{ border: "1px solid #677DE0" }}
-          title={"Remove cards and gameplay control layers from this comp"}
+          title={"Clear Level"}
+          aria-label="Clear Level"
         >
-          Clear Level
+          <img src={ClearIcon} alt="" />
         </button>
       </div>
 
-      <div className="button-row">
-        <button
-          onClick={handleAddProgressBar}
-          style={{ border: "1px solid #E8920D" }}
-          title={"Add Progress Bar"}
-        >
-          Progress Bar
-        </button>
+      <div className="actions-segment-panel">
+        {activeGroup === "play" && (
+          <div className="button-row actions-button-row" role="tabpanel">
+            <button
+              onClick={applyFlipCard}
+              style={{ border: "1px solid #4AA44C" }}
+              title={"Flip Card"}
+            >
+              Flip
+            </button>
 
-        <button
-          onClick={handleClearExpressions}
-          style={{ border: "1px solid #E8920D" }}
-          title={"Clear Layer Expressions"}
-        >
-          Clear Expressions
-        </button>
+            <button onClick={applyJump}
+              style={{ border: "1px solid #4AA44C" }}
+              title={"Apply Jump with Coin"}
+            >
+              Jump
+            </button>
+
+            <button
+              onClick={flipStockCards}
+              style={{ border: "1px solid #E4D84C" }}
+              title={"Flip Stock Cards"}
+            >
+              Flip Stock
+            </button>
+          </div>
+        )}
+
+        {activeGroup === "setup" && (
+          <div className="button-row actions-button-row" role="tabpanel">
+            <button
+              onClick={handleSetTargetLayer}
+              style={{ backgroundColor: "#B53838" }}
+              title={"Set Target Layer"}
+            >
+              Set Target
+            </button>
+
+            <button
+              onClick={handleSetStockLayer}
+              style={{ backgroundColor: "#E4D84C", color: "black" }}
+              title={"Set Stock Layers"}
+            >
+              Set Stock
+            </button>
+
+            <button
+              onClick={handleSetTableauLayer}
+              style={{ backgroundColor: "#4AA44C" }}
+              title={"Set Tableau Layers"}
+            >
+              Set Tableau
+            </button>
+
+          </div>
+        )}
+
+        {activeGroup === "maintenance" && (
+          <div className="button-row actions-button-row" role="tabpanel">
+            <button
+              onClick={resetCardsAnimation}
+              style={{ border: "1px solid #677DE0" }}
+              title={"Reset Keyframes and Expressions"}
+            >
+              Reset
+            </button>
+
+            <button
+              onClick={restoreCardsAnimation}
+              style={{ border: "1px solid #677DE0" }}
+              title={"Restore Keyframes and Expressions"}
+            >
+              Restore
+            </button>
+
+            <button
+              onClick={handleClearExpressions}
+              style={{ border: "1px solid #E8920D" }}
+              title={"Clear Layer Expressions"}
+            >
+              Clear Expressions
+            </button>
+
+            <button
+              onClick={handleGroupCards}
+              style={{ border: "1px solid #E8920D" }}
+              title={"Create a centered null and parent all card layers"}
+            >
+              Group Cards
+            </button>
+
+            <button
+              onClick={handleAddProgressBar}
+              style={{ border: "1px solid #E8920D" }}
+              title={"Add Progress Bar"}
+            >
+              Progress Bar
+            </button>
+          </div>
+        )}
       </div>
+
     </section>
   );
 };

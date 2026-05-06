@@ -15,6 +15,12 @@ import {
   syncLayoutCacheFromRemote,
   syncSingleLayoutToCache
 } from "./layoutCache";
+import {
+  ensureAssetsReadyOrAlert,
+  getAssetRootPath,
+  normalizeAssetPath,
+  validateAssetEntryPoint
+} from "../../assetPaths";
 import "./LayoutsPanel.scss";
 
 // --- CONFIGURAÇÃO DE PERSISTÊNCIA ---
@@ -414,14 +420,16 @@ const showHostConfirm = async (message: any): Promise<boolean> => {
 
 type Props = {
   baseDirDefault?: string;
-  cardProject: string;
+  assetEntryPoint: string;
+  onAssetEntryPointChange: (assetEntryPoint: string) => void;
   onSettingsClose?: () => void;
   settingsOpen?: boolean;
 };
 
 export const LayoutsPanel: React.FC<Props> = ({
   baseDirDefault = "D:/Downloads/cardsLevels",
-  cardProject,
+  assetEntryPoint,
+  onAssetEntryPointChange,
   onSettingsClose,
   settingsOpen = false
 }) => {
@@ -446,6 +454,7 @@ export const LayoutsPanel: React.FC<Props> = ({
   const cacheRefreshInFlightRef = useRef(false);
   const remoteRootPath = useMemo(() => normalizePath(persistentSavePath || baseDir || ""), [baseDir, persistentSavePath]);
   const cacheRootPath = useMemo(() => getLayoutCacheRootPath(remoteRootPath, customCachePath), [customCachePath, remoteRootPath]);
+  const assetRootPath = useMemo(() => getAssetRootPath(assetEntryPoint), [assetEntryPoint]);
 
   // --- INIT ---
   useEffect(() => {
@@ -635,6 +644,9 @@ export const LayoutsPanel: React.FC<Props> = ({
       return;
     }
 
+    const readyAssets = await ensureAssetsReadyOrAlert(assetEntryPoint);
+    if (!readyAssets) return;
+
     const remoteRoot = remoteRootPath;
     const cachedLevelFolder = cacheRootPath ? `${cacheRootPath}/${selectedFolder}` : "";
     const remoteLevelFolder = remoteRoot ? `${remoteRoot}/${selectedFolder}` : "";
@@ -670,6 +682,7 @@ export const LayoutsPanel: React.FC<Props> = ({
       const isExactResolution = sourceResolution === targetResolution;
       const applyOptions = {
         autoFitLayout: !isExactResolution,
+        controlPresetPath: readyAssets.cardsControlPresetPath,
         layoutOrigin: {
           schema: LAYOUT_ORIGIN_SCHEMA,
           levelFolder: selectedFolder
@@ -677,14 +690,14 @@ export const LayoutsPanel: React.FC<Props> = ({
       };
 
       await reloadExtendScript();
-      const res = await evalTS("handleApplyCardsLayout", layoutData, cardProject, applyOptions);
+      const res = await evalTS("handleApplyCardsLayout", layoutData, readyAssets.cardProject, applyOptions);
       if (res !== "OK" && res !== undefined) await showHostAlert(`Error applying: ${res}`);
 
     } catch (e) {
       await showHostAlert("Error reading JSON file.");
       console.error(e);
     }
-  }, [cacheRootPath, cardProject, remoteRootPath, selectedFolder, selectedLayoutEntry]);
+  }, [assetEntryPoint, cacheRootPath, remoteRootPath, selectedFolder, selectedLayoutEntry]);
 
 
   // -------------------------
@@ -1367,10 +1380,56 @@ export const LayoutsPanel: React.FC<Props> = ({
     }
   };
 
+  const handleChangeAssetEntryPoint = async () => {
+    if (!window.cep) {
+      await showHostAlert("CEP API unavailable.");
+      return;
+    }
+
+    const result = window.cep.fs.showOpenDialogEx(
+      false,
+      true,
+      "Select Assets Entry Point",
+      assetEntryPoint || HOME_DIR,
+      []
+    );
+
+    if (result.err === 0 && result.data && result.data.length > 0) {
+      const newPath = normalizeAssetPath(result.data[0] || "");
+      if (!newPath) return;
+
+      saveConfig({ assetEntryPoint: newPath });
+      onAssetEntryPointChange(newPath);
+
+      const validation = validateAssetEntryPoint(newPath);
+      if (!validation.ok && validation.message) await showHostAlert(validation.message);
+    }
+  };
+
   const handleOpenSavePath = () => {
     if (!persistentSavePath) return;
     let cmd = "";
     const p = path.normalize(persistentSavePath);
+    if (process.platform === "win32") {
+      cmd = `explorer "${p}"`;
+    } else {
+      cmd = `open "${p}"`;
+    }
+    require("child_process").exec(cmd);
+  };
+
+  const handleOpenAssetsPath = () => {
+    if (!assetRootPath) return;
+
+    try {
+      if (!fs.existsSync(assetRootPath)) return;
+    } catch (e) {
+      console.error(e);
+      return;
+    }
+
+    let cmd = "";
+    const p = path.normalize(assetRootPath);
     if (process.platform === "win32") {
       cmd = `explorer "${p}"`;
     } else {
@@ -1423,6 +1482,13 @@ export const LayoutsPanel: React.FC<Props> = ({
     () => ({ "--layouts-cache-progress": `${cacheRefreshProgress}%` } as React.CSSProperties),
     [cacheRefreshProgress]
   );
+  const assetRootExists = useMemo(() => {
+    try {
+      return !!assetRootPath && fs.existsSync(assetRootPath);
+    } catch (_) {
+      return false;
+    }
+  }, [assetRootPath]);
 
   const moveSelectedLevel = useCallback((offset: number) => {
     if (!filtered.length || offset === 0) return;
@@ -1535,6 +1601,32 @@ export const LayoutsPanel: React.FC<Props> = ({
             <div className="layouts-settings">
               <div className="layouts-settings-section">
                 <div className="layouts-settings-section-title">Storage</div>
+                <div className="layouts-settings-row">
+                  <span
+                    className="layouts-settings-label"
+                    title={assetRootPath || "Path not set"}
+                  >
+                    Assets Path
+                  </span>
+
+                  <div className="layouts-settings-actions">
+                    <button
+                      className="btn-open-folder"
+                      onClick={handleOpenAssetsPath}
+                      disabled={!assetRootExists}
+                    >
+                      Open
+                    </button>
+
+                    <button
+                      className="btn-change"
+                      onClick={handleChangeAssetEntryPoint}
+                    >
+                      {assetEntryPoint ? "Change" : "Set"}
+                    </button>
+                  </div>
+                </div>
+
                 <div className="layouts-settings-row">
                   <span
                     className="layouts-settings-label"

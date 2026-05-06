@@ -52,7 +52,7 @@ const config: CEP_Config = {
     jsxBin: "off",
   },
   installModules: ["sql.js"],
-  copyAssets: ["assets"],
+  copyAssets: [],
   copyZipAssets: [],
 };
 export default config;

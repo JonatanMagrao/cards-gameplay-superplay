@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { evalTS } from "../../../lib/utils/bolt";
+import { ensureAssetsReadyOrAlert } from "../../assetPaths";
 import "./DuplicatePanel.scss";
 
 // --- CAMADA DE SERVIÇO (API) ---
@@ -16,10 +17,10 @@ const aeService = {
 };
 
 type DuplicatePanelProps = {
-  controlPresetPath?: string;
+  assetEntryPoint: string;
 };
 
-export const DuplicatePanel: React.FC<DuplicatePanelProps> = ({ controlPresetPath }) => {
+export const DuplicatePanel: React.FC<DuplicatePanelProps> = ({ assetEntryPoint }) => {
   const [numCopies, setNumCopies] = useState("5");
   const [cardDistance, setCardDistance] = useState(["0", "0"]);
   const [isPrecisionMode, setPrecisionMode] = useState(false);
@@ -97,7 +98,10 @@ export const DuplicatePanel: React.FC<DuplicatePanelProps> = ({ controlPresetPat
     const x = Number(cardDistance[0].replace(",", ".") || "0");
     const y = Number(cardDistance[1].replace(",", ".") || "0");
     if (copies > 0 && Number.isFinite(x) && Number.isFinite(y)) {
-      await aeService.duplicate(copies, [x, y], controlPresetPath);
+      const readyAssets = await ensureAssetsReadyOrAlert(assetEntryPoint);
+      if (!readyAssets) return;
+
+      await aeService.duplicate(copies, [x, y], readyAssets.cardsControlPresetPath);
     }
   };
 

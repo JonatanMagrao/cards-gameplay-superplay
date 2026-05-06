@@ -11,7 +11,6 @@ import {
   addCardToPrecomp,
   resetCardsAnimation,
   restoreCardsAnimation,
-  cardsControlPresetFileName,
   groupCardsToControl,
   clearCardsLevel
 } from "./actions";
@@ -24,27 +23,6 @@ import { addProgressBar } from "./progressBar-utils";
 const cardsFolderName = "Disney Solitaire Cards"
 const presetMatchName = "Pseudo/cards_gameplay_superplay"
 // const precompRenderer = "ADBE Calder"
-
-const getAssetPath = (sourcePath: string | undefined, relativePath: string): string => {
-  const normalizedSourcePath = String(sourcePath || "").replace(/\\/g, "/");
-  const assetsToken = "/assets/";
-  const assetsIndex = normalizedSourcePath.lastIndexOf(assetsToken);
-
-  if (assetsIndex >= 0) {
-    return normalizedSourcePath.substring(0, assetsIndex + assetsToken.length) + relativePath;
-  }
-
-  const slashIndex = normalizedSourcePath.lastIndexOf("/");
-  if (slashIndex >= 0) {
-    return normalizedSourcePath.substring(0, slashIndex + 1) + relativePath;
-  }
-
-  return relativePath;
-}
-
-const getCardsControlPresetPath = (sourcePath?: string): string => {
-  return getAssetPath(sourcePath, "presets/" + cardsControlPresetFileName);
-}
 
 const getFileNameFromPath = (filePath: string): string => {
   let startIndex = 0;
@@ -264,13 +242,14 @@ export const handleShowUpdateLayoutTargetDialog = (options?: {
 }
 
 export const handleApplyCardsLayout = (layoutData: CardsLayoutJson, filePath: string, options?: ApplyCardsLayoutOptions) => {
-
-  importFilesAndCompsForCards(filePath, cardsFolderName)
-
   app.beginUndoGroup("Apply Cards Layout");
   try {
     const applyOptions: ApplyCardsLayoutOptions = options || {};
-    applyOptions.controlPresetPath = getCardsControlPresetPath(filePath);
+    if (!applyOptions.controlPresetPath) {
+      alert("Cards control preset path is missing.");
+      return "ERROR";
+    }
+    importFilesAndCompsForCards(filePath, cardsFolderName)
     return applyCardsLayoutFromObject(layoutData, applyOptions);
   } catch (e) {
     //@ts-ignore
@@ -514,10 +493,16 @@ export const handleSetTableauLayer = () => {
   }
 }
 
-export const handleApplyJump = (presetPath: string, coinFilePath: string, sfxFolderPath?: string, trimCoveredCards?: boolean) => {
+export const handleApplyJump = (
+  presetPath: string,
+  coinFilePath: string,
+  sfxFolderPath?: string,
+  controlPresetPath?: string,
+  trimCoveredCards?: boolean
+) => {
   app.beginUndoGroup("Apply Jump")
   try {
-    applyJumpOnSelectedlayers(presetPath, coinFilePath, sfxFolderPath, getCardsControlPresetPath(presetPath), trimCoveredCards === true)
+    applyJumpOnSelectedlayers(presetPath, coinFilePath, sfxFolderPath, controlPresetPath, trimCoveredCards === true)
   } catch (e) {
     alertError(e, 93, "handleApplyJump", "aeft.ts")
   } finally {
@@ -525,10 +510,15 @@ export const handleApplyJump = (presetPath: string, coinFilePath: string, sfxFol
   }
 }
 
-export const handleFlipStockCards = (expressionLibPath?: string, sfxFolderPath?: string, trimCoveredCards?: boolean) => {
+export const handleFlipStockCards = (
+  expressionLibPath?: string,
+  sfxFolderPath?: string,
+  controlPresetPath?: string,
+  trimCoveredCards?: boolean
+) => {
   app.beginUndoGroup("Flip Stock Cards")
   try {
-    flipStockCards(undefined, expressionLibPath, sfxFolderPath, getCardsControlPresetPath(expressionLibPath), trimCoveredCards === true)
+    flipStockCards(undefined, expressionLibPath, sfxFolderPath, controlPresetPath, trimCoveredCards === true)
   } catch (e) {
     alertError(e, 114, "handleFlipStockCards", "aeft.ts")
   } finally {
@@ -620,13 +610,19 @@ export const handleChangeCard = (deckName: string, card: number, cardName: strin
   app.endUndoGroup()
 }
 
-export const handleAddCard = (deckName: string, card: number, cardName: string, filePath: string) => {
+export const handleAddCard = (
+  deckName: string,
+  card: number,
+  cardName: string,
+  filePath: string,
+  controlPresetPath?: string
+) => {
 
   importFilesAndCompsForCards(filePath, cardsFolderName)
 
   app.beginUndoGroup("Add Card to precomp")
   try {
-    addCardToPrecomp(deckName, card, cardName, getCardsControlPresetPath(filePath))
+    addCardToPrecomp(deckName, card, cardName, controlPresetPath)
   } catch (e) {
     alertError(e, 179, "handleAddCard", "aeft.ts")
   } finally {
@@ -645,6 +641,7 @@ export const handleRestoreCardsAnimation = (
   expressionLibPath?: string,
   coinFilePath?: string,
   sfxFolderPath?: string,
+  controlPresetPath?: string,
   trimCoveredCards?: boolean
 ) => {
   app.beginUndoGroup("Restore Cards Animation by Layout")
@@ -654,7 +651,7 @@ export const handleRestoreCardsAnimation = (
     expressionLibPath,
     coinFilePath,
     sfxFolderPath,
-    getCardsControlPresetPath(presetPath),
+    controlPresetPath,
     trimCoveredCards === true
   )
   app.endUndoGroup()

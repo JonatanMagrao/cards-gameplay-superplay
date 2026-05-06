@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { csi, subscribeBackgroundColor } from "../lib/utils/bolt";
+import { useEffect, useMemo, useState } from "react";
+import { subscribeBackgroundColor } from "../lib/utils/bolt";
 import "./main.scss";
 
 // Import components
@@ -9,6 +9,7 @@ import { LayoutsPanel } from "./components/LayoutsPanel/LayoutsPanel";
 import { DuplicatePanel } from "./components/DuplicatePanel/DuplicatePanel";
 
 import { os, path } from "../lib/cep/node";
+import { getAssetPaths, getSavedAssetEntryPoint } from "./assetPaths";
 
 export const getDefaultCardsLevelsDir = () => {
   return path.join(os.homedir(), "Documents", "cards-level-layouts");
@@ -25,11 +26,8 @@ export const App = () => {
 
   const [tab, setTab] = useState<TabKey>("cards");
   const [layoutsSettingsOpen, setLayoutsSettingsOpen] = useState(false);
-  
-  const projectRelPath = "disney_solitaire_cards.aepx"
-  const assets = `${csi.getSystemPath("extension")}/assets`;
-  const cardProject = `${assets}/${projectRelPath}`;
-  const cardsControlPresetPath = `${assets}/presets/cards-gameplay-control.ffx`;
+  const [assetEntryPoint, setAssetEntryPoint] = useState(() => getSavedAssetEntryPoint());
+  const assetPaths = useMemo(() => getAssetPaths(assetEntryPoint), [assetEntryPoint]);
 
   useEffect(() => {
     if (window.cep) subscribeBackgroundColor(setBgColor);
@@ -84,19 +82,21 @@ export const App = () => {
                 setDeck={setDeck}
                 cardNumber={cardNumber}
                 setCardNumber={setCardNumber}
-                cardProject={cardProject}
+                assetEntryPoint={assetEntryPoint}
+                assetPaths={assetPaths}
                 coinValue={coinValue}       // <--- Passando valor
                 setCoinValue={setCoinValue} // <--- Passando função de alterar valor
               />
 
-              <ActionsPanel coinValue={coinValue} /> {/* <--- Passando o valor para o botão Jump usar */}
+              <ActionsPanel assetEntryPoint={assetEntryPoint} coinValue={coinValue} /> {/* <--- Passando o valor para o botão Jump usar */}
 
-              <DuplicatePanel controlPresetPath={cardsControlPresetPath} />
+              <DuplicatePanel assetEntryPoint={assetEntryPoint} />
             </>
           ) : (
             <LayoutsPanel
               baseDirDefault={getDefaultCardsLevelsDir()}
-              cardProject={cardProject}
+              assetEntryPoint={assetEntryPoint}
+              onAssetEntryPointChange={setAssetEntryPoint}
               onSettingsClose={() => setLayoutsSettingsOpen(false)}
               settingsOpen={layoutsSettingsOpen}
             />

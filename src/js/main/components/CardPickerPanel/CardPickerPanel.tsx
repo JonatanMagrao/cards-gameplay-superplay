@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { csi, evalTS } from "../../../lib/utils/bolt";
+import { evalTS } from "../../../lib/utils/bolt";
 import { fs } from "../../../lib/cep/node";
+import { AssetPathBundle, ensureAssetsReadyOrAlert, joinAssetPath } from "../../assetPaths";
 import "./CardPickerPanel.scss";
 
 type Props = {
@@ -8,13 +9,14 @@ type Props = {
   setDeck: (v: string) => void;
   cardNumber: number;
   setCardNumber: (v: number) => void;
-  cardProject: string;
+  assetEntryPoint: string;
+  assetPaths: AssetPathBundle;
   coinValue: string;
   setCoinValue: (v: string) => void;
 };
 
 export const CardPickerPanel: React.FC<Props> = ({ 
-  deck, setDeck, cardNumber, setCardNumber, cardProject, coinValue, setCoinValue 
+  deck, setDeck, cardNumber, setCardNumber, assetEntryPoint, assetPaths, coinValue, setCoinValue 
 }) => {
   const [cardSrc, setCardSrc] = useState<string | null>(null);
   const [coinIconSrc, setCoinIconSrc] = useState<string | null>(null); // NOVO: Estado para o ícone da moeda
@@ -56,19 +58,36 @@ export const CardPickerPanel: React.FC<Props> = ({
   const isSpecialCard = safeCard.fileImg === "wild_card.png" || safeCard.fileImg === "plus_card.png";
   const cardTitle = isSpecialCard ? safeCard.name : `${safeCard.name} - ${suitLabel}`;
 
-  const assets = `${csi.getSystemPath("extension")}/assets`;
-  const cardsDeckPath = `${assets}/cards-deck`;
-  const coinIconPath = `${assets}/ui-assets/disney_coin.png`; // NOVO: Caminho do ícone
+  const cardsDeckPath = assetPaths.cardsDeckPath;
+  const coinIconPath = assetPaths.coinIconPath; // NOVO: Caminho do ícone
 
-  const cardImage = isSpecialCard
-    ? `${cardsDeckPath}/${safeCard.fileImg}`
-    : `${cardsDeckPath}/${deck}/${safeCard.fileImg}`;
+  const cardImage = cardsDeckPath
+    ? (
+      isSpecialCard
+        ? joinAssetPath(cardsDeckPath, safeCard.fileImg)
+        : joinAssetPath(cardsDeckPath, deck, safeCard.fileImg)
+    )
+    : "";
 
-  const changeCard = async () =>
+  const changeCard = async () => {
+    const readyAssets = await ensureAssetsReadyOrAlert(assetEntryPoint);
+    if (!readyAssets) return;
+
     await evalTS("handleChangeCard", deck, cardNumber, cardTitle);
+  };
 
   const handleAddCard = async () => {
-    await evalTS("handleAddCard", deck, cardNumber, cardTitle, cardProject);
+    const readyAssets = await ensureAssetsReadyOrAlert(assetEntryPoint);
+    if (!readyAssets) return;
+
+    await evalTS(
+      "handleAddCard",
+      deck,
+      cardNumber,
+      cardTitle,
+      readyAssets.cardProject,
+      readyAssets.cardsControlPresetPath
+    );
   };
 
   const handlePreviewClick = (e: React.MouseEvent<HTMLDivElement>) => {
