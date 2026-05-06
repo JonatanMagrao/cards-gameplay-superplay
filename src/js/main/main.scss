@@ -2,6 +2,67 @@
 
 /* ===== Layouts Panel (Apply / Save) ===== */
 
+.extension-update-slot {
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+}
+
+.extension-update-slot:not(.has-update) {
+  display: none;
+}
+
+.extension-update-slot.has-update {
+  min-height: 28px;
+  margin-bottom: 0.5rem;
+}
+
+.extension-update-banner {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #48685e;
+  border-radius: 6px;
+  background: #1b2a27;
+  color: #dff8ef;
+  -webkit-text-fill-color: #dff8ef;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.2rem 0.25rem 0.2rem 0.55rem;
+  box-sizing: border-box;
+}
+
+.extension-update-banner span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.extension-update-banner button {
+  min-width: 54px;
+  height: 20px;
+  min-height: 20px;
+  padding: 0 0.45rem;
+  border: 1px solid #82d8bd;
+  border-radius: 4px;
+  background: #243934;
+  color: #dff8ef;
+  -webkit-text-fill-color: #dff8ef;
+  font-size: 0.66rem;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.extension-update-banner button:hover {
+  background: #2d4941;
+}
+
 .layouts-section {
   gap: 0.6rem; // combina com teu panel-section
 }

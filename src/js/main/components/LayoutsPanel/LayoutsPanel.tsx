@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { fs, path, os } from "../../../lib/cep/node";
+import { child_process, fs, path, os } from "../../../lib/cep/node";
 import { csi, evalFile, evalTS } from "../../../lib/utils/bolt";
 import ChevronIcon from "../../../assets/icons/chevron.svg";
 import CachedIcon from "../../../assets/icons/cached.svg";
@@ -18,6 +18,7 @@ import {
 import {
   ensureAssetsReadyOrAlert,
   getAssetRootPath,
+  getDefaultTutorialsPath,
   normalizeAssetPath,
   validateAssetEntryPoint
 } from "../../assetPaths";
@@ -27,6 +28,7 @@ import "./LayoutsPanel.scss";
 const HOME_DIR = os.homedir();
 const CONFIG_FILE_NAME = ".cards-layout-config.json";
 const CONFIG_PATH = path.join(HOME_DIR, CONFIG_FILE_NAME);
+const FLYOUT_REFRESH_EVENT = "cards-gameplay.refreshFlyoutMenu";
 const THUMBNAIL_MAX_SIDE = 512;
 const THUMBNAIL_JPEG_QUALITY = 0.82;
 const LAYOUT_ORIGIN_SCHEMA = "cards-gameplay.layout-origin.v1";
@@ -49,6 +51,14 @@ const saveConfig = (data: any) => {
     const current = loadConfig();
     fs.writeFileSync(CONFIG_PATH, JSON.stringify({ ...current, ...data }, null, 2));
   } catch (e) { console.error(e); }
+};
+
+const refreshFlyoutMenu = () => {
+  try {
+    window.dispatchEvent(new Event(FLYOUT_REFRESH_EVENT));
+  } catch (e) {
+    console.error(e);
+  }
 };
 
 const safeTrim = (s: any) => String(s).replace(/^\s+|\s+$/g, "");
@@ -395,6 +405,7 @@ export const LayoutsPanel: React.FC<Props> = ({
 }) => {
   const [baseDir, setBaseDir] = useState(baseDirDefault);
   const [persistentSavePath, setPersistentSavePath] = useState<string | null>(null);
+  const [persistentTutorialsPath, setPersistentTutorialsPath] = useState<string | null>(null);
   const [customCachePath, setCustomCachePath] = useState("");
   const [trimCoveredCards, setTrimCoveredCards] = useState(false);
   const [levels, setLevels] = useState<string[]>([]);
@@ -414,6 +425,11 @@ export const LayoutsPanel: React.FC<Props> = ({
   const remoteRootPath = useMemo(() => normalizePath(persistentSavePath || baseDir || ""), [baseDir, persistentSavePath]);
   const cacheRootPath = useMemo(() => getLayoutCacheRootPath(remoteRootPath, customCachePath), [customCachePath, remoteRootPath]);
   const assetRootPath = useMemo(() => getAssetRootPath(assetEntryPoint), [assetEntryPoint]);
+  const defaultTutorialsPath = useMemo(() => getDefaultTutorialsPath(assetEntryPoint), [assetEntryPoint]);
+  const tutorialsRootPath = useMemo(
+    () => normalizePath(persistentTutorialsPath || defaultTutorialsPath || ""),
+    [defaultTutorialsPath, persistentTutorialsPath]
+  );
 
   // --- INIT ---
   useEffect(() => {
@@ -430,6 +446,7 @@ export const LayoutsPanel: React.FC<Props> = ({
     }
 
     if (config.cachePath) setCustomCachePath(normalizePath(config.cachePath));
+    setPersistentTutorialsPath(config.tutorialsPath ? normalizePath(config.tutorialsPath) : null);
     if (typeof config.trimCoveredCards === "boolean") setTrimCoveredCards(config.trimCoveredCards);
   }, [baseDirDefault]);
 
@@ -1020,6 +1037,34 @@ export const LayoutsPanel: React.FC<Props> = ({
   // UI HANDLERS
   // -------------------------
 
+  const openFolderPath = (folderPath: string, createIfMissing: boolean = false) => {
+    const folder = normalizePath(folderPath);
+    if (!folder) return;
+
+    try {
+      if (!fs.existsSync(folder)) {
+        if (!createIfMissing) return;
+        fs.mkdirSync(folder, { recursive: true });
+      }
+    } catch (e) {
+      console.error(e);
+      return;
+    }
+
+    try {
+      const normalizedFolder = path.normalize(folder);
+      if (process.platform === "win32") {
+        child_process.execFile("explorer", [normalizedFolder]);
+      } else if (process.platform === "darwin") {
+        child_process.execFile("open", [normalizedFolder]);
+      } else {
+        child_process.execFile("xdg-open", [normalizedFolder]);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const handleChangePath = async () => {
     if (!window.cep) {
       await showHostAlert("CEP API unavailable.");
@@ -1039,6 +1084,30 @@ export const LayoutsPanel: React.FC<Props> = ({
       saveConfig({ savePath: newPath });
       setPersistentSavePath(newPath);
       setBaseDir(newPath);
+    }
+  };
+
+  const handleChangeTutorialsPath = async () => {
+    if (!window.cep) {
+      await showHostAlert("CEP API unavailable.");
+      return;
+    }
+
+    const result = window.cep.fs.showOpenDialogEx(
+      false,
+      true,
+      "Select Tutorials Folder",
+      tutorialsRootPath || assetEntryPoint || HOME_DIR,
+      []
+    );
+
+    if (result.err === 0 && result.data && result.data.length > 0) {
+      const newPath = normalizePath(result.data[0] || "");
+      if (!newPath) return;
+
+      saveConfig({ tutorialsPath: newPath });
+      setPersistentTutorialsPath(newPath);
+      refreshFlyoutMenu();
     }
   };
 
@@ -1119,6 +1188,7 @@ export const LayoutsPanel: React.FC<Props> = ({
 
       saveConfig({ assetEntryPoint: newPath });
       onAssetEntryPointChange(newPath);
+      refreshFlyoutMenu();
 
       const validation = validateAssetEntryPoint(newPath);
       if (!validation.ok && validation.message) await showHostAlert(validation.message);
@@ -1126,63 +1196,19 @@ export const LayoutsPanel: React.FC<Props> = ({
   };
 
   const handleOpenSavePath = () => {
-    if (!remoteRootPath) return;
-
-    try {
-      if (!fs.existsSync(remoteRootPath)) fs.mkdirSync(remoteRootPath, { recursive: true });
-    } catch (e) {
-      console.error(e);
-      return;
-    }
-
-    let cmd = "";
-    const p = path.normalize(remoteRootPath);
-    if (process.platform === "win32") {
-      cmd = `explorer "${p}"`;
-    } else {
-      cmd = `open "${p}"`;
-    }
-    require("child_process").exec(cmd);
+    openFolderPath(remoteRootPath, true);
   };
 
   const handleOpenAssetsPath = () => {
-    if (!assetRootPath) return;
+    openFolderPath(assetRootPath, false);
+  };
 
-    try {
-      if (!fs.existsSync(assetRootPath)) return;
-    } catch (e) {
-      console.error(e);
-      return;
-    }
-
-    let cmd = "";
-    const p = path.normalize(assetRootPath);
-    if (process.platform === "win32") {
-      cmd = `explorer "${p}"`;
-    } else {
-      cmd = `open "${p}"`;
-    }
-    require("child_process").exec(cmd);
+  const handleOpenTutorialsPath = () => {
+    openFolderPath(tutorialsRootPath, true);
   };
 
   const handleOpenCachePath = () => {
-    if (!cacheRootPath) return;
-
-    try {
-      if (!fs.existsSync(cacheRootPath)) fs.mkdirSync(cacheRootPath, { recursive: true });
-    } catch (e) {
-      console.error(e);
-      return;
-    }
-
-    let cmd = "";
-    const p = path.normalize(cacheRootPath);
-    if (process.platform === "win32") {
-      cmd = `explorer "${p}"`;
-    } else {
-      cmd = `open "${p}"`;
-    }
-    require("child_process").exec(cmd);
+    openFolderPath(cacheRootPath, true);
   };
 
   const handleOpenLayoutPreview = useCallback(async () => {
@@ -1376,6 +1402,32 @@ export const LayoutsPanel: React.FC<Props> = ({
                       onClick={handleChangePath}
                     >
                       {remoteRootPath ? "Change" : "Set"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="layouts-settings-row">
+                  <span
+                    className="layouts-settings-label"
+                    title={tutorialsRootPath || "Path not set"}
+                  >
+                    Tutorials Path
+                  </span>
+
+                  <div className="layouts-settings-actions">
+                    <button
+                      className="btn-open-folder"
+                      onClick={handleOpenTutorialsPath}
+                      disabled={!tutorialsRootPath || !safeTrim(tutorialsRootPath)}
+                    >
+                      Open
+                    </button>
+
+                    <button
+                      className="btn-change"
+                      onClick={handleChangeTutorialsPath}
+                    >
+                      {tutorialsRootPath ? "Change" : "Set"}
                     </button>
                   </div>
                 </div>

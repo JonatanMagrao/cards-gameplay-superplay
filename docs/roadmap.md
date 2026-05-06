@@ -1,8 +1,5 @@
 | feature                                                                                                                           | status |
 |-----------------------------------------------------------------------------------------------------------------------------------|--------|
-| revise update button options and interface                                                                                        | ⬜      |
-| add tags features (like beach, cassino, etc) on the layouts saving                                                                | ⬜      |
-| review the resources (aexp, assets), maybe not using it packaged with the extension, but use it from specific google drive folder | ⬜      |
 | continue from fase 3 of technical review                                                                                          | ⬜      |
 | create documentation                                                                                                              | ⬜      |
 | ------------------------------------------------------------------------------                                                    | ⬜      |
@@ -13,6 +10,9 @@
 | improve and update the card-animation-tutorials                                                                                   | ⬜      |
 | implement the cards gameplay control as an personalized pseudo effects                                                            | ⬜      |
 | ------------------------------------------------------------------------------                                                    | ⬜      |
+| revise update button options and interface                                                                                        | ✅      |
+| add tags features (like beach, cassino, etc) on the layouts saving                                                                | ✅      |
+| review the resources (aexp, assets), maybe not using it packaged with the extension, but use it from specific google drive folder | ✅      |
 | add a setup config (checkbox) to enable or disable cutting layer after it have been placed on the target layer position           | ✅      |
 | group of action buttons into accordion                                                                                            | ✅      |
 | Reduce informations on layout precomp marker                                                                                      | ✅      |

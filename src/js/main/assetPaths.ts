@@ -4,9 +4,12 @@ import { evalTS } from "../lib/utils/bolt";
 export const CONFIG_FILE_NAME = ".cards-layout-config.json";
 export const DEFAULT_ASSETS_RELATIVE_PATH = "Creative_Marketing_Assets/GENERAL-ASSETS/Plugins/Cards Gameplay/assets";
 export const DEFAULT_LEVELS_RELATIVE_PATH = DEFAULT_ASSETS_RELATIVE_PATH.replace(/\/assets$/, "/levels");
+export const DEFAULT_TUTORIALS_RELATIVE_PATH = DEFAULT_ASSETS_RELATIVE_PATH.replace(/\/assets$/, "/video-tutorials");
+export const DEFAULT_EXTENSION_RELEASES_RELATIVE_PATH = DEFAULT_ASSETS_RELATIVE_PATH.replace(/\/assets$/, "/extension-releases");
 
 export type CardsGameplayConfig = {
   assetEntryPoint?: string;
+  tutorialsPath?: string;
   [key: string]: any;
 };
 
@@ -176,6 +179,20 @@ export const getDefaultLevelsPath = (assetEntryPoint: string): string => {
   const normalizedEntryPoint = normalizeAssetPath(assetEntryPoint);
   return normalizedEntryPoint
     ? joinAssetPath(normalizedEntryPoint, DEFAULT_LEVELS_RELATIVE_PATH)
+    : "";
+};
+
+export const getDefaultTutorialsPath = (assetEntryPoint: string): string => {
+  const normalizedEntryPoint = normalizeAssetPath(assetEntryPoint);
+  return normalizedEntryPoint
+    ? joinAssetPath(normalizedEntryPoint, DEFAULT_TUTORIALS_RELATIVE_PATH)
+    : "";
+};
+
+export const getDefaultExtensionReleasesPath = (assetEntryPoint: string): string => {
+  const normalizedEntryPoint = normalizeAssetPath(assetEntryPoint);
+  return normalizedEntryPoint
+    ? joinAssetPath(normalizedEntryPoint, DEFAULT_EXTENSION_RELEASES_RELATIVE_PATH)
     : "";
 };
 

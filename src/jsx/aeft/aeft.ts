@@ -64,6 +64,47 @@ export const handleShowConfirm = (message: string) => {
   return confirm(String(message || ""));
 }
 
+export const handleShowTextDialog = (title: string, text: string) => {
+  try {
+    const dialog = new Window("dialog", String(title || "Details"), undefined, { resizeable: true });
+    dialog.orientation = "column";
+    dialog.alignChildren = ["fill", "fill"];
+    dialog.margins = 12;
+    dialog.spacing = 10;
+
+    const textBox = dialog.add("edittext", undefined, String(text || ""), {
+      multiline: true,
+      scrolling: true,
+      readonly: true
+    });
+    textBox.alignment = ["fill", "fill"];
+    textBox.preferredSize = [620, 420];
+    textBox.minimumSize = [360, 220];
+
+    const buttons = dialog.add("group");
+    buttons.orientation = "row";
+    buttons.alignment = ["right", "bottom"];
+    buttons.add("button", undefined, "Close", { name: "ok" });
+
+    const resizeDialog = function () {
+      try {
+        dialog.layout.resize();
+      } catch (_) { }
+    };
+
+    dialog.onResize = resizeDialog;
+    dialog.onResizing = resizeDialog;
+    dialog.center();
+    dialog.show();
+
+    return "OK";
+  } catch (e) {
+    //@ts-ignore
+    alert(String(text || title || "") || e.toString());
+    return "ERROR";
+  }
+}
+
 export const handleApplyCardsLayout = (layoutData: CardsLayoutJson, filePath: string, options?: ApplyCardsLayoutOptions) => {
   app.beginUndoGroup("Apply Cards Layout");
   try {
