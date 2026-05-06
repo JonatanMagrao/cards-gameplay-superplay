@@ -1,7 +1,6 @@
 | feature                                                                                                                           | status |
 |-----------------------------------------------------------------------------------------------------------------------------------|--------|
-| continue from fase 3 of technical review                                                                                          | ⬜      |
-| phase 3: add precomputed action order metadata to action markers                                                                  | ✅      |
+| revalidar o fluxo (uso, aplicação, animação) e tutorial da carta plus                                                             | ⬜      |
 | create documentation                                                                                                              | ⬜      |
 | ------------------------------------------------------------------------------                                                    | ⬜      |
 | implement the personalized pseudo effects                                                                                         | ⬜      |
@@ -11,6 +10,8 @@
 | improve and update the card-animation-tutorials                                                                                   | ⬜      |
 | implement the cards gameplay control as an personalized pseudo effects                                                            | ⬜      |
 | ------------------------------------------------------------------------------                                                    | ⬜      |
+| continue from fase 3 of technical review                                                                                          | ✅      |
+| phase 3: add precomputed action order metadata to action markers                                                                  | ✅      |
 | revise update button options and interface                                                                                        | ✅      |
 | add tags features (like beach, cassino, etc) on the layouts saving                                                                | ✅      |
 | review the resources (aexp, assets), maybe not using it packaged with the extension, but use it from specific google drive folder | ✅      |

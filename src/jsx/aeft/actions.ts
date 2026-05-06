@@ -50,6 +50,7 @@ export const cardsControlPresetFileName = "cards-gameplay-control.ffx"
 const fxPrecompName = "FX Precomp"
 const legacySfxPrecompName = "SFX Precomp"
 const cardsAssetsFolderName = "Disney Solitaire Cards"
+const plusCardSourceName = "Plus_Card"
 const expressionLibName = "superplay-expression-lib.jsx"
 const cardsControlsLayerName = "Cards Controls"
 const cardsControlFxDisplayName = "Cards Gameplay Control"
@@ -1625,9 +1626,16 @@ export const changeCard = (deckName: string, card: number, cardName: string) => 
   const thisComp = requireActiveComp("Change Card");
   if (!thisComp) return;
 
-  const cardsSet = findAvItemByName(deckName, false)
+  const isPlusCard = card === 15;
+  if (!isPlusCard && (card < 1 || card > 14)) {
+    alert(`Card option "${card}" is invalid. Please choose a card from 1 to 14, or Plus.`);
+    return
+  }
+
+  const sourceName = isPlusCard ? plusCardSourceName : deckName;
+  const cardsSet = findAvItemByName(sourceName, false)
   if (!cardsSet) {
-    alert(`Project item "${deckName}" was not found.`)
+    alert(`Project item "${sourceName}" was not found.`)
     return
   }
 
@@ -1642,8 +1650,12 @@ export const changeCard = (deckName: string, card: number, cardName: string) => 
       const camada = camadas[k] as any
 
       camada.replaceSource(cardsSet, false)
-      const cardOption = getLayerProp(camada, cardOptionEPPath)
-      cardOption.setValue(card)
+      if (isPlusCard) {
+        camada.label = keyLabel.purple
+      } else {
+        const cardOption = getLayerProp(camada, cardOptionEPPath)
+        cardOption.setValue(card)
+      }
 
       const existingZoneTag = getLayerCardTag(camada.name);
 
@@ -1666,14 +1678,15 @@ export const addCardToPrecomp = (deckName: string, card: number, cardName: strin
     if (!thisComp) return
 
     if (card === 15) {
-      const plusCardSource = findAvItemByName("Plus_Card", false)
+      const plusCardSource = findAvItemByName(plusCardSourceName, false)
       if (!plusCardSource) {
-        alert('Project item "Plus_Card" was not found.')
+        alert(`Project item "${plusCardSourceName}" was not found.`)
         return
       }
 
-      thisComp.layers.add(plusCardSource)
-      thisComp.layer("Plus_Card").label = keyLabel.purple
+      const plusLayer = thisComp.layers.add(plusCardSource)
+      plusLayer.name = cardName
+      plusLayer.label = keyLabel.purple
       ensureCardsControlsLayer(thisComp, controlPresetPath)
 
       return

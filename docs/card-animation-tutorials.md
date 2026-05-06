@@ -1,100 +1,173 @@
-- card manager
-  - cards changes
-  - card face
-  - turning card
-  - click to add (also imports)
-  - click to change
+# Cards Gameplay Tutorial Videos
 
-  Here is the Card Manager, your hub for creating and editing card faces.
-  Start by using the dropdowns to select the Suit and the Rank. The preview updates in real-time, allowing you to dial in the exact card you need.
-  When you are ready, just hold Ctrl and Click the image to drop the card into your composition. Don't worry about assets; the tool handles the importing automatically on the first use. just ensure you have an active composition open to receive it.
-  You can also edit cards on the fly. Simply select the card layer in your timeline, choose a new Suit or Rank, and Click the preview image to apply the changes.
-  Notice that whenever you create or update a card, the tool automatically renames the layer with the specific Suit and Rank, keeping your timeline organized and easy to identify.
-  And finally, whenever you need to flip the card to reveal the back, just select the layers and hit the Turn button. You can select as many cards as you need at once, and they will all flip together.
+Goal: keep the tutorial series short, practical, and easy to update. Target length: up to 2 minutes per video.
 
-- copies
-  - número de cópias
-  - order
-  - duplicate
-  - x and y inputs and sliders
+## 01 - Getting Started: Settings, Assets, and Updates
 
-  Let’s look at the Duplicate Cards section.
-  Start by entering the number of copies you need in the input field. With a single card selected, click Duplicate to instantly create your copies.
-  You can control the spacing using the X and Y inputs or sliders. You can set this up before duplicating, or adjust it after the fact.
-  Here is a cool tip: if you select all the copies, you can still tweak their spacing. For the inputs, just type the value and click away to apply. For the sliders, simply drag and release to see the update.
-  Finally, we have the Order button. By default, the tool uses the first layer in the timeline as the anchor for these changes. If you want to invert the hierarchy and make the cards react to the last layer instead, just click Order before making your adjustments.
+Main sequence:
 
-- actions
+- Open the Cards Gameplay panel.
+- Open Settings.
+- Show Assets Path, Levels Path, Tutorials Path, and Cache Path.
+- Hover labels to reveal full paths.
+- Use Open and Change buttons.
+- Explain which shared-drive folders should be available offline.
+- Show where update banners appear.
+- Show release notes/updates from the flyout menu when available.
+- Mention what users should not rename inside the assets folder.
 
-  First, the Flip button. This creates a standard rotation animation and can be applied to any card type: Target, Stock, or Tableau. Currently, there is no lock on duplication, so you can apply it freely, but I'm reviewing this for future updates to prevent accidental double-clicks.
+Voiceover script:
 
-  Next is the Jump button. This triggers a jump animation specifically on the Target layer, so you must have a Target layer present in your precomp; otherwise, you'll get an error message. The button is green to suggest using it with Tableau cards, but technically it works on any layer. Note that the Jump effect is not iterable, meaning you can only have one Jump event per layer.
+Before using Cards Gameplay, make sure the extension knows where your shared files live.
 
-  Then we have Flip Stock, designed for those yellow Stock cards. Like Jump, this also requires a Target layer to function. Here is the trick: always select the next card in the sequence you want to flip, and the ones underneath will follow automatically. There is no duplicate lock here since some specific workflows might require re-triggering, so just pay attention when using it.
+Open Settings and check the main paths. Assets Path points to the shared assets used by the tool: presets, cards, VFX, SFX, expressions, and the After Effects project assets. Levels Path is where saved layouts live. Tutorials Path is where local tutorial videos are loaded from. Cache Path is your local copy of the layout library, used to make browsing faster.
 
-  The Set Target, Set Stock, and Set Tableau buttons are for setup. They instantly configure layer colors, enable 3D automatically, and apply the necessary naming tags—like brackets around [Target]. One important rule: you can only have one Target layer per composition. If you try to create a second one, the tool will alert you that one already exists.
+You can hover each label to see the full path, use Open to inspect the folder, or Change to point the extension somewhere else.
 
-  Finally, let's master the Reset and Restore workflow.
+For daily work, the most important folders to keep available offline in Google Drive are assets, levels, and video-tutorials. The extension-releases folder is optional for offline work; it is only used when checking for available updates.
 
-  Reset cleans the house. It wipes all expressions, keyframes, and effects generated by the tool from your Target, Stock, and Tableau layers, but it intentionally keeps the markers for reference. Crucially, it ignores any manual effects or keyframes you've added yourself. Just remember that those manual additions won't be saved if you export a Layout.
+If a newer version is available, the panel will show an update banner at the top. You can also use the flyout menu to view version notes when release text files are available.
 
-  Restore brings everything back. It scans your timeline for Flip, Flip Stock, and Jump markers and re-applies the tool's effects and keyframes to those specific layers at those specific times.
+One important rule: do not rename required files or precomps inside the assets folder. The tool expects specific names so it can import and rebuild things correctly.
 
-  I built these effects using standard keyframes to give you maximum freedom. You are free to adjust curves and timing manually. However, be aware that using Restore will revert them to the default standard. Pro Tip: If you have customized an animation and want to protect it from being overwritten by Restore, try changing the keyframe label color or moving them slightly. To stop the tool from re-applying an effect entirely, simply delete the marker or move it to a different time on the timeline.
+## 02 - Card Manager: Add, Change, and Turn Cards
 
+Main sequence:
 
-- layouts
- - abas
- - apply
- - search (input e dropdown menu)
- - save
- - settings button
- - deixar o mouse em cima de folder path, ele vai revelar o path
- - botão open
- - botão change
- - o que salva, o que não salva
- - botão restore na aba cards
- - cuidado na hora de salvar... precisa limpar primeiro
+- Choose a suit.
+- Choose a rank.
+- Show the card preview updating.
+- Ctrl+click the preview to add a card.
+- Select an existing card layer.
+- Click the preview to change the card face.
+- Use Turn on selected cards.
+- Show automatic layer naming and labels.
 
-Now, let's talk about the Layouts tab. On your very first use, a dialog will pop up asking you to select a folder. This will be the permanent home for your library, where all your layout JSONs will be saved.
+Voiceover script:
 
-Pay close attention here: Since this folder is often shared with the whole team, any changes or deletions you make will affect everyone's workflow. Please be mindful when managing these files to avoid breaking the pipeline for others. I actually recommend never opening or manually editing the files directly inside that folder to keep the data safe.
+The Card Manager is where you create and edit card faces.
 
-Before you save a new layout, there are two crucial steps. First, go to the Cards Panel and click Reset. This clears any active effects, keyframes, or expressions generated by the tool, ensuring a clean save. Second, if you have manual animation, move your playhead to the exact moment where the cards are in their desired start position. This ensures the import matches your design perfectly later.
+Start by choosing a suit and a rank. The preview updates immediately, so you can confirm the exact card before adding it to the comp.
 
-Z depth is supported: if a card layer has a Z Position value, it will respond normally when the layout is saved and applied later. Still, the best practice is to save the clean layout only, before running animation actions, adding keyframes, or applying gameplay effects.
+To add a new card, hold Control and click the card preview. The extension imports the required card assets if needed and adds the card to the active composition. Just make sure a composition is open before doing this.
 
-To save, simply give your layout a name. I strongly recommend using the Project Number, the Iteration number, and the Project Name. This convention makes searching much easier later on. Then, click the Save button. A confirmation message will pop up at the top, verifying exactly what was saved and the file name used.
+You can also update existing cards. Select one or more card layers, choose a new suit or rank, and click the preview without holding Control. The selected layers will update to the new card face.
 
-The tool is smart: it saves a separate JSON file for each resolution. If you are updating an existing version, a prompt will ask if you want to overwrite it. If you want to create a new resolution for an existing layout, like a vertical version of a horizontal setup, simply type the exact same name and hit save; the script handles the rest. Just keep in mind: if you try to apply a layout to a composition resolution that hasn't been saved yet, you will receive a message letting you know it doesn't exist.
+Whenever a card is created or changed, the tool keeps the layer name organized with the suit and rank. This makes the timeline easier to read later, especially when a layout has many cards.
 
-So, what exactly gets saved? It captures everything: layer colors, layer names, Rotation, Position, Scale, Suits, Ranks, stacking order, and even your Jump, Flip, and Flip Stock markers.
+If you need to show the back of a card, select the layers and click Turn. You can turn one card or many cards at the same time.
 
-Finally, to restore a layout, just search for it by name in the input field or pick it from the dropdown menu to apply it instantly. If a colleague has just saved a new layout and you need to use it right away, you might need to refresh the library to see it. Simply Right-Click anywhere on the panel and choose Reload or Force Reload to update the list.
+## 03 - Building Layouts: Duplicate, Arrange, and Setup Tags
 
-- project
- - pastas
- - arquivos
- - precomps
+Main sequence:
 
-  Now, a quick word about the Project Structure.
-  The system relies on a specific set of files and pre-comps. Please, do not rename the actual files or pre-compositions, as the tool is hardcoded to look for these exact names to function correctly. However, you are free to rename or reorganize the folders themselves. As long as the file names inside remain unchanged, the tool will work perfectly.
-  These compositions were built using Essential Properties. This architecture allows for powerful automation, letting you create multiple variations while maintaining a clean master structure. Key data like Suits, Ranks, and standard animations, such as the Flip, are embedded inside these comps. To avoid bugs, I highly recommend keeping their internal structure untouched. 
-  Update: In the latest version, I removed the strict folder hierarchy requirement. This ensures you won't have any conflicts if you use other organization tools, like the one created by Niv.
+- Add or select a starter card.
+- Set number of copies.
+- Use Duplicate.
+- Adjust X and Y spacing.
+- Use sliders and inputs.
+- Toggle Order/reverse behavior.
+- Set Target.
+- Set Stock.
+- Set Tableau.
+- Show colors and name tags in the timeline.
 
-- vfx
-  - footage replacement
-  - back card
-  - special card
-  - back vfx_01
-  - front_vfx_01
+Voiceover script:
 
-  Let's talk about the Back VFX and Front VFX pre-comps. Think of these as your creative sandboxes. They are set up with the exact same resolution and grid as the standard cards, allowing you to update the card faces or add effects without touching the original master files.
-  To start, simply open one of these pre-comps. You will see some guide layers and text. Feel free to delete that text. You have total freedom here: create animations, add visual effects, or import a completely new design while keeping the original position references.
-  Once your design is ready, go back to your timeline and open the Essential Properties of the desired card layer. All you have to do is drag your modified VFX pre-comp into the specific slot you want to update.
-  If you drag it into the 'Back Card' slot, you replace the back of the card, so your new design appears whenever the card flips. On the other hand, if you drag it into the 'Special Card' slot, it replaces the front.
-  Just one crucial detail regarding the front replacement: to actually see this change, you must select the 'Wild Card' option in the Card Manager. Keep in mind that the preview inside the panel won't update to show these custom Wild Cards, but don't worry: the layer in your composition will render perfectly.
+After creating a card, the next step is building the layout.
 
-- Cautions
-  - falar do cuidado em usar rotation e não orientation
-  - falar de como resolver problemas, como se a carta ficar atrás de outra
+Select a card, choose how many copies you need, and click Duplicate. The extension creates the copies and keeps them arranged according to the current X and Y spacing values.
+
+You can adjust spacing with the input fields or the sliders. This works before duplicating, and it also works after duplication if you select the cards you want to redistribute.
+
+The Order toggle changes which side of the selected stack behaves like the anchor. Use it when you need the spacing to grow from the opposite direction.
+
+Once the cards are positioned, tag them for gameplay. Use Set Target for the target card, Set Stock for stock cards, and Set Tableau for tableau cards. These buttons set the layer color, enable 3D, and add the required name tags such as [TARGET], [STOCK], or [TABLEAU].
+
+Only one target layer is allowed per composition. If a target already exists, the tool will warn you before creating another one.
+
+Best practice: build and save a clean layout before running gameplay animations.
+
+## 04 - Layout Library: Apply, Save, and Update Levels
+
+Main sequence:
+
+- Search layouts in the input/dropdown.
+- Show layout preview.
+- Show tags and description.
+- Apply a layout.
+- Apply a different layout over an existing level and show confirmation.
+- Save a new level.
+- Save over an existing level and show confirmation.
+- Show description and tags in the save dialog.
+- Explain resolutions and cache refresh.
+
+Voiceover script:
+
+The Layouts panel is your shared level library.
+
+Use the search field or dropdown to find a level. The preview, description, tags, and source resolution help you confirm that you are choosing the right layout. Click Apply to place it in the active composition.
+
+If the active comp already has a managed level and you choose a different one, the extension asks for confirmation before replacing it. This helps prevent accidentally writing one level over another.
+
+Saving works as both create and update. If the level does not exist yet, Save creates it. If a matching level already exists, the tool asks before overwriting it. The save dialog lets you set the level name, tags, and description.
+
+Layouts are saved by resolution. If a level has multiple resolutions, the extension uses the best match for the active composition.
+
+The layout stores card names, labels, position, scale, rotation, Z depth, card face options, stacking order, and gameplay markers. It does not save arbitrary manual animation as a reliable layout state.
+
+If someone else adds or updates a level, refresh the local cache so your panel can see the latest files.
+
+## 05 - Gameplay Actions: Flip, Jump, Flip Stock, Progress Bar, and Restore
+
+Main sequence:
+
+- Select a card and apply Flip.
+- Set a Target layer.
+- Select Tableau card and apply Jump.
+- Select Stock card and apply Flip Stock.
+- Add Progress Bar.
+- Show markers in the timeline.
+- Use Reset.
+- Use Restore.
+- Show FX Precomp generated by the tool.
+
+Voiceover script:
+
+Gameplay actions are driven by markers.
+
+Flip adds a standard flip action to selected cards. Jump moves a card toward the target, so a Target layer must exist before using it. Flip Stock is designed for stock cards and also depends on the target.
+
+When you apply Jump or Flip Stock, the extension creates the needed expressions, controls, SFX, VFX, and markers. The markers are important because they describe what happened and when it happened.
+
+The Progress Bar reads Jump markers from the target composition and updates automatically as the gameplay timeline advances.
+
+Reset removes tool-generated animation, expressions, and effects from the card layers, but keeps the markers. Restore uses those markers to rebuild the animation. This is useful when you need to clean up, repair a comp, or recreate the animation after applying a saved layout.
+
+The FX Precomp is generated and managed by the tool. It contains audio and visual effects created by gameplay actions. Do not treat it as a manual work area, because reset and restore workflows may rebuild it.
+
+## 06 - Custom VFX and Troubleshooting
+
+Main sequence:
+
+- Open Back VFX and Front VFX precomps.
+- Show guide layers.
+- Replace or add custom artwork/VFX.
+- Drag custom precomp into Essential Properties.
+- Replace Back Card.
+- Replace Special Card.
+- Use Wild Card to preview special front replacement.
+- Mention Rotation versus Orientation.
+- Show common fixes: missing target, wrong depth, assets missing.
+
+Voiceover script:
+
+The VFX precomps are creative sandboxes for custom card visuals.
+
+Open the Back VFX or Front VFX precomp. These comps use the same card frame and alignment, so you can replace artwork, add animation, or build visual effects without editing the original card masters.
+
+When the custom design is ready, go back to the card layer and open its Essential Properties. Drag your custom VFX precomp into the slot you want to replace.
+
+Use Back Card to change the back of the card. Use Special Card to change the front replacement. To see the Special Card replacement, choose the Wild Card option in the Card Manager. The panel preview may not show the custom wild card, but the layer in After Effects will render correctly.
+
+For troubleshooting, keep a few rules in mind. Use Rotation, not Orientation, for normal card adjustments. If a card appears behind another one, check Z depth and restore the animation if needed. If Jump or Flip Stock does not work, confirm that a Target layer exists. If assets are missing, check the Assets Path and make sure the shared-drive files are available.

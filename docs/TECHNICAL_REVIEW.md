@@ -57,8 +57,10 @@ Status em 2026-05-06:
 - Fase 1 aplicada: checks de tags sem estado, guardas de composicao ativa, restore transacional e mensagens voltadas ao usuario em ingles.
 - Fase 2 fechada operacionalmente: helpers reutilizaveis de snapshot de composicao/selecao, helpers de marcador, lookups tipados de itens do projeto, remocao do helper legado `getItemByName`, save de layout lendo valores base/pre-expression e typecheck ExtendScript passando.
 - A divisao fisica completa dos modulos `aeft-utils.ts` e `aeft-utils-jonatan.ts` continua sendo uma melhoria de baixo risco para uma fase futura, mas os principais contratos reutilizaveis da Fase 2 ja estao em uso.
-- Fase 3 iniciada: markers de acoes `Jump` e `Flip Stock` agora recebem metadata `actionOrder`, permitindo que a expressao de posicao do Jump evite varrer todas as camadas por frame em layouts novos/restaurados.
+- Fase 3 concluida: markers de acoes `Jump` e `Flip Stock` agora recebem metadata `actionOrder`, permitindo que a expressao de posicao do Jump evite varrer todas as camadas por frame em layouts novos/restaurados.
+- Fase 3 validada manualmente em uma composicao com aproximadamente 48 cartas, com performance satisfatoria na maquina de teste.
 - Decisao de Fase 3: o Progress Bar permanece dinamico e continua lendo os markers `Jump` da composicao alvo. A tentativa de gravar markers `Progress Trigger` no layer do Progress Bar foi descartada para evitar metadata artificial e manter edicoes manuais de markers refletidas automaticamente.
+- Fase 3 tambem estabilizou o fluxo de undo em Apply/Restore, reduzindo reordenacao de layers desnecessaria e movendo preparacoes de assets para fora dos undo groups principais.
 
 ## Achados de Alta Prioridade
 
@@ -138,7 +140,7 @@ Recomendado:
 
 `FX Precomp` e tratada atualmente como output gerado, e reset/restore limpam seu conteudo. Isso e bom para determinismo. Se usuarios comecarem a adicionar FX manuais dentro dessa precomp, o reset ira apaga-los.
 
-Decisao necessaria: `FX Precomp` pertence exclusivamente a ferramenta, ou usuarios podem edita-la manualmente?
+Decisao aplicada: `FX Precomp` pertence a ferramenta. Usuarios nao devem depender de edicoes manuais persistentes dentro dela. Quando a pasta `Disney Solitaire Cards` existe no projeto, a precomp gerada e organizada dentro dessa pasta; caso contrario, fica no root do projeto.
 
 ### Valores de Moedas Nao Sao Persistidos
 
@@ -152,6 +154,18 @@ Jump
 ```
 
 Se o valor da moeda for derivado de combo/regras do jogo, ele pode ser recalculado como o SFX.
+
+### Carta Plus E Carta Especial Separada
+
+No Card Manager, `Wild` e `Plus` aparecem junto das cartas normais, mas tecnicamente elas nao sao iguais:
+
+- `Wild` usa a mesma fonte do deck selecionado e corresponde ao `Card Option` 14.
+- `Plus` usa o item/projeto separado `Plus_Card` e nao pertence a nenhum suit.
+- `Plus` nao deve tentar escrever `Card Option` 15, porque o controle Essential Property aceita apenas valores de 1 a 14.
+- Ao adicionar ou trocar uma layer para `Plus`, o fluxo deve substituir o source pela comp/item `Plus_Card`, nomear a layer como `Plus` e aplicar label roxo.
+- `Plus_Card` e um asset obrigatorio do projeto e nao deve ser renomeado dentro dos assets.
+
+Decisao pendente de produto: documentar melhor o uso criativo/gameplay da `Plus` nos tutoriais quando a regra final de uso estiver definida.
 
 ### Jump E de Uso Unico Por Camada
 
@@ -190,15 +204,15 @@ Proximos candidatos para mover:
 
 ## Fluxo de Layout
 
-### Apply Layout Nao Limpa Cartas Existentes
+### Apply Layout Substitui Layouts Gerenciados
 
-Aplicar um layout atualmente adiciona camadas de carta. Isso e flexivel, mas aplicar duas vezes pode duplicar um layout.
+Aplicar um layout em uma composicao sem origem conhecida cria as camadas do zero. Quando a composicao ja possui metadata de origem de layout, o fluxo remove as camadas de layout gerenciadas antes de aplicar o novo layout.
 
-Opcoes possiveis de UX:
+Comportamento atual:
 
-- `Apply Layout`
-- `Replace Current Layout`
-- avisar se a composicao ativa ja contem camadas de carta tagueadas.
+- se o level ativo e diferente do selecionado, o painel confirma antes de substituir;
+- se o level ativo e o mesmo, o apply funciona como atualizacao/substituicao gerenciada;
+- aplicar layout em composicoes manuais sem metadata ainda deve ser usado com cuidado.
 
 ### Formato de Exportacao de Marcadores E Minimalista
 
@@ -260,13 +274,13 @@ Os valores de moeda atualmente estao hardcoded em `CardPickerPanel`. Uma opcao m
 - `./src/assets/light-icon.png`
 - `./src/assets/dark-icon.png`
 
-Esses arquivos nao foram encontrados em `src/assets`. Isso pode afetar o polimento de pacote/manifest.
+Esses arquivos nao foram encontrados em `src/assets`. Existem apenas icones de UI em `src/js/assets/icons`. Isso nao reintroduz assets pesados no pacote, mas pode afetar o polimento do manifest/painel no host.
 
 ### Assets Pesados Nao Sao Mais Distribuidos no Pacote
 
 Os decks, presets, SFX, VFX, progress bar, biblioteca externa de expressoes e projeto `.aepx` foram movidos para fora da extensao. O painel agora usa paths configuraveis para encontrar esses recursos no Shared Drive.
 
-`copyAssets` esta vazio, entao o build da extensao nao deve carregar a pasta antiga de assets pesados.
+`copyAssets` e `copyZipAssets` estao vazios, entao o build da extensao nao deve carregar a pasta antiga de assets pesados. A revisao de assets distribuiveis esta resolvida no essencial; a Fase 4 deve apenas conferir o pacote final e corrigir os icones CEP ausentes.
 
 ### Pastas Operacionais Externas
 
@@ -333,9 +347,9 @@ Status: fechada operacionalmente em 2026-05-06.
 
 ### Fase 3
 
-- Medir performance de expressoes em composicoes grandes.
-- Mover mais helpers de expressao para a biblioteca externa.
-- Considerar dados gerados de timeline de acoes se as varreduras dinamicas ficarem lentas.
+Status: concluida em 2026-05-06.
+
+Objetivo: reduzir custo de expressoes de animacao sem perder flexibilidade manual dos markers.
 
 Primeira entrega aplicada:
 
@@ -343,28 +357,34 @@ Primeira entrega aplicada:
 - `restoreCardsAnimation` atualiza `actionOrder` em markers existentes antes de reconstruir a animacao.
 - `expPos` usa `actionOrder` quando presente e mantem fallback dinamico para layouts/markers antigos.
 - `expProgressBar` permanece dinamico e le os markers `Jump` da comp alvo, sem gravar markers auxiliares no layer do progress bar.
-
-Proximos alvos da Fase 3:
-
-- Medir uma composicao real com muitas cartas e markers antes/depois do `actionOrder`.
-- Avaliar mover helpers repetidos de `getMarkerTitle`, parsing de marker data e leitura de controles para a biblioteca externa de expressoes.
-- Testar `Jump` e `Flip Stock` em After Effects com comp real para validar ordem visual, SFX e compatibilidade com restore.
+- Apply/Restore foram ajustados para evitar `Undo group mismatch` e reduzir undo de `Layer Reordering`.
+- Teste manual com aproximadamente 48 cartas teve performance satisfatoria.
 
 ### Fase 4
 
 - Limpar SCSS do frontend e remover globais duplicados.
 - Tornar a largura do painel responsiva.
+- Mover estilos inline recorrentes para classes SCSS.
 - Substituir README/CHANGELOG boilerplate por docs de produto.
-- Revisar assets distribuiveis e tamanho de pacote.
+- Atualizar `docs/card-animation-tutorials.md` para o fluxo atual.
+- Corrigir ou remover referencias de icones CEP ausentes em `cep.config.ts`.
+- Conferir o pacote final apenas para garantir que assets pesados continuam fora; a migracao de assets distribuiveis ja esta resolvida no essencial.
 
 ## Decisoes Abertas
 
 1. Moedas devem ser derivadas de regras de gameplay ou armazenadas por marcador?
-2. `FX Precomp` e de posse exclusiva da ferramenta?
-3. `Cards Controls` deve ser criada automaticamente?
-4. Aplicar layout deve anexar ou substituir por padrao?
-5. Quao rigorosa deve ser a compatibilidade ExtendScript no codigo fonte versus output transpilado?
+2. Uma carta pode ter mais de um `Jump` no futuro, ou o fluxo segue com um `Jump` por camada?
+3. Valores de moeda devem continuar hardcoded no painel ou ser derivados dinamicamente de `assets/coins-vfx`?
+
+## Decisoes Fechadas
+
+1. `FX Precomp` e de posse exclusiva da ferramenta.
+2. `Cards Controls` e criada/garantida automaticamente pelos fluxos que precisam dela.
+3. Layouts gerenciados podem ser substituidos pelo Apply/Save com confirmacoes quando ha risco de sobrescrever outro level.
+4. Compatibilidade ExtendScript: o codigo do lado AE deve continuar validado com typecheck ES5 e evitar APIs modernas arriscadas em `src/jsx/aeft`, a menos que a transpilacao/runtime tenha sido verificada. Expressoes do AE podem seguir o motor moderno de expressions quando necessario.
 
 ## Conclusao
 
-O projeto esta caminhando em uma direcao solida. O proximo passo mais valioso e tornar a fundacao atual mais segura: checks de tags sem estado, validacao explicita de composicao, restore transacional e mensagens claras em ingles voltadas ao usuario. Depois disso, consolidar utilidades de AE vai reduzir a chance de bugs futuros e tornar novas funcionalidades de gameplay muito mais faceis de adicionar.
+O projeto ja passou pela consolidacao tecnica mais critica: seguranca de restore/reset, paths externos, metadata de layout, `Cards Controls` automatico, `actionOrder` para animacoes e fluxo de undo mais estavel.
+
+A Fase 4 deve ser tratada como fase de produto e acabamento: limpar UI/CSS, atualizar documentacao, corrigir icones CEP e conferir o pacote final. A revisao de assets pesados nao deve virar uma nova migracao, porque esse ponto ja foi resolvido com assets externos e `copyAssets: []`.
