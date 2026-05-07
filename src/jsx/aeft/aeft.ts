@@ -221,15 +221,22 @@ export const handleOpenLayoutPreview = (imagePath: string) => {
   }
 }
 
-export const handleShowSaveLayoutDialog = (imagePath: string, defaults?: { name?: string; tags?: string; description?: string; title?: string }) => {
+export const handleShowSaveLayoutDialog = (
+  imagePath: string,
+  defaults?: { name?: string; tags?: string; description?: string; title?: string; allowMissingPreview?: boolean }
+) => {
   try {
-    const imageFile = new File(imagePath);
-    if (!imageFile.exists) return { cancelled: true, error: "Preview image not found: " + imagePath };
-
     const initialValues = defaults || {};
-    const previewImage = ScriptUI.newImage(imageFile.fsName);
-    const imageWidth = getDimensionValue(previewImage.size, "width", 0, 512);
-    const imageHeight = getDimensionValue(previewImage.size, "height", 1, 512);
+    const imageFile = imagePath ? new File(imagePath) : null;
+    const hasPreview = !!(imageFile && imageFile.exists);
+
+    if (!hasPreview && initialValues.allowMissingPreview !== true) {
+      return { cancelled: true, error: "Preview image not found: " + imagePath };
+    }
+
+    const previewImage = hasPreview ? ScriptUI.newImage((imageFile as File).fsName) : null;
+    const imageWidth = previewImage ? getDimensionValue(previewImage.size, "width", 0, 512) : 300;
+    const imageHeight = previewImage ? getDimensionValue(previewImage.size, "height", 1, 512) : 180;
     const largestImageSide = Math.max(imageWidth, imageHeight);
     const previewScale = largestImageSide > 0 ? 300 / largestImageSide : 1;
     const previewWidth = Math.max(260, Math.round(imageWidth * previewScale));
@@ -241,24 +248,26 @@ export const handleShowSaveLayoutDialog = (imagePath: string, defaults?: { name?
     dialog.margins = 12;
     dialog.spacing = 10;
 
-    const previewCanvas = dialog.add("group");
-    previewCanvas.alignment = ["fill", "top"];
-    previewCanvas.preferredSize = [previewWidth, previewHeight];
-    previewCanvas.minimumSize = [240, 160];
+    if (previewImage) {
+      const previewCanvas = dialog.add("group");
+      previewCanvas.alignment = ["fill", "top"];
+      previewCanvas.preferredSize = [previewWidth, previewHeight];
+      previewCanvas.minimumSize = [240, 160];
 
-    previewCanvas.onDraw = function () {
-      const canvasWidth = getDimensionValue(previewCanvas.size, "width", 0, previewWidth);
-      const canvasHeight = getDimensionValue(previewCanvas.size, "height", 1, previewHeight);
-      const scaleX = canvasWidth / imageWidth;
-      const scaleY = canvasHeight / imageHeight;
-      const drawScale = Math.min(scaleX, scaleY);
-      const drawWidth = Math.max(1, Math.round(imageWidth * drawScale));
-      const drawHeight = Math.max(1, Math.round(imageHeight * drawScale));
-      const drawX = Math.round((canvasWidth - drawWidth) / 2);
-      const drawY = Math.round((canvasHeight - drawHeight) / 2);
+      previewCanvas.onDraw = function () {
+        const canvasWidth = getDimensionValue(previewCanvas.size, "width", 0, previewWidth);
+        const canvasHeight = getDimensionValue(previewCanvas.size, "height", 1, previewHeight);
+        const scaleX = canvasWidth / imageWidth;
+        const scaleY = canvasHeight / imageHeight;
+        const drawScale = Math.min(scaleX, scaleY);
+        const drawWidth = Math.max(1, Math.round(imageWidth * drawScale));
+        const drawHeight = Math.max(1, Math.round(imageHeight * drawScale));
+        const drawX = Math.round((canvasWidth - drawWidth) / 2);
+        const drawY = Math.round((canvasHeight - drawHeight) / 2);
 
-      previewCanvas.graphics.drawImage(previewImage, drawX, drawY, drawWidth, drawHeight);
-    };
+        previewCanvas.graphics.drawImage(previewImage, drawX, drawY, drawWidth, drawHeight);
+      };
+    }
 
     const addInputRow = function (label: string, defaultValue: string, multiline?: boolean) {
       const group = dialog.add("group");

@@ -775,7 +775,15 @@ export const applyJumpOnSelectedlayers = (
       const camada = selectedLayers[i]
 
       if (!fxExistsByMatchName(camada, cardFxMatchName)) camada.applyPreset(new File(presetPath))
-      if (namedMarkerExists(camada, "Jump")) continue
+      if (namedMarkerExists(camada, "Jump")) {
+        alert([
+          'This card already has a "Jump" marker:',
+          camada.name,
+          "",
+          'Each card layer can only have one "Jump" marker.',
+        ].join("\n"))
+        continue
+      }
 
       //@ts-ignore
       camada.threeDLayer = true

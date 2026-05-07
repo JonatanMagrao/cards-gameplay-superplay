@@ -259,6 +259,16 @@ type ExistingLayoutMetadata = {
   tags: string[];
 };
 
+const getErrorMessage = (error: any): string => {
+  return String(error && error.message ? error.message : error || "");
+};
+
+const isMetadataOnlySaveFallbackError = (error: any): boolean => {
+  const message = getErrorMessage(error);
+  return message.indexOf("No active composition found.") >= 0
+    || message.indexOf("No card layers found (TABLEAU/TARGET/STOCK).") >= 0;
+};
+
 const normalizePath = (value: string): string => String(value || "").replace(/\\/g, "/");
 
 const getFileNameFromPath = (filePath: string): string => {
@@ -789,6 +799,15 @@ export const LayoutsPanel: React.FC<Props> = ({
     deleteFolderIfEmpty(tempFolderPath);
   }, []);
 
+  const getExistingLevelJsonPath = useCallback((levelFolderPath: string): string => {
+    const normalizedFolderPath = normalizePath(levelFolderPath);
+    const canonicalJsonPath = normalizePath(path.join(normalizedFolderPath, CANONICAL_LAYOUT_JSON_NAME));
+    if (canonicalJsonPath && fs.existsSync(canonicalJsonPath)) return canonicalJsonPath;
+
+    const fallbackJsonPath = getLevelJsonPath(normalizedFolderPath, compResolution);
+    return fallbackJsonPath ? fallbackJsonPath.filePath : "";
+  }, [compResolution]);
+
   const getExistingLayoutMetadata = useCallback((levelFolderPath: string, fallbackEntry: LayoutIndexEntry | null): ExistingLayoutMetadata => {
     const metadata = {
       name: fallbackEntry ? fallbackEntry.name : "",
@@ -797,8 +816,8 @@ export const LayoutsPanel: React.FC<Props> = ({
     };
 
     const candidatePaths = [
+      getExistingLevelJsonPath(levelFolderPath),
       fallbackEntry ? fallbackEntry.jsonPath : "",
-      normalizePath(path.join(levelFolderPath, CANONICAL_LAYOUT_JSON_NAME))
     ];
 
     for (let i = 0; i < candidatePaths.length; i++) {
@@ -817,7 +836,7 @@ export const LayoutsPanel: React.FC<Props> = ({
     }
 
     return metadata;
-  }, []);
+  }, [getExistingLevelJsonPath]);
 
   const writeCanonicalLayout = useCallback(async (
     rootPathInput: string,
@@ -874,14 +893,112 @@ export const LayoutsPanel: React.FC<Props> = ({
     return true;
   }, [customCachePath, refreshLevels]);
 
+  const updateSelectedLayoutMetadata = useCallback(async (rootPathInput: string): Promise<boolean> => {
+    const rootPath = normalizePath(rootPathInput);
+    const levelFolderName = String(selectedFolder || "");
+
+    if (!levelFolderName) {
+      await showHostAlert("Select a level first.");
+      return false;
+    }
+
+    const levelFolderPath = normalizePath(path.join(rootPath, levelFolderName));
+    if (!rootPath || !fs.existsSync(levelFolderPath)) {
+      await showHostAlert(`Selected level was not found in the Levels Path:\n${levelFolderName}`);
+      return false;
+    }
+
+    const jsonPath = getExistingLevelJsonPath(levelFolderPath);
+    if (!jsonPath || !fs.existsSync(jsonPath)) {
+      await showHostAlert(`No layout JSON found for: ${levelFolderName}`);
+      return false;
+    }
+
+    const metadata = getExistingLayoutMetadata(levelFolderPath, selectedLayoutEntry);
+    const cachedPreviewPath = selectedLayoutEntry && selectedLayoutEntry.thumbnailPath && fs.existsSync(selectedLayoutEntry.thumbnailPath)
+      ? selectedLayoutEntry.thumbnailPath
+      : "";
+    const previewPath = layoutPreviewPath && fs.existsSync(layoutPreviewPath)
+      ? layoutPreviewPath
+      : cachedPreviewPath
+        || getLevelPreviewPath(cacheRootPath, levelFolderName, compResolution)
+        || getLevelPreviewPath(rootPath, levelFolderName, compResolution)
+        || "";
+
+    const dialogResult = await evalTS("handleShowSaveLayoutDialog", previewPath, {
+      title: "Update Layout Info",
+      name: metadata.name || getLevelLabelFromFolderName(levelFolderName),
+      tags: metadata.tags.join(", "),
+      description: metadata.description,
+      allowMissingPreview: true
+    }) as SaveLayoutDialogResult & { error?: string };
+
+    if (dialogResult && dialogResult.error) {
+      await showHostAlert(dialogResult.error);
+      return false;
+    }
+
+    if (!dialogResult || dialogResult.cancelled) return false;
+
+    const levelName = safeTrim(dialogResult.name);
+    if (!levelName) {
+      await showHostAlert("Type a level name first.");
+      return false;
+    }
+
+    let layoutData: any;
+    try {
+      layoutData = JSON.parse(fs.readFileSync(jsonPath, "utf-8"));
+    } catch (e) {
+      await showHostAlert(`Could not read layout JSON: ${e}`);
+      return false;
+    }
+
+    const layoutToSave = {
+      ...layoutData,
+      level: levelName,
+      description: String(dialogResult.description || ""),
+      tags: parseTags(dialogResult.tags),
+    };
+
+    fs.writeFileSync(jsonPath, JSON.stringify(layoutToSave, null, 2), "utf-8");
+
+    try {
+      const cacheResult = await syncSingleLayoutToCache(rootPath, levelFolderName, customCachePath);
+      applyLayoutEntries(cacheResult.entries, setLayoutEntries, setLevels);
+    } catch (cacheError) {
+      console.error(cacheError);
+      await refreshLevels();
+    }
+
+    setSelectedFolder(levelFolderName);
+    setQuery("");
+    setThumbnailVersion(v => v + 1);
+    await showHostAlert(`Updated!\nLevel: ${getLevelLabelFromFolderName(levelFolderName)}`);
+    return true;
+  }, [
+    cacheRootPath,
+    compResolution,
+    customCachePath,
+    getExistingLayoutMetadata,
+    getExistingLevelJsonPath,
+    layoutPreviewPath,
+    refreshLevels,
+    selectedFolder,
+    selectedLayoutEntry
+  ]);
+
   const handleSave = useCallback(async () => {
     let tempThumbnailPath = "";
 
     try {
       await reloadExtendScript();
       const activeCompResolution = await evalTS("getCompResolution");
+      const rootPath = await getTargetRoot("Select Levels Folder");
+      if (!rootPath) return;
+
       if (!activeCompResolution) {
-        await showHostAlert("No active comp found. Open the level comp you want to save first.");
+        await updateSelectedLayoutMetadata(rootPath);
         return;
       }
 
@@ -901,9 +1018,6 @@ export const LayoutsPanel: React.FC<Props> = ({
         if (!saveActiveLevel) return;
       }
 
-      const rootPath = await getTargetRoot("Select Levels Folder");
-      if (!rootPath) return;
-
       const initialLevelFolderName = activeLevelFolderName;
       const initialEntry = initialLevelFolderName
         ? layoutEntries.find(entry => entry.folder === initialLevelFolderName) || null
@@ -920,7 +1034,18 @@ export const LayoutsPanel: React.FC<Props> = ({
         tags: initialMetadata.tags || []
       };
 
-      const layoutData = await readActiveLayoutData(initialDefaults.name || "New Layout");
+      let layoutData: any;
+      try {
+        layoutData = await readActiveLayoutData(initialDefaults.name || "New Layout");
+      } catch (e) {
+        if (isMetadataOnlySaveFallbackError(e)) {
+          await updateSelectedLayoutMetadata(rootPath);
+          return;
+        }
+
+        throw e;
+      }
+
       tempThumbnailPath = await createTemporaryThumbnail(getLayoutCacheRootPath(rootPath, customCachePath) || rootPath, layoutData);
 
       let dialogDefaults = initialDefaults;
@@ -1017,6 +1142,7 @@ export const LayoutsPanel: React.FC<Props> = ({
     readActiveLayoutData,
     selectedFolder,
     selectedLayoutEntry,
+    updateSelectedLayoutMetadata,
     writeCanonicalLayout
   ]);
 
