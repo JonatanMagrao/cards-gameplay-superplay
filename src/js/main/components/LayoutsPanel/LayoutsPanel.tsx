@@ -36,6 +36,8 @@ const LAYOUT_ORIGIN_SCHEMA = "cards-gameplay.layout-origin.v1";
 const CANONICAL_LAYOUT_JSON_NAME = "layout.json";
 const CANONICAL_THUMBNAIL_NAME = "thumbnail.jpg";
 const LEGACY_RESOLUTION_ASSET_RE = /^\d{2,5}x\d{2,5}\.(json|jpe?g|png)$/i;
+const LEVEL_NAME_PATTERN = /^\d{3}-\d{3}_[A-Za-z0-9_]+$/;
+const LEVEL_NAME_FORMAT_HINT = "Use the format 000-000_Name, for example: 018-011_NewWorld.";
 
 // Helpers
 const loadConfig = loadCardsGameplayConfig;
@@ -50,30 +52,13 @@ const refreshFlyoutMenu = () => {
 };
 
 const safeTrim = (s: any) => String(s).replace(/^\s+|\s+$/g, "");
-const pad3 = (v: any) => {
-  const n = parseInt(String(v), 10);
-  if (isNaN(n) || n < 0) return "000";
-  const s = String(n);
-  return s.length >= 3 ? s : ("000" + s).slice(-3);
-};
-
-const sanitizeLevelFolderToken = (value: string): string => {
-  return safeTrim(value)
-    .replace(/\\/g, "/")
-    .replace(/[<>:"/|?*\x00-\x1F]/g, "-")
-    .replace(/\s+/g, "-")
-    .replace(/_+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-+|-+$/g, "");
-};
 
 const normalizeLevelFolderNameUI = (levelId: string): string => {
-  const raw = sanitizeLevelFolderToken(levelId);
-  const m = raw.match(/^(\d+)(?:[_-](.+))?$/);
-  if (!m) return `lvl_${raw.replace(/_/g, "-")}`;
-  const num = pad3(m[1]);
-  const name = sanitizeLevelFolderToken(m[2] || "");
-  return name ? `lvl_${num}-${name}` : `lvl_${num}`;
+  return `lvl_${safeTrim(levelId)}`;
+};
+
+const isValidLevelName = (levelName: string): boolean => {
+  return LEVEL_NAME_PATTERN.test(safeTrim(levelName));
 };
 
 const getImageObjectUrl = (imagePath: string): string | null => {
@@ -995,6 +980,11 @@ export const LayoutsPanel: React.FC<Props> = ({
       return false;
     }
 
+    if (!isValidLevelName(levelName)) {
+      await showHostAlert(`Invalid level name.\n${LEVEL_NAME_FORMAT_HINT}`);
+      return false;
+    }
+
     let layoutData: any;
     try {
       layoutData = JSON.parse(fs.readFileSync(jsonPath, "utf-8"));
@@ -1128,6 +1118,16 @@ export const LayoutsPanel: React.FC<Props> = ({
           cleanupTemporaryThumbnail(tempThumbnailPath);
           await showHostAlert("Type a level name first.");
           return;
+        }
+
+        if (!isValidLevelName(levelName)) {
+          await showHostAlert(`Invalid level name.\n${LEVEL_NAME_FORMAT_HINT}`);
+          dialogDefaults = {
+            name: levelName,
+            description: String(dialogResult.description || ""),
+            tags: parseTags(dialogResult.tags)
+          };
+          continue;
         }
 
         const targetFolderName = loadedExistingFolderName && levelName === loadedExistingDefaultName

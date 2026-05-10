@@ -1,6 +1,6 @@
 import { captureCompState, findAvItemByName, getActiveComp, restoreCompState } from "./aeft-utils";
 import { getLayerMarkersMetadata, getLayerProp, getPropertyBaseValueAtTime } from "./aeft-utils-jonatan";
-import { ensureCardsControlsLayer, keyLabel, posPropPath, scalePropPath, zRotPropPath } from "./actions";
+import { clearGameplayFxLayers, ensureCardsControlsLayer, keyLabel, posPropPath, scalePropPath, zRotPropPath } from "./actions";
 import { buildMarkerComment, parseMarkerComment } from "./markers";
 
 export type CardLayout = {
@@ -519,6 +519,7 @@ export const applyCardsLayoutFromObject = (layoutJson: CardsLayoutJson, options?
 
   try {
     resetDeckCache();
+    clearGameplayFxLayers(comp);
     if (getCardsLayoutOriginFromComp(comp)) {
       removeCardsLayoutLayersFromComp(comp);
     }

@@ -495,6 +495,11 @@ const clearCoinVfxLayers = (comp: CompItem) => {
   }
 }
 
+export const clearGameplayFxLayers = (comp: CompItem) => {
+  clearFxPrecompLayers()
+  clearCoinVfxLayers(comp)
+}
+
 const getMarkerActionName = (marker: LayerMarkerMeta): string => {
   return marker.title || getMarkerCommentTitle(marker.comment);
 }
@@ -2063,8 +2068,7 @@ export const resetCardsAnimation = (presetMatchName: string) => {
 
       }
 
-      clearFxPrecompLayers()
-      clearCoinVfxLayers(thisComp)
+      clearGameplayFxLayers(thisComp)
     } finally {
       restoreCompState(thisComp, compSnapshot)
     }
@@ -2134,8 +2138,7 @@ export const restoreCardsAnimation = (
   try {
     ensureCardsControlsLayer(thisComp, controlPresetPath)
     stampActionMarkerOrders()
-    clearFxPrecompLayers()
-    clearCoinVfxLayers(thisComp)
+    clearGameplayFxLayers(thisComp)
     recalculateCoveredCardTrims(thisComp, false)
 
     thisComp.time = 0
