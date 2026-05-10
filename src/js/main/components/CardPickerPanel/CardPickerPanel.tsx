@@ -202,48 +202,48 @@ export const CardPickerPanel: React.FC<Props> = ({
       <section className="panel-section panel-preview">
         {cardSrc && (
           <div className="preview-container">
-            <div
-              className="card-preview"
-              onClick={handlePreviewClick}
-              style={{ cursor: "pointer" }}
-              title="Click to Change | Ctrl + Click to Add"
-            >
-              <img className="card-image" src={cardSrc} alt={cardTitle} />
-              <span className="card-hint">
-                Click to change / Ctrl+Click to add
-              </span>
-            </div>
+            <div className="card-preview">
+              <div
+                className="card-preview-hit-area"
+                onClick={handlePreviewClick}
+                title="Click to Change | Ctrl + Click to Add"
+              >
+                <img className="card-image" src={cardSrc} alt={cardTitle} />
+                <span className="card-hint">
+                  Click to change / Ctrl+Click to add
+                </span>
+              </div>
 
-            <div className="coin-controls">
-              {/* NOVO: Ícone substitui o texto span */}
-              {coinIconSrc && (
-                <img 
-                  src={coinIconSrc} 
-                  alt="Coin" 
+              <div className="coin-controls">
+                {coinIconSrc && (
+                  <img
+                    className="coin-icon"
+                    src={coinIconSrc}
+                    alt="Coin"
+                    title="Coin Value"
+                  />
+                )}
+
+                <select
+                  value={coinValue}
+                  onChange={(e) => setCoinValue(e.target.value)}
+                  className="field-input field-input--compact"
                   title="Coin Value"
-                  style={{ width: "25px", height: "25px", objectFit: "contain" }} 
-                />
-              )}
-              
-              <select
-                value={coinValue}
-                onChange={(e) => setCoinValue(e.target.value)}
-                className="field-input field-input--compact"
-                title="Coin Value"
-              >
-                {coinOptions.map((val) => (
-                  <option key={val} value={val}>+{val}</option>
-                ))}
-              </select>
-              <button
-                type="button"
-                className="coin-update-button"
-                onClick={updateSelectedJumpCoinValue}
-                title="Update selected Jump coin"
-                aria-label="Update selected Jump coin"
-              >
-                Set
-              </button>
+                >
+                  {coinOptions.map((val) => (
+                    <option key={val} value={val}>+{val}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="coin-update-button"
+                  onClick={updateSelectedJumpCoinValue}
+                  title="Update selected Jump coin"
+                  aria-label="Update selected Jump coin"
+                >
+                  Set
+                </button>
+              </div>
             </div>
           </div>
         )}

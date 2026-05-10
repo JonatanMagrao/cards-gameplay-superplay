@@ -55,6 +55,11 @@ export const App = () => {
     if (extensionUpdate) openExtensionUpdate(extensionUpdate);
   }, [extensionUpdate]);
 
+  const handleToggleSettings = useCallback(() => {
+    setTab("layouts");
+    setLayoutsSettingsOpen(open => !open);
+  }, []);
+
   return (
     <div className="app" style={{ backgroundColor: bgColor }} spellCheck={false}>
       <header className="app-header">
@@ -75,19 +80,17 @@ export const App = () => {
 
           {/* Header + Tabs */}
           <div className="panel-tabs-header">
-            {tab === "layouts" && (
-              <button
-                type="button"
-                className="panel-settings-button"
-                title="Open Paths Settings"
-                onClick={() => setLayoutsSettingsOpen(open => !open)}
-                aria-label="Open Paths Settings"
-              >
-                {"\u2699"}
-              </button>
-            )}
+            <button
+              type="button"
+              className="panel-settings-button"
+              title="Open Paths Settings"
+              onClick={handleToggleSettings}
+              aria-label="Open Paths Settings"
+            >
+              {"\u2699"}
+            </button>
 
-            <div className={`panel-tabs ${tab === "layouts" ? "has-settings" : ""}`} role="tablist" aria-label="Main tabs">
+            <div className="panel-tabs has-settings" role="tablist" aria-label="Main tabs">
               <button
                 type="button"
                 className={`panel-tab ${tab === "cards" ? "is-active" : ""}`}
