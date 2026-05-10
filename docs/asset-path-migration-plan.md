@@ -39,10 +39,10 @@ A implementacao atual centraliza a resolucao em `src/js/main/assetPaths.ts`, usa
 
 ## Configuracao
 
-Adicionar uma nova chave ao arquivo de configuracao existente:
+Adicionar uma nova chave ao arquivo de configuracao:
 
 ```txt
-~/.cards-layout-config.json
+%LOCALAPPDATA%/Cards Gameplay/config.json
 ```
 
 Nova chave:

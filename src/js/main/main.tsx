@@ -8,13 +8,20 @@ import { ActionsPanel } from "./components/ActionsPanel/ActionsPanel";
 import { LayoutsPanel } from "./components/LayoutsPanel/LayoutsPanel";
 import { DuplicatePanel } from "./components/DuplicatePanel/DuplicatePanel";
 
-import { os, path } from "../lib/cep/node";
-import { getAssetPaths, getDefaultLevelsPath, getSavedAssetEntryPoint } from "./assetPaths";
+import { os } from "../lib/cep/node";
+import {
+  getAssetPaths,
+  getDefaultLevelsPath,
+  getSavedAssetEntryPoint,
+  normalizeAssetPath,
+  saveCardsGameplayConfigPatch,
+  validateAssetEntryPoint
+} from "./assetPaths";
 import { getAvailableExtensionUpdate, openExtensionUpdate, ExtensionUpdateInfo } from "./extensionUpdates";
 import { version } from "../../shared/shared";
 
 export const getDefaultCardsLevelsDir = (assetEntryPoint: string) => {
-  return getDefaultLevelsPath(assetEntryPoint) || path.join(os.homedir(), "Documents", "cards-level-layouts");
+  return getDefaultLevelsPath(assetEntryPoint) || "";
 };
 
 type TabKey = "cards" | "layouts";
@@ -31,6 +38,7 @@ export const App = () => {
   const [assetEntryPoint, setAssetEntryPoint] = useState(() => getSavedAssetEntryPoint());
   const [extensionUpdate, setExtensionUpdate] = useState<ExtensionUpdateInfo | null>(null);
   const assetPaths = useMemo(() => getAssetPaths(assetEntryPoint), [assetEntryPoint]);
+  const entrySetupOpen = !assetEntryPoint;
 
   useEffect(() => {
     if (window.cep) subscribeBackgroundColor(setBgColor);
@@ -59,6 +67,33 @@ export const App = () => {
     setTab("layouts");
     setLayoutsSettingsOpen(open => !open);
   }, []);
+
+  const handleSetEntryPoint = useCallback(async () => {
+    if (!window.cep) {
+      window.alert("CEP API unavailable.");
+      return;
+    }
+
+    const result = window.cep.fs.showOpenDialogEx(
+      false,
+      true,
+      "Select Entry Point",
+      assetEntryPoint || os.homedir(),
+      []
+    );
+
+    if (result.err !== 0 || !result.data || result.data.length === 0) return;
+
+    const newPath = normalizeAssetPath(result.data[0] || "");
+    if (!newPath) return;
+
+    saveCardsGameplayConfigPatch({ assetEntryPoint: newPath, savePath: "", tutorialsPath: "" });
+    setAssetEntryPoint(newPath);
+    window.dispatchEvent(new Event("cards-gameplay.refreshFlyoutMenu"));
+
+    const validation = validateAssetEntryPoint(newPath);
+    if (!validation.ok && validation.message) window.alert(validation.message);
+  }, [assetEntryPoint]);
 
   return (
     <div className="app" style={{ backgroundColor: bgColor }} spellCheck={false}>
@@ -139,6 +174,26 @@ export const App = () => {
               onSettingsClose={() => setLayoutsSettingsOpen(false)}
               settingsOpen={layoutsSettingsOpen}
             />
+          )}
+
+          {entrySetupOpen && (
+            <div className="entry-setup-backdrop">
+              <div className="entry-setup-modal" role="dialog" aria-modal="true" aria-label="Entry point setup">
+                <div className="entry-setup-title">Set Entry Point</div>
+                <p className="entry-setup-copy">
+                  Choose the shared drive root to continue. Assets, levels, tutorials, and releases will be derived from it.
+                </p>
+                <div className="entry-setup-actions">
+                  <button
+                    type="button"
+                    className="entry-setup-primary"
+                    onClick={handleSetEntryPoint}
+                  >
+                    Set Entry Point
+                  </button>
+                </div>
+              </div>
+            </div>
           )}
         </div>
       </header>

@@ -249,3 +249,65 @@
   border-color: #61dafb;
 }
 
+/* ===== First-run Entry Point Setup ===== */
+
+.entry-setup-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: #20232a;
+  box-sizing: border-box;
+}
+
+.entry-setup-modal {
+  width: min(252px, calc(100vw - 24px));
+  border-radius: 8px;
+  background: #181b21;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.55);
+  padding: 0.85rem;
+  display: grid;
+  gap: 0.65rem;
+  box-sizing: border-box;
+  color: #d9dde7;
+  -webkit-text-fill-color: #d9dde7;
+}
+
+.entry-setup-title {
+  font-size: 0.82rem;
+  font-weight: 900;
+  line-height: 1.15;
+}
+
+.entry-setup-copy {
+  margin: 0;
+  color: #aeb6c3;
+  -webkit-text-fill-color: #aeb6c3;
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.entry-setup-actions {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.entry-setup-actions button {
+  min-height: 28px;
+  border-radius: 5px;
+  font-size: 0.72rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.entry-setup-primary {
+  border: 1px solid #61dafb;
+  background: #263947;
+  color: #ffffff;
+  -webkit-text-fill-color: #ffffff;
+}
+

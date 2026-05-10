@@ -228,9 +228,9 @@ Isso e compacto, mas dados futuros de marcador se beneficiariam de um formato de
 {"time":1.2,"label":9,"comment":"Jump","duration":0}
 ```
 
-### Configuracao de Layout Fica Oculta na Home do Usuario
+### Configuracao de Layout
 
-O painel de layouts armazena `.cards-layout-config.json` no diretorio home do usuario. Isso funciona, mas o schema e a localizacao do arquivo devem ser documentados para suporte.
+O painel de layouts armazena `config.json` em `%LOCALAPPDATA%/Cards Gameplay` no Windows. O schema deve ser documentado para suporte.
 
 ## Frontend e UI
 

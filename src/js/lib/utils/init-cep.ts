@@ -1,9 +1,9 @@
 import { company, displayName, version } from "../../../shared/shared";
-import { child_process, fs, os, path } from "../cep/node";
+import { child_process, fs, path } from "../cep/node";
 import { evalTS, openLinkInBrowser } from "./bolt";
+import { loadCardsGameplayConfig } from "./cardsConfig";
 import { keyRegisterOverride, dropDisable } from "./cep";
 
-const CONFIG_FILE_NAME = ".cards-layout-config.json";
 const VIDEO_TUTORIALS_RELATIVE_PATH = "Creative_Marketing_Assets/GENERAL-ASSETS/Plugins/Cards Gameplay/video-tutorials";
 const EXTENSION_RELEASES_RELATIVE_PATH = VIDEO_TUTORIALS_RELATIVE_PATH.replace(/\/video-tutorials$/, "/extension-releases");
 const VIDEO_FILE_PATTERN = /\.(mp4|mov|m4v)$/i;
@@ -11,12 +11,6 @@ const ZXP_FILE_PATTERN = /\.zxp$/i;
 const TEXT_FILE_PATTERN = /\.txt$/i;
 const VERSION_PATTERN = /v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?/g;
 export const FLYOUT_REFRESH_EVENT = "cards-gameplay.refreshFlyoutMenu";
-
-type CardsGameplayConfig = {
-  assetEntryPoint?: string;
-  tutorialsPath?: string;
-  [key: string]: any;
-};
 
 type FlyoutMenuEvent = {
   data:
@@ -83,25 +77,7 @@ const escapeXmlAttribute = (value: string): string => {
     .replace(/>/g, "&gt;");
 };
 
-const getConfigPath = (): string => {
-  try {
-    return joinPath(os.homedir(), CONFIG_FILE_NAME);
-  } catch (_) {
-    return CONFIG_FILE_NAME;
-  }
-};
-
-const loadConfig = (): CardsGameplayConfig => {
-  try {
-    const configPath = getConfigPath();
-    if (!fs.existsSync(configPath)) return {};
-
-    return JSON.parse(fs.readFileSync(configPath, "utf-8")) as CardsGameplayConfig;
-  } catch (e) {
-    console.error(e);
-    return {};
-  }
-};
+const loadConfig = loadCardsGameplayConfig;
 
 const getVideoTutorialsPath = (): string => {
   const config = loadConfig();

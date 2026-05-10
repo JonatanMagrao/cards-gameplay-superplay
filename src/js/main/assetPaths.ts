@@ -1,17 +1,18 @@
-import { fs, os } from "../lib/cep/node";
+import { fs } from "../lib/cep/node";
 import { evalTS } from "../lib/utils/bolt";
+import {
+  type CardsGameplayConfig,
+  loadCardsGameplayConfig as loadCardsGameplayConfigFile,
+  saveCardsGameplayConfigPatch as saveCardsGameplayConfigPatchFile
+} from "../lib/utils/cardsConfig";
 
-export const CONFIG_FILE_NAME = ".cards-layout-config.json";
+export { CONFIG_FILE_NAME } from "../lib/utils/cardsConfig";
 export const DEFAULT_ASSETS_RELATIVE_PATH = "Creative_Marketing_Assets/GENERAL-ASSETS/Plugins/Cards Gameplay/assets";
 export const DEFAULT_LEVELS_RELATIVE_PATH = DEFAULT_ASSETS_RELATIVE_PATH.replace(/\/assets$/, "/levels");
 export const DEFAULT_TUTORIALS_RELATIVE_PATH = DEFAULT_ASSETS_RELATIVE_PATH.replace(/\/assets$/, "/video-tutorials");
 export const DEFAULT_EXTENSION_RELEASES_RELATIVE_PATH = DEFAULT_ASSETS_RELATIVE_PATH.replace(/\/assets$/, "/extension-releases");
 
-export type CardsGameplayConfig = {
-  assetEntryPoint?: string;
-  tutorialsPath?: string;
-  [key: string]: any;
-};
+export type { CardsGameplayConfig } from "../lib/utils/cardsConfig";
 
 export type AssetPathBundle = {
   assetEntryPoint: string;
@@ -132,35 +133,12 @@ export const joinAssetPath = (...parts: string[]): string => {
   return output;
 };
 
-const getConfigPath = (): string => {
-  try {
-    return joinAssetPath(os.homedir(), CONFIG_FILE_NAME);
-  } catch (_) {
-    return CONFIG_FILE_NAME;
-  }
-};
-
 export const loadCardsGameplayConfig = (): CardsGameplayConfig => {
-  try {
-    const configPath = getConfigPath();
-    if (!hasFilesystemAccess() || !fs.existsSync(configPath)) return {};
-
-    return JSON.parse(fs.readFileSync(configPath, "utf-8")) as CardsGameplayConfig;
-  } catch (e) {
-    console.error(e);
-    return {};
-  }
+  return loadCardsGameplayConfigFile();
 };
 
 export const saveCardsGameplayConfigPatch = (data: CardsGameplayConfig): void => {
-  try {
-    if (!hasFilesystemAccess()) return;
-
-    const current = loadCardsGameplayConfig();
-    fs.writeFileSync(getConfigPath(), JSON.stringify({ ...current, ...data }, null, 2));
-  } catch (e) {
-    console.error(e);
-  }
+  saveCardsGameplayConfigPatchFile(data);
 };
 
 export const getSavedAssetEntryPoint = (): string => {

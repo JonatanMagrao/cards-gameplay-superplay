@@ -18,16 +18,17 @@ import {
 import {
   ensureAssetsReadyOrAlert,
   getAssetRootPath,
+  getDefaultLevelsPath,
   getDefaultTutorialsPath,
+  loadCardsGameplayConfig,
   normalizeAssetPath,
+  saveCardsGameplayConfigPatch,
   validateAssetEntryPoint
 } from "../../assetPaths";
 import "./LayoutsPanel.scss";
 
 // --- CONFIGURAÇÃO DE PERSISTÊNCIA ---
 const HOME_DIR = os.homedir();
-const CONFIG_FILE_NAME = ".cards-layout-config.json";
-const CONFIG_PATH = path.join(HOME_DIR, CONFIG_FILE_NAME);
 const FLYOUT_REFRESH_EVENT = "cards-gameplay.refreshFlyoutMenu";
 const THUMBNAIL_MAX_SIDE = 512;
 const THUMBNAIL_JPEG_QUALITY = 0.82;
@@ -35,24 +36,10 @@ const LAYOUT_ORIGIN_SCHEMA = "cards-gameplay.layout-origin.v1";
 const CANONICAL_LAYOUT_JSON_NAME = "layout.json";
 const CANONICAL_THUMBNAIL_NAME = "thumbnail.jpg";
 const LEGACY_RESOLUTION_ASSET_RE = /^\d{2,5}x\d{2,5}\.(json|jpe?g|png)$/i;
-const LEGACY_DEFAULT_LEVELS_DIR = path.join(HOME_DIR, "Documents", "cards-level-layouts").replace(/\\/g, "/");
 
 // Helpers
-const loadConfig = () => {
-  try {
-    if (fs.existsSync(CONFIG_PATH)) {
-      return JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8"));
-    }
-  } catch (e) { console.error(e); }
-  return {};
-};
-
-const saveConfig = (data: any) => {
-  try {
-    const current = loadConfig();
-    fs.writeFileSync(CONFIG_PATH, JSON.stringify({ ...current, ...data }, null, 2));
-  } catch (e) { console.error(e); }
-};
+const loadConfig = loadCardsGameplayConfig;
+const saveConfig = saveCardsGameplayConfigPatch;
 
 const refreshFlyoutMenu = () => {
   try {
@@ -500,19 +487,13 @@ export const LayoutsPanel: React.FC<Props> = ({
   // --- INIT ---
   useEffect(() => {
     const config = loadConfig();
-    const savedPath = normalizePath(config.savePath || "");
     const defaultLevelsPath = normalizePath(baseDirDefault || "");
 
-    if (savedPath && savedPath !== LEGACY_DEFAULT_LEVELS_DIR) {
-      setPersistentSavePath(savedPath);
-      setBaseDir(savedPath);
-    } else {
-      setPersistentSavePath(null);
-      setBaseDir(defaultLevelsPath || baseDirDefault);
-    }
+    setPersistentSavePath(null);
+    setBaseDir(defaultLevelsPath || baseDirDefault);
 
     if (config.cachePath) setCustomCachePath(normalizePath(config.cachePath));
-    setPersistentTutorialsPath(config.tutorialsPath ? normalizePath(config.tutorialsPath) : null);
+    setPersistentTutorialsPath(null);
     if (typeof config.trimCoveredCards === "boolean") setTrimCoveredCards(config.trimCoveredCards);
   }, [baseDirDefault]);
 
@@ -1380,8 +1361,11 @@ export const LayoutsPanel: React.FC<Props> = ({
       const newPath = normalizeAssetPath(result.data[0] || "");
       if (!newPath) return;
 
-      saveConfig({ assetEntryPoint: newPath });
+      saveConfig({ assetEntryPoint: newPath, savePath: "", tutorialsPath: "" });
       onAssetEntryPointChange(newPath);
+      setPersistentSavePath(null);
+      setBaseDir(getDefaultLevelsPath(newPath));
+      setPersistentTutorialsPath(null);
       refreshFlyoutMenu();
 
       const validation = validateAssetEntryPoint(newPath);
@@ -1395,6 +1379,10 @@ export const LayoutsPanel: React.FC<Props> = ({
 
   const handleOpenAssetsPath = () => {
     openFolderPath(assetRootPath, false);
+  };
+
+  const handleOpenAssetEntryPoint = () => {
+    openFolderPath(assetEntryPoint, false);
   };
 
   const handleOpenTutorialsPath = () => {
@@ -1551,16 +1539,16 @@ export const LayoutsPanel: React.FC<Props> = ({
                 <div className="layouts-settings-row">
                   <span
                     className="layouts-settings-label"
-                    title={assetRootPath || "Path not set"}
+                    title={assetEntryPoint || "Path not set"}
                   >
-                    Assets Path
+                    Entry Point
                   </span>
 
                   <div className="layouts-settings-actions">
                     <button
                       className="btn-open-folder"
-                      onClick={handleOpenAssetsPath}
-                      disabled={!assetRootExists}
+                      onClick={handleOpenAssetEntryPoint}
+                      disabled={!assetEntryPoint}
                     >
                       Open
                     </button>
@@ -1574,10 +1562,29 @@ export const LayoutsPanel: React.FC<Props> = ({
                   </div>
                 </div>
 
-                <div className="layouts-settings-row">
+                <div className="layouts-settings-row layouts-settings-derived-row">
                   <span
                     className="layouts-settings-label"
-                    title={remoteRootPath || "Path not set"}
+                    title={assetRootPath || "Derived from Entry Point"}
+                  >
+                    Assets Path
+                  </span>
+
+                  <div className="layouts-settings-actions">
+                    <button
+                      className="btn-open-folder"
+                      onClick={handleOpenAssetsPath}
+                      disabled={!assetRootExists}
+                    >
+                      Open
+                    </button>
+                  </div>
+                </div>
+
+                <div className="layouts-settings-row layouts-settings-derived-row">
+                  <span
+                    className="layouts-settings-label"
+                    title={remoteRootPath || "Derived from Entry Point"}
                   >
                     Levels Path
                   </span>
@@ -1590,20 +1597,13 @@ export const LayoutsPanel: React.FC<Props> = ({
                     >
                       Open
                     </button>
-
-                    <button
-                      className="btn-change"
-                      onClick={handleChangePath}
-                    >
-                      {remoteRootPath ? "Change" : "Set"}
-                    </button>
                   </div>
                 </div>
 
-                <div className="layouts-settings-row">
+                <div className="layouts-settings-row layouts-settings-derived-row">
                   <span
                     className="layouts-settings-label"
-                    title={tutorialsRootPath || "Path not set"}
+                    title={tutorialsRootPath || "Derived from Entry Point"}
                   >
                     Tutorials Path
                   </span>
@@ -1615,13 +1615,6 @@ export const LayoutsPanel: React.FC<Props> = ({
                       disabled={!tutorialsRootPath || !safeTrim(tutorialsRootPath)}
                     >
                       Open
-                    </button>
-
-                    <button
-                      className="btn-change"
-                      onClick={handleChangeTutorialsPath}
-                    >
-                      {tutorialsRootPath ? "Change" : "Set"}
                     </button>
                   </div>
                 </div>

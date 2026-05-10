@@ -1,7 +1,6 @@
 import React from "react";
 import { evalTS } from "../../../lib/utils/bolt";
-import { fs, os, path } from "../../../lib/cep/node";
-import { ensureAssetsReadyOrAlert, getCoinVfxPath } from "../../assetPaths";
+import { ensureAssetsReadyOrAlert, getCoinVfxPath, loadCardsGameplayConfig } from "../../assetPaths";
 import ClearIcon from "../../../assets/icons/clear.svg";
 import "./ActionsPanel.scss";
 
@@ -10,14 +9,9 @@ type Props = {
   coinValue: string; // NOVO: Recebendo a moeda escolhida
 };
 
-const CONFIG_FILE_NAME = ".cards-layout-config.json";
-
 const readTrimCoveredCardsPreference = (): boolean => {
   try {
-    const configPath = path.join(os.homedir(), CONFIG_FILE_NAME);
-    if (!fs.existsSync(configPath)) return true;
-
-    const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    const config = loadCardsGameplayConfig();
     if (config && typeof config.trimCoveredCards === "boolean") return config.trimCoveredCards;
     return true;
   } catch (_) {
