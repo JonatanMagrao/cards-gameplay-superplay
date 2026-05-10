@@ -511,6 +511,10 @@ const parseMarkerCommentDataObject = (comment: string): any => {
   return {};
 }
 
+const formatMarkerData = (data: any): string => {
+  return (JSON as any).stringify(data || {}, null, 2);
+}
+
 const compareLayerMarkersByTime = (a: LayerMarkerMeta, b: LayerMarkerMeta): number => {
   const timeDiff = a.time - b.time;
   if (Math.abs(timeDiff) > markerTimeTolerance) return timeDiff;
@@ -566,7 +570,7 @@ const writeActionOrderToMarker = (marker: LayerMarkerMeta, actionOrder: number):
   const markerValue = markerProp.keyValue(markerIndex) as MarkerValue;
   const markerData = parseMarkerCommentDataObject(markerValue.comment);
   markerData.actionOrder = actionOrder;
-  markerValue.comment = buildMarkerComment(markerAction, JSON.stringify(markerData));
+  markerValue.comment = buildMarkerComment(markerAction, formatMarkerData(markerData));
 
   markerProp.setValueAtKey(markerIndex, markerValue);
 }
@@ -586,7 +590,7 @@ const writeMarkerDataToMarker = (marker: LayerMarkerMeta, dataPatch: any): any =
     markerData[key] = dataPatch[key];
   }
 
-  markerValue.comment = buildMarkerComment(markerAction, JSON.stringify(markerData));
+  markerValue.comment = buildMarkerComment(markerAction, formatMarkerData(markerData));
   markerProp.setValueAtKey(markerIndex, markerValue);
   marker.comment = markerValue.comment;
 
@@ -921,6 +925,74 @@ const applyCoin = (camada: Layer, coinFilePath: string | undefined, coinTime: nu
 
 }
 
+const getJumpMarkerForLayer = (layer: Layer): LayerMarkerMeta | null => {
+  const layerMarkers = getLayerMarkersMetadata(layer);
+
+  for (let i = 0; i < layerMarkers.length; i++) {
+    if (getMarkerActionName(layerMarkers[i]) === "Jump") return layerMarkers[i];
+  }
+
+  return null;
+}
+
+const removeCoinVfxForLayer = (cardLayer: Layer): void => {
+  const expectedLayerName = `${coinVfxLayerNamePrefix} - ${cardLayer.name}`;
+  const fxCompNames = [fxPrecompName, legacySfxPrecompName];
+
+  for (let c = 0; c < fxCompNames.length; c++) {
+    const fxPrecomp = findCompItemByName(fxCompNames[c], false) as CompItem;
+    if (!fxPrecomp) continue;
+
+    for (let i = fxPrecomp.numLayers; i >= 1; i--) {
+      const layer = fxPrecomp.layer(i);
+      if (layer.name === expectedLayerName) layer.remove();
+    }
+  }
+}
+
+export const updateSelectedJumpCoinValue = (coinFilePath: string, coinValue: string) => {
+  const thisComp = requireActiveComp("Update Jump Coin");
+  if (!thisComp) return;
+
+  if (!thisComp.selectedLayers || thisComp.selectedLayers.length !== 1) {
+    alert("Select exactly one Tableau card with a Jump marker.");
+    return;
+  }
+
+  const selectedLayer = thisComp.selectedLayers[0];
+  if (getLayerCardTag(selectedLayer.name) !== "TABLEAU") {
+    alert("Select one Tableau card.");
+    return;
+  }
+
+  const jumpMarker = getJumpMarkerForLayer(selectedLayer);
+  if (!jumpMarker) {
+    alert('Selected Tableau card does not have a "Jump" marker.');
+    return;
+  }
+
+  const normalizedCoinValue = normalizeCoinValue(coinValue);
+  if (normalizedCoinValue === "") {
+    alert("Invalid coin value.");
+    return;
+  }
+
+  const targetCoinFilePath = getCoinFilePathForValue(coinFilePath, normalizedCoinValue);
+  if (!targetCoinFilePath || !ensureFootageItem(targetCoinFilePath, "Coin VFX")) return;
+
+  const compSnapshot = captureCompState(thisComp);
+
+  try {
+    writeMarkerDataToMarker(jumpMarker, { coinValue: normalizedCoinValue });
+    removeCoinVfxForLayer(selectedLayer);
+    applyCoin(selectedLayer, targetCoinFilePath, jumpMarker.time);
+  } catch (e) {
+    alertError(e, 209, "updateSelectedJumpCoinValue", "actions.ts")
+  } finally {
+    restoreCompState(thisComp, compSnapshot)
+  }
+}
+
 export const applyJumpOnSelectedlayers = (
   presetPath: string,
   coinFilePath: string,
@@ -981,7 +1053,7 @@ export const applyJumpOnSelectedlayers = (
       addMarkerToLayer(camada, thisTime, {
         title: "Jump",
         label: keyLabel.green,
-        data: JSON.stringify(jumpMarkerData),
+        data: formatMarkerData(jumpMarkerData),
       })
       setJumpTargetLayer(camada, targetLayer)
 

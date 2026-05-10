@@ -133,3 +133,23 @@
   border-radius: 6px;
   margin-top: 0.2rem;
 }
+
+.coin-update-button {
+  flex: 0 0 42px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid #4aa44c;
+  border-radius: 4px;
+  background: #20232a;
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.coin-update-button:hover {
+  background: #26362b;
+  border-color: #6bd56e;
+}

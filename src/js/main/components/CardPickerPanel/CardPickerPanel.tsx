@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { evalTS } from "../../../lib/utils/bolt";
 import { fs } from "../../../lib/cep/node";
-import { AssetPathBundle, ensureAssetsReadyOrAlert, joinAssetPath } from "../../assetPaths";
+import { AssetPathBundle, ensureAssetsReadyOrAlert, getCoinVfxPath, joinAssetPath } from "../../assetPaths";
 import "./CardPickerPanel.scss";
 
 type Props = {
@@ -96,6 +96,17 @@ export const CardPickerPanel: React.FC<Props> = ({
     } else {
       changeCard();
     }
+  };
+
+  const updateSelectedJumpCoinValue = async () => {
+    const readyAssets = await ensureAssetsReadyOrAlert(assetEntryPoint);
+    if (!readyAssets) return;
+
+    await evalTS(
+      "handleUpdateSelectedJumpCoinValue",
+      getCoinVfxPath(readyAssets, coinValue),
+      coinValue
+    );
   };
 
   // useEffect para a carta
@@ -218,11 +229,21 @@ export const CardPickerPanel: React.FC<Props> = ({
                 value={coinValue}
                 onChange={(e) => setCoinValue(e.target.value)}
                 className="field-input field-input--compact"
+                title="Coin Value"
               >
                 {coinOptions.map((val) => (
                   <option key={val} value={val}>+{val}</option>
                 ))}
               </select>
+              <button
+                type="button"
+                className="coin-update-button"
+                onClick={updateSelectedJumpCoinValue}
+                title="Update selected Jump coin"
+                aria-label="Update selected Jump coin"
+              >
+                Set
+              </button>
             </div>
           </div>
         )}

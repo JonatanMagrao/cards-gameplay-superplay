@@ -13,7 +13,8 @@ import {
   restoreCardsAnimation,
   prepareRestoreCardsAnimationAssets,
   groupCardsToControl,
-  clearCardsLevel
+  clearCardsLevel,
+  updateSelectedJumpCoinValue
 } from "./actions";
 import { requireActiveComp } from "./aeft-utils";
 import { clearLayerExpressions, distributeLayers, forEachSelectedLayer } from "./aeft-utils-jonatan";
@@ -387,6 +388,20 @@ export const handleApplyJump = (
     applyJumpOnSelectedlayers(presetPath, coinFilePath, sfxFolderPath, controlPresetPath, trimCoveredCards === true, coinValue)
   } catch (e) {
     alertError(e, 93, "handleApplyJump", "aeft.ts")
+  } finally {
+    app.endUndoGroup()
+  }
+}
+
+export const handleUpdateSelectedJumpCoinValue = (
+  coinFilePath: string,
+  coinValue: string
+) => {
+  app.beginUndoGroup("Update Jump Coin")
+  try {
+    updateSelectedJumpCoinValue(coinFilePath, coinValue)
+  } catch (e) {
+    alertError(e, 94, "handleUpdateSelectedJumpCoinValue", "aeft.ts")
   } finally {
     app.endUndoGroup()
   }

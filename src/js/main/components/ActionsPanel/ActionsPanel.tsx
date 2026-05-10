@@ -15,12 +15,13 @@ const CONFIG_FILE_NAME = ".cards-layout-config.json";
 const readTrimCoveredCardsPreference = (): boolean => {
   try {
     const configPath = path.join(os.homedir(), CONFIG_FILE_NAME);
-    if (!fs.existsSync(configPath)) return false;
+    if (!fs.existsSync(configPath)) return true;
 
     const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-    return config && config.trimCoveredCards === true;
+    if (config && typeof config.trimCoveredCards === "boolean") return config.trimCoveredCards;
+    return true;
   } catch (_) {
-    return false;
+    return true;
   }
 };
 
