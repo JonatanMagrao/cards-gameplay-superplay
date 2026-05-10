@@ -57,6 +57,7 @@ const cardsControlFxDisplayName = "Cards Gameplay Control"
 const cardsGroupControlLayerName = "Cards Group Control"
 const cardsLayoutOriginSchema = "cards-gameplay.layout-origin.v1"
 const coinVfxLayerNamePrefix = "Coin VFX"
+const defaultCoinValueSequence = ["02", "04", "06", "08", "10", "15", "20", "25"]
 const jumpSfxFilePrefix = "jump_sfx_"
 const jumpSfxFileExtension = ".wav"
 const jumpSfxMaxScanCount = 99
@@ -227,6 +228,18 @@ const getFileNameFromPath = (filePath: string): string => {
   return pathText.substring(lastSeparatorIndex + 1);
 }
 
+const getFolderPathFromFilePath = (filePath: string | undefined): string => {
+  const pathText = String(filePath || "");
+  let lastSeparatorIndex = -1;
+
+  for (let i = 0; i < pathText.length; i++) {
+    const char = pathText.charAt(i);
+    if (char === "/" || char === "\\") lastSeparatorIndex = i;
+  }
+
+  return lastSeparatorIndex < 0 ? "" : pathText.substring(0, lastSeparatorIndex);
+}
+
 const joinPath = (folderPath: string | undefined, fileName: string): string => {
   const folder = String(folderPath || "");
   if (folder === "") return fileName;
@@ -243,6 +256,114 @@ const getNumberedSfxFileName = (prefix: string, fileNumber: number): string => {
     : String(fileNumber);
 
   return `${prefix}${numberText}${jumpSfxFileExtension}`;
+}
+
+const normalizeCoinValue = (coinValue: string | undefined): string => {
+  const valueText = String(coinValue || "").replace(/^\s+|\s+$/g, "");
+  if (valueText === "") return "";
+
+  const match = valueText.match(/\d+/);
+  const digits = match ? match[0] : valueText;
+  const parsed = parseInt(digits, 10);
+
+  if (!isNaN(parsed) && parsed > 0 && parsed < 10 && digits.length === 1) {
+    return `0${parsed}`;
+  }
+
+  return digits;
+}
+
+const getCoinValueFromFilePath = (coinFilePath: string | undefined): string => {
+  const fileName = getFileNameFromPath(String(coinFilePath || ""));
+  const match = fileName.match(/coin_plus-([^\.]+)\.mov$/i);
+
+  return match ? normalizeCoinValue(match[1]) : "";
+}
+
+const addUniqueNormalizedCoinValue = (coinValues: string[], coinValue: string | undefined): void => {
+  const normalizedCoinValue = normalizeCoinValue(coinValue);
+  if (normalizedCoinValue === "") return;
+
+  for (let i = 0; i < coinValues.length; i++) {
+    if (coinValues[i] === normalizedCoinValue) return;
+  }
+
+  coinValues.push(normalizedCoinValue);
+}
+
+const getDefaultCoinValueSequence = (): string[] => {
+  const values: string[] = [];
+
+  for (let i = 0; i < defaultCoinValueSequence.length; i++) {
+    values.push(defaultCoinValueSequence[i]);
+  }
+
+  return values;
+}
+
+const getCoinValueSequence = (baseCoinFilePath: string | undefined): string[] => {
+  const coinFolderPath = getFolderPathFromFilePath(baseCoinFilePath);
+  const values: string[] = [];
+
+  if (coinFolderPath !== "") {
+    try {
+      const coinFolder = new Folder(coinFolderPath);
+      if (coinFolder.exists) {
+        const coinFiles = coinFolder.getFiles("coin_plus-*.mov");
+
+        for (let i = 0; i < coinFiles.length; i++) {
+          const coinFile = coinFiles[i];
+          const coinFileName = coinFile instanceof File
+            ? coinFile.name
+            : getFileNameFromPath(String(coinFile));
+          const match = coinFileName.match(/coin_plus-([^\.]+)\.mov$/i);
+
+          if (match) addUniqueNormalizedCoinValue(values, match[1]);
+        }
+      }
+    } catch (_) { }
+  }
+
+  if (values.length === 0) return getDefaultCoinValueSequence();
+
+  values.sort((a, b) => {
+    const aNumber = parseInt(a, 10);
+    const bNumber = parseInt(b, 10);
+
+    if (!isNaN(aNumber) && !isNaN(bNumber) && aNumber !== bNumber) {
+      return aNumber - bNumber;
+    }
+
+    return a < b ? -1 : a > b ? 1 : 0;
+  });
+
+  return values;
+}
+
+const getCoinValueForSequence = (
+  baseCoinFilePath: string | undefined,
+  sequenceIndex: number,
+  fallbackCoinValue?: string
+): string => {
+  const coinValues = getCoinValueSequence(baseCoinFilePath);
+  const safeSequenceIndex = sequenceIndex < 1 ? 1 : Math.floor(sequenceIndex);
+
+  if (coinValues.length > 0) {
+    const wrappedIndex = ((safeSequenceIndex - 1) % coinValues.length);
+    return coinValues[wrappedIndex];
+  }
+
+  return normalizeCoinValue(fallbackCoinValue) || getCoinValueFromFilePath(baseCoinFilePath);
+}
+
+const getCoinFilePathForValue = (baseCoinFilePath: string | undefined, coinValue: string | undefined): string | undefined => {
+  const normalizedCoinValue = normalizeCoinValue(coinValue);
+  if (normalizedCoinValue === "") return baseCoinFilePath;
+
+  const coinFolderPath = getFolderPathFromFilePath(baseCoinFilePath);
+  if (coinFolderPath === "") return baseCoinFilePath;
+
+  return joinPath(coinFolderPath, `coin_plus-${normalizedCoinValue}.mov`);
 }
 
 const getJumpSfxVariationCount = (sfxFolderPath?: string): number => {
@@ -450,6 +571,28 @@ const writeActionOrderToMarker = (marker: LayerMarkerMeta, actionOrder: number):
   markerProp.setValueAtKey(markerIndex, markerValue);
 }
 
+const writeMarkerDataToMarker = (marker: LayerMarkerMeta, dataPatch: any): any => {
+  const markerAction = getMarkerActionName(marker);
+  const markerProp = marker.layer.property(markerPropPath) as Property;
+  if (!markerProp) return parseMarkerCommentDataObject(marker.comment);
+
+  const markerIndex = getLayerMarkerKeyIndexAtTimeAndAction(marker.layer, marker.time, markerAction);
+  if (markerIndex === null) return parseMarkerCommentDataObject(marker.comment);
+
+  const markerValue = markerProp.keyValue(markerIndex) as MarkerValue;
+  const markerData = parseMarkerCommentDataObject(markerValue.comment);
+
+  for (const key in dataPatch) {
+    markerData[key] = dataPatch[key];
+  }
+
+  markerValue.comment = buildMarkerComment(markerAction, JSON.stringify(markerData));
+  markerProp.setValueAtKey(markerIndex, markerValue);
+  marker.comment = markerValue.comment;
+
+  return markerData;
+}
+
 const stampActionMarkerOrders = (): void => {
   const actionMarkers = getActionSequenceMarkers();
 
@@ -481,6 +624,44 @@ const getNextJumpSfxSequenceIndexAtTime = (time: number): number => {
 const applyJumpSfx = (comp: CompItem, sfxTime: number, sfxFolderPath: string | undefined, sequenceIndex: number) => {
   const jumpSfxFileName = getJumpSfxFileNameForSequence(sfxFolderPath, sequenceIndex);
   applySfx(comp, sfxTime, joinPath(sfxFolderPath, jumpSfxFileName), keyLabel.green);
+}
+
+const getJumpMarkerData = (
+  coinFilePath: string | undefined,
+  coinValue: string | undefined,
+  sequenceIndex: number
+): any => {
+  const markerCoinValue = getCoinValueForSequence(coinFilePath, sequenceIndex, coinValue);
+
+  const data: any = {};
+
+  if (markerCoinValue !== "") data.coinValue = markerCoinValue;
+
+  return data;
+}
+
+const ensureJumpMarkerPlaybackData = (
+  marker: LayerMarkerMeta,
+  coinFilePath: string | undefined,
+  fallbackSequenceIndex: number
+): any => {
+  const markerData = parseMarkerCommentDataObject(marker.comment);
+  const existingCoinValue = normalizeCoinValue(markerData.coinValue);
+  const expectedCoinValue = getCoinValueForSequence(coinFilePath, fallbackSequenceIndex);
+  const resolvedCoinValue = expectedCoinValue || existingCoinValue;
+  const dataPatch: any = {};
+  let shouldWrite = false;
+
+  if (resolvedCoinValue !== "" && existingCoinValue !== resolvedCoinValue) {
+    dataPatch.coinValue = resolvedCoinValue;
+    shouldWrite = true;
+  }
+
+  if (shouldWrite) writeMarkerDataToMarker(marker, dataPatch);
+
+  markerData.coinValue = resolvedCoinValue;
+
+  return markerData;
 }
 
 const cardFxDisplayName = "Cards Gameplay Superplay"
@@ -745,7 +926,8 @@ export const applyJumpOnSelectedlayers = (
   coinFilePath: string,
   sfxFolderPath?: string,
   controlPresetPath?: string,
-  trimCoveredCards: boolean = false
+  trimCoveredCards: boolean = false,
+  coinValue?: string
 ) => {
 
   const thisComp = requireActiveComp("Apply Jump");
@@ -788,13 +970,19 @@ export const applyJumpOnSelectedlayers = (
       //@ts-ignore
       camada.threeDLayer = true
 
-      applyCoin(camada, coinFilePath, thisTime)
+      const jumpMarkerData = getJumpMarkerData(coinFilePath, coinValue, jumpSfxSequenceIndex)
+      const jumpCoinFilePath = getCoinFilePathForValue(coinFilePath, jumpMarkerData.coinValue)
+      applyCoin(camada, jumpCoinFilePath, thisTime)
 
       jumpPos(camada)
       jumpScale(camada)
       jumpRotation(camada)
 
-      addMarkerToLayer(camada, thisTime, { title: "Jump", label: keyLabel.green })
+      addMarkerToLayer(camada, thisTime, {
+        title: "Jump",
+        label: keyLabel.green,
+        data: JSON.stringify(jumpMarkerData),
+      })
       setJumpTargetLayer(camada, targetLayer)
 
       applyJumpSfx(thisComp, thisTime, sfxFolderPath, jumpSfxSequenceIndex)
@@ -846,26 +1034,57 @@ const ensureExpressionLibProjectItem = (expressionLibPath?: string): FootageItem
   return importedItem;
 }
 
-const getRestoreActionRequirements = (): { hasJump: boolean; hasFlipStock: boolean } => {
-  const requirements = {
+type RestoreActionRequirements = {
+  hasJump: boolean;
+  hasFlipStock: boolean;
+  coinValues: string[];
+}
+
+const addUniqueCoinValue = (coinValues: string[], coinValue: string | undefined): void => {
+  const normalizedCoinValue = normalizeCoinValue(coinValue);
+  if (normalizedCoinValue === "") return;
+
+  for (let i = 0; i < coinValues.length; i++) {
+    if (coinValues[i] === normalizedCoinValue) return;
+  }
+
+  coinValues.push(normalizedCoinValue);
+}
+
+const getMarkerCoinValue = (marker: LayerMarkerMeta): string => {
+  const markerData = parseMarkerCommentDataObject(marker.comment);
+  return normalizeCoinValue(markerData.coinValue);
+}
+
+const getRestoreActionRequirements = (coinFilePath?: string): RestoreActionRequirements => {
+  const requirements: RestoreActionRequirements = {
     hasJump: false,
     hasFlipStock: false,
+    coinValues: [],
   };
 
   const thisComp = requireActiveComp("Prepare Restore Assets", false);
   if (!thisComp) return requirements;
 
-  const cardsLayers = findCardLayers();
+  const actionMarkers = getActionSequenceMarkers();
+  let jumpSequenceIndex = 1;
 
-  for (let i = 0; i < cardsLayers.length; i++) {
-    const layerMarkers = getLayerMarkersMetadata(cardsLayers[i]);
+  for (let i = 0; i < actionMarkers.length; i++) {
+    const marker = actionMarkers[i];
+    const markerAction = getMarkerActionName(marker);
 
-    for (let j = 0; j < layerMarkers.length; j++) {
-      const markerAction = getMarkerActionName(layerMarkers[j]);
+    if (markerAction === "Jump") {
+      const markerCoinValue = getMarkerCoinValue(marker);
+      const resolvedCoinValue = getCoinValueForSequence(coinFilePath, jumpSequenceIndex) || markerCoinValue;
 
-      if (markerAction === "Jump") requirements.hasJump = true;
-      if (markerAction === "Flip Stock") requirements.hasFlipStock = true;
-      if (requirements.hasJump && requirements.hasFlipStock) return requirements;
+      requirements.hasJump = true;
+      addUniqueCoinValue(requirements.coinValues, resolvedCoinValue);
+      jumpSequenceIndex++;
+    }
+
+    if (markerAction === "Flip Stock") {
+      requirements.hasFlipStock = true;
+      jumpSequenceIndex = 1;
     }
   }
 
@@ -896,7 +1115,7 @@ export const prepareRestoreCardsAnimationAssets = (
   const thisComp = requireActiveComp("Prepare Restore Assets", false);
   if (!thisComp) return true;
 
-  const requirements = getRestoreActionRequirements();
+  const requirements = getRestoreActionRequirements(coinFilePath);
   let ready = true;
 
   if (requirements.hasJump || requirements.hasFlipStock) {
@@ -904,7 +1123,15 @@ export const prepareRestoreCardsAnimationAssets = (
   }
 
   if (requirements.hasJump) {
-    if (coinFilePath && !ensureFootageItem(coinFilePath, "Coin VFX")) ready = false;
+    if (coinFilePath && requirements.coinValues.length > 0) {
+      for (let i = 0; i < requirements.coinValues.length; i++) {
+        const markerCoinFilePath = getCoinFilePathForValue(coinFilePath, requirements.coinValues[i]);
+        if (markerCoinFilePath && !ensureFootageItem(markerCoinFilePath, "Coin VFX")) ready = false;
+      }
+    } else if (coinFilePath && !ensureFootageItem(coinFilePath, "Coin VFX")) {
+      ready = false;
+    }
+
     if (!prepareJumpSfxItems(sfxFolderPath)) ready = false;
   }
 
@@ -1863,6 +2090,8 @@ export const restoreCardsAnimation = (
     const cardAction = getMarkerActionName(card)
 
     if (cardAction === "Jump") {
+      const jumpMarkerData = ensureJumpMarkerPlaybackData(card, coinFilePath, jumpSfxSequenceIndex)
+      const savedCoinFilePath = getCoinFilePathForValue(coinFilePath, jumpMarkerData.coinValue)
 
       card.layer.selected = true
 
@@ -1871,7 +2100,7 @@ export const restoreCardsAnimation = (
       jumpScale(card.layer)
       jumpRotation(card.layer)
       setJumpTargetLayer(card.layer, targetLayer)
-      applyCoin(card.layer, coinFilePath, card.time)
+      applyCoin(card.layer, savedCoinFilePath, card.time)
       applyJumpSfx(thisComp, card.time, sfxFolderPath, jumpSfxSequenceIndex)
       jumpSfxSequenceIndex++
 

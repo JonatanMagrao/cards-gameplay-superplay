@@ -34,6 +34,7 @@ const THUMBNAIL_JPEG_QUALITY = 0.82;
 const LAYOUT_ORIGIN_SCHEMA = "cards-gameplay.layout-origin.v1";
 const CANONICAL_LAYOUT_JSON_NAME = "layout.json";
 const CANONICAL_THUMBNAIL_NAME = "thumbnail.jpg";
+const LEGACY_RESOLUTION_ASSET_RE = /^\d{2,5}x\d{2,5}\.(json|jpe?g|png)$/i;
 const LEGACY_DEFAULT_LEVELS_DIR = path.join(HOME_DIR, "Documents", "cards-level-layouts").replace(/\\/g, "/");
 
 // Helpers
@@ -196,6 +197,16 @@ const getLevelPreviewPath = (rootPath: string, levelFolder: string, preferredRes
   const levelFolderPath = `${rootPath.replace(/\\/g, "/")}/${levelFolder}`;
   if (!fs.existsSync(levelFolderPath)) return null;
 
+  const canonicalPreviewPaths = [
+    `${levelFolderPath}/${CANONICAL_THUMBNAIL_NAME}`,
+    `${levelFolderPath}/thumbnail.jpeg`,
+    `${levelFolderPath}/thumbnail.png`,
+  ];
+
+  for (let i = 0; i < canonicalPreviewPaths.length; i++) {
+    if (fs.existsSync(canonicalPreviewPaths[i])) return canonicalPreviewPaths[i];
+  }
+
   if (preferredResolution) {
     const preferredJpgPath = `${levelFolderPath}/${preferredResolution}.jpg`;
     const preferredJpegPath = `${levelFolderPath}/${preferredResolution}.jpeg`;
@@ -277,6 +288,46 @@ const getFileNameFromPath = (filePath: string): string => {
   return parts[parts.length - 1] || normalized;
 };
 
+const createTempSiblingPath = (targetPath: string, suffix: string): string => {
+  const folderPath = normalizePath(path.dirname(targetPath));
+  const fileName = getFileNameFromPath(targetPath);
+  const unique = `${Date.now()}-${Math.round(Math.random() * 1000000)}`;
+  return normalizePath(path.join(folderPath, `.${fileName}.${unique}.${suffix}`));
+};
+
+const replaceFileWithTemp = (tempPath: string, targetPath: string): void => {
+  if (!tempPath || !targetPath) return;
+
+  try {
+    fs.renameSync(tempPath, targetPath);
+  } catch (e) {
+    if (!fs.existsSync(targetPath)) throw e;
+    fs.unlinkSync(targetPath);
+    fs.renameSync(tempPath, targetPath);
+  }
+};
+
+const deleteLegacyResolutionAssets = (levelFolderPath: string): void => {
+  try {
+    if (!levelFolderPath || !fs.existsSync(levelFolderPath)) return;
+
+    const entries = fs.readdirSync(levelFolderPath) as string[];
+    for (let i = 0; i < entries.length; i++) {
+      const entryName = entries[i];
+      if (!LEGACY_RESOLUTION_ASSET_RE.test(entryName)) continue;
+
+      const filePath = normalizePath(path.join(levelFolderPath, entryName));
+      try {
+        if (fs.statSync(filePath).isFile()) fs.unlinkSync(filePath);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  } catch (e) {
+    console.error(e);
+  }
+};
+
 const getLevelLabelFromFolderName = (levelFolder: string): string => {
   return String(levelFolder || "").replace(/^lvl_/, "");
 };
@@ -322,6 +373,11 @@ const getResolutionFallbackScore = (candidate: string, preferred: string): numbe
 
 const getLevelJsonPath = (levelFolderPath: string, preferredResolution: string): LevelJsonPath | null => {
   if (!levelFolderPath || !fs.existsSync(levelFolderPath)) return null;
+
+  const canonicalJsonPath = normalizePath(path.join(levelFolderPath, CANONICAL_LAYOUT_JSON_NAME));
+  if (fs.existsSync(canonicalJsonPath)) {
+    return { filePath: canonicalJsonPath, isExactResolution: false };
+  }
 
   if (preferredResolution) {
     const exactPath = `${levelFolderPath}/${preferredResolution}.json`;
@@ -868,14 +924,26 @@ export const LayoutsPanel: React.FC<Props> = ({
       tags,
     };
 
-    await convertImageToJpeg(
-      tempThumbnailPath,
-      thumbnailPath,
-      THUMBNAIL_MAX_SIDE,
-      THUMBNAIL_JPEG_QUALITY
-    );
+    const tempCanonicalThumbnailPath = createTempSiblingPath(thumbnailPath, "jpg");
+    const tempCanonicalJsonPath = createTempSiblingPath(jsonPath, "json");
 
-    fs.writeFileSync(jsonPath, JSON.stringify(layoutToSave, null, 2), "utf-8");
+    try {
+      await convertImageToJpeg(
+        tempThumbnailPath,
+        tempCanonicalThumbnailPath,
+        THUMBNAIL_MAX_SIDE,
+        THUMBNAIL_JPEG_QUALITY
+      );
+
+      fs.writeFileSync(tempCanonicalJsonPath, JSON.stringify(layoutToSave, null, 2), "utf-8");
+      replaceFileWithTemp(tempCanonicalThumbnailPath, thumbnailPath);
+      replaceFileWithTemp(tempCanonicalJsonPath, jsonPath);
+      deleteLegacyResolutionAssets(levelFolderPath);
+    } catch (e) {
+      deleteFileIfExists(tempCanonicalThumbnailPath);
+      deleteFileIfExists(tempCanonicalJsonPath);
+      throw e;
+    }
 
     try {
       const cacheResult = await syncSingleLayoutToCache(rootPath, levelFolderName, customCachePath);

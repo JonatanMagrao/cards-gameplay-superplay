@@ -379,11 +379,12 @@ export const handleApplyJump = (
   coinFilePath: string,
   sfxFolderPath?: string,
   controlPresetPath?: string,
-  trimCoveredCards?: boolean
+  trimCoveredCards?: boolean,
+  coinValue?: string
 ) => {
   app.beginUndoGroup("Apply Jump")
   try {
-    applyJumpOnSelectedlayers(presetPath, coinFilePath, sfxFolderPath, controlPresetPath, trimCoveredCards === true)
+    applyJumpOnSelectedlayers(presetPath, coinFilePath, sfxFolderPath, controlPresetPath, trimCoveredCards === true, coinValue)
   } catch (e) {
     alertError(e, 93, "handleApplyJump", "aeft.ts")
   } finally {

@@ -39,7 +39,8 @@ export const ActionsPanel: React.FC<Props> = ({ assetEntryPoint, coinValue }) =>
       getCoinVfxPath(readyAssets, coinValue),
       readyAssets.sfxFolderPath,
       readyAssets.cardsControlPresetPath,
-      readTrimCoveredCardsPreference()
+      readTrimCoveredCardsPreference(),
+      coinValue
     );
   };
 

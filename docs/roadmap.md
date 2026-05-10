@@ -1,5 +1,6 @@
 | feature                                                                                                                           | status |
 |-----------------------------------------------------------------------------------------------------------------------------------|--------|
+| manter apenas uma resolução e level json por layout (atualmente está salvando imagem e json para cada resolução)                  | ⬜      |
 | revalidar o fluxo (uso, aplicação, animação) e tutorial da carta plus                                                             | ⬜      |
 | create documentation                                                                                                              | ⬜      |
 | ------------------------------------------------------------------------------                                                    | ⬜      |
