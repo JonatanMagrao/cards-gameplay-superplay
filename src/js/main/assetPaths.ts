@@ -59,10 +59,12 @@ const requiredFolders = [
   "ui-assets",
 ];
 
+const cardsJumpPresetRelativePath = "presets/cards_gameplay_jump.ffx";
+
 const baseRequiredFiles = [
   "disney_solitaire_cards.aepx",
   "presets/cards-gameplay-control.ffx",
-  "presets/cards_gameplay_superplay.ffx",
+  cardsJumpPresetRelativePath,
   "presets/cards_gameplay_progressbar.ffx",
   "expressions/superplay-expression-lib.jsx",
   "progress-bar/bluebar.png",
@@ -184,7 +186,7 @@ export const getAssetPaths = (assetEntryPoint: string): AssetPathBundle => {
     assetRoot,
     cardProject: fromRoot("disney_solitaire_cards.aepx"),
     cardsControlPresetPath: fromRoot("presets/cards-gameplay-control.ffx"),
-    cardsPresetPath: fromRoot("presets/cards_gameplay_superplay.ffx"),
+    cardsPresetPath: fromRoot(cardsJumpPresetRelativePath),
     progressBarPresetPath: fromRoot("presets/cards_gameplay_progressbar.ffx"),
     expressionLibPath: fromRoot("expressions/superplay-expression-lib.jsx"),
     sfxFolderPath: fromRoot("sfx"),

@@ -14,7 +14,8 @@ import {
   prepareRestoreCardsAnimationAssets,
   groupCardsToControl,
   clearCardsLevel,
-  updateSelectedJumpCoinValue
+  updateSelectedJumpCoinValue,
+  cardFxMatchName
 } from "./actions";
 import { requireActiveComp } from "./aeft-utils";
 import { clearLayerExpressions, distributeLayers, forEachSelectedLayer } from "./aeft-utils-jonatan";
@@ -23,7 +24,7 @@ import { alertError } from "./errors";
 import { addProgressBar } from "./progressBar-utils";
 
 const cardsFolderName = "Disney Solitaire Cards"
-const presetMatchName = "Pseudo/cards_gameplay_superplay"
+const presetMatchName = cardFxMatchName
 // const precompRenderer = "ADBE Calder"
 
 const getFileNameFromPath = (filePath: string): string => {

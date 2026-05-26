@@ -44,7 +44,11 @@ export const keyLabel = {
   darkGreen: 16
 } as const
 
-const cardFxMatchName = "Pseudo/cards_gameplay_superplay"
+export const cardFxMatchName = "Pseudo/cards_superplay_jump"
+const cardFxLegacyMatchNames = [
+  "Pseudo/cards_gameplay_jump",
+  "Pseudo/cards_gameplay_superplay",
+]
 export const cardsControlFxMatchName = "Pseudo/cards_gameplay_control"
 export const cardsControlPresetFileName = "cards-gameplay-control.ffx"
 const fxPrecompName = "FX Precomp"
@@ -114,6 +118,8 @@ export const progressBarEPPath = [essentialPropertiesMatchName, "Bar Control"] a
 export const textPropPath = ["ADBE Text Properties", "ADBE Text Document"] as const
 
 export const superplayCardEffect = [layerEffect, cardFxMatchName]
+
+const cardFxMatchNames = [cardFxMatchName].concat(cardFxLegacyMatchNames)
 
 
 //================================= TABLEAU JUMP ACTIONS
@@ -673,7 +679,12 @@ const ensureJumpMarkerPlaybackData = (
   return markerData;
 }
 
-const cardFxDisplayName = "Cards Gameplay Superplay"
+const cardFxDisplayName = "Cards Superplay Jump"
+const cardFxLegacyDisplayNames = [
+  "Cards Gameplay Jump",
+  "Cards Gameplay Superplay",
+]
+const cardFxDisplayNames = [cardFxDisplayName].concat(cardFxLegacyDisplayNames)
 const trimBounceThresholdPx = 0.5
 const trimMinSettleFrames = 2
 const trimDefaultSettleFrames = 10
@@ -685,7 +696,7 @@ const clampNumber = (value: number, minValue: number, maxValue: number): number 
 }
 
 const getCardEffectProp = (layer: Layer, propName: string): Property | null => {
-  const cardEffect = getEffectByNameOrMatchName(layer, cardFxDisplayName, cardFxMatchName)
+  const cardEffect = getCardEffect(layer)
   if (!cardEffect) return null
 
   try {
@@ -899,13 +910,14 @@ export const jumpRotation = (camada: Layer) => {
 }
 
 export const setJumpTargetLayer = (camada: Layer, targetLayer: Layer) => {
+  const cardEffect = getCardEffect(camada)
+  if (!cardEffect) return
 
-  camada
-    .property("ADBE Effect Parade")
-    .property(cardFxMatchName)
-    .property("Target Layer")
-    //@ts-ignore
-    .setValue(targetLayer.index)
+  const targetLayerProp = cardEffect.property("Target Layer") as Property
+  if (!targetLayerProp) return
+
+  //@ts-ignore
+  targetLayerProp.setValue(targetLayer.index)
 }
 
 const applyCoin = (camada: Layer, coinFilePath: string | undefined, coinTime: number) => {
@@ -1033,7 +1045,7 @@ export const applyJumpOnSelectedlayers = (
     for (let i = 0; i < selectedLayers.length; i++) {
       const camada = selectedLayers[i]
 
-      if (!fxExistsByMatchName(camada, cardFxMatchName)) camada.applyPreset(new File(presetPath))
+      if (!cardFxExists(camada)) camada.applyPreset(new File(presetPath))
       if (namedMarkerExists(camada, "Jump")) {
         alert([
           'This card already has a "Jump" marker:',
@@ -1284,6 +1296,59 @@ const getEffectByNameOrMatchName = (
   }
 
   return null;
+}
+
+function includesString(values: string[], value: string): boolean {
+  for (let i = 0; i < values.length; i++) {
+    if (values[i] === value) return true;
+  }
+
+  return false;
+}
+
+function getEffectByNamesOrMatchNames(
+  layer: Layer,
+  effectNames: string[],
+  effectMatchNames: string[]
+): PropertyGroup | null {
+  const effects = layer.property(layerEffect) as PropertyGroup;
+  if (!effects) return null;
+
+  for (let i = 0; i < effectMatchNames.length; i++) {
+    try {
+      const effect = effects.property(effectMatchNames[i]) as PropertyGroup;
+      if (effect) return effect;
+    } catch (_) { }
+  }
+
+  for (let i = 0; i < effectNames.length; i++) {
+    try {
+      const effect = effects.property(effectNames[i]) as PropertyGroup;
+      if (effect) return effect;
+    } catch (_) { }
+  }
+
+  for (let i = 1; i <= effects.numProperties; i++) {
+    const effect = effects.property(i) as PropertyGroup;
+    if (!effect) continue;
+    if (includesString(effectNames, effect.name) || includesString(effectMatchNames, effect.matchName)) {
+      return effect;
+    }
+  }
+
+  return null;
+}
+
+function getCardEffect(layer: Layer): PropertyGroup | null {
+  return getEffectByNamesOrMatchNames(layer, cardFxDisplayNames, cardFxMatchNames);
+}
+
+function cardFxExists(layer: Layer): boolean {
+  for (let i = 0; i < cardFxMatchNames.length; i++) {
+    if (fxExistsByMatchName(layer, cardFxMatchNames[i])) return true;
+  }
+
+  return getCardEffect(layer) !== null;
 }
 
 const getCardsControlEffect = (layer: Layer): PropertyGroup | null => {
@@ -2170,7 +2235,7 @@ export const restoreCardsAnimation = (
 
       card.layer.selected = true
 
-      if (!fxExistsByMatchName(card.layer, presetMatchName)) card.layer.applyPreset(new File(presetPath))
+      if (!cardFxExists(card.layer)) card.layer.applyPreset(new File(presetPath))
       jumpPos(card.layer)
       jumpScale(card.layer)
       jumpRotation(card.layer)

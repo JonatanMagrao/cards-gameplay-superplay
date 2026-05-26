@@ -7,6 +7,7 @@ import { keyRegisterOverride, dropDisable } from "./cep";
 const VIDEO_TUTORIALS_RELATIVE_PATH = "Creative_Marketing_Assets/GENERAL-ASSETS/Plugins/Cards Gameplay/video-tutorials";
 const EXTENSION_RELEASES_RELATIVE_PATH = VIDEO_TUTORIALS_RELATIVE_PATH.replace(/\/video-tutorials$/, "/extension-releases");
 const VIDEO_FILE_PATTERN = /\.(mp4|mov|m4v)$/i;
+const TUTORIAL_PREFIX_PATTERN = /^(\d+(?:\.\d+)?)[\s_-]+/;
 const ZXP_FILE_PATTERN = /\.zxp$/i;
 const TEXT_FILE_PATTERN = /\.txt$/i;
 const VERSION_PATTERN = /v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?/g;
@@ -317,15 +318,37 @@ const getReleaseNotesInfo = (): ReleaseNotesInfo => {
   return defaultInfo;
 };
 
-const getTutorialSortNumber = (fileName: string): number => {
-  const match = String(fileName || "").match(/^(\d+)[\s_-]+/);
-  return match ? parseInt(match[1], 10) : Number.MAX_SAFE_INTEGER;
+const getTutorialSortParts = (fileName: string): number[] => {
+  const match = String(fileName || "").match(TUTORIAL_PREFIX_PATTERN);
+  if (!match) return [Number.MAX_SAFE_INTEGER];
+
+  const rawParts = match[1].split(".");
+  const parts: number[] = [];
+
+  for (let i = 0; i < rawParts.length; i++) {
+    const part = parseInt(rawParts[i], 10);
+    parts.push(isNaN(part) ? 0 : part);
+  }
+
+  return parts.length ? parts : [Number.MAX_SAFE_INTEGER];
+};
+
+const compareTutorialSortParts = (a: number[], b: number[]): number => {
+  const maxLength = Math.max(a.length, b.length);
+
+  for (let i = 0; i < maxLength; i++) {
+    const partA = i < a.length ? a[i] : 0;
+    const partB = i < b.length ? b[i] : 0;
+    if (partA !== partB) return partA - partB;
+  }
+
+  return 0;
 };
 
 const getTutorialLabel = (fileName: string): string => {
   const baseName = String(fileName || "")
     .replace(/\.[^.]+$/g, "")
-    .replace(/^\d+[\s_-]+/g, "")
+    .replace(TUTORIAL_PREFIX_PATTERN, "")
     .replace(/[-_]+/g, " ")
     .replace(/\s+/g, " ")
     .replace(/^\s+|\s+$/g, "");
@@ -349,9 +372,10 @@ const getTutorialFiles = (): { label: string; filePath: string }[] => {
     const fileNames = (fs.readdirSync(tutorialsPath) as string[])
       .filter(fileName => VIDEO_FILE_PATTERN.test(fileName))
       .sort((a, b) => {
-        const sortA = getTutorialSortNumber(a);
-        const sortB = getTutorialSortNumber(b);
-        if (sortA !== sortB) return sortA - sortB;
+        const sortA = getTutorialSortParts(a);
+        const sortB = getTutorialSortParts(b);
+        const sortResult = compareTutorialSortParts(sortA, sortB);
+        if (sortResult !== 0) return sortResult;
         return a.toLowerCase() < b.toLowerCase() ? -1 : 1;
       });
 

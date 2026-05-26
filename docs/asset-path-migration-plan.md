@@ -133,7 +133,7 @@ Validar arquivos obrigatorios:
 ```txt
 disney_solitaire_cards.aepx
 presets/cards-gameplay-control.ffx
-presets/cards_gameplay_superplay.ffx
+presets/cards_gameplay_jump.ffx
 presets/cards_gameplay_progressbar.ffx
 expressions/superplay-expression-lib.jsx
 progress-bar/bluebar.png
@@ -226,7 +226,7 @@ Itens faltando:
 Assets validation failed.
 
 Missing required items:
-- presets/cards_gameplay_superplay.ffx
+- presets/cards_gameplay_jump.ffx
 - expressions/superplay-expression-lib.jsx
 - cards-deck/Club_Deck/DS-Cards_2_Club.png
 

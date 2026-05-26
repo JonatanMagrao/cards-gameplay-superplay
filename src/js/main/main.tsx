@@ -64,7 +64,6 @@ export const App = () => {
   }, [extensionUpdate]);
 
   const handleToggleSettings = useCallback(() => {
-    setTab("layouts");
     setLayoutsSettingsOpen(open => !open);
   }, []);
 
@@ -118,9 +117,9 @@ export const App = () => {
             <button
               type="button"
               className="panel-settings-button"
-              title="Open Paths Settings"
+              title="Settings"
               onClick={handleToggleSettings}
-              aria-label="Open Paths Settings"
+              aria-label="Settings"
             >
               {"\u2699"}
             </button>
@@ -149,7 +148,7 @@ export const App = () => {
           </div>
 
           {/* Content */}
-          {tab === "cards" ? (
+          {tab === "cards" && (
             <>
               <CardPickerPanel
                 deck={deck}
@@ -166,15 +165,16 @@ export const App = () => {
 
               <DuplicatePanel assetEntryPoint={assetEntryPoint} />
             </>
-          ) : (
-            <LayoutsPanel
-              baseDirDefault={getDefaultCardsLevelsDir(assetEntryPoint)}
-              assetEntryPoint={assetEntryPoint}
-              onAssetEntryPointChange={setAssetEntryPoint}
-              onSettingsClose={() => setLayoutsSettingsOpen(false)}
-              settingsOpen={layoutsSettingsOpen}
-            />
           )}
+
+          <LayoutsPanel
+            baseDirDefault={getDefaultCardsLevelsDir(assetEntryPoint)}
+            assetEntryPoint={assetEntryPoint}
+            onAssetEntryPointChange={setAssetEntryPoint}
+            onSettingsClose={() => setLayoutsSettingsOpen(false)}
+            settingsOpen={layoutsSettingsOpen}
+            showContent={tab === "layouts"}
+          />
 
           {entrySetupOpen && (
             <div className="entry-setup-backdrop">

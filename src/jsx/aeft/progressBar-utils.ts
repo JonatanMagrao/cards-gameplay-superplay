@@ -68,7 +68,7 @@ const progressBarText = (thisComp: CompItem, parentLayer: Layer, startTime: numb
   thisComp.hideShyLayers = true
 
   const textScale = getLayerProp(textLayer, scalePropPath);
-  textScale.setValue([35, 35])
+  textScale.setValue([75,75])
 
   return textLayer
 

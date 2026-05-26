@@ -1,0 +1,75 @@
+Cards Gameplay v2.1.0
+
+Overview
+This version focuses on first-run setup, safer gameplay rebuilds, coin feedback control, layout library cleanup, and updated tutorial production materials.
+
+Highlights
+- Added a first-run Entry Point setup flow.
+- Reorganized action controls into Play, Setup, and Maint. groups.
+- Added manual coin correction for selected Jump actions.
+- Improved automatic coin value handling for Jump and Restore.
+- Added safeguards against applying more than one Jump to the same card.
+- Fixed Plus card creation and replacement behavior.
+- Improved cleanup of generated VFX and SFX when resetting, restoring, or replacing layouts.
+- Updated the layout library to prefer canonical layout.json and thumbnail.jpg files.
+- Added stricter level name validation using the 000-000_Name format.
+- Updated tutorial scripts, voiceover guidance, and recommended local tutorial video filenames.
+
+Setup And Paths
+- The extension now asks for the shared-drive Entry Point before asset-dependent workflows can continue.
+- Settings can be opened from the main panel without needing to switch into the Layouts tab first.
+- Changing the Entry Point resets derived Levels Path and Tutorials Path overrides so they follow the shared-drive structure again.
+- Asset validation now expects the Jump preset at presets/cards_gameplay_jump.ffx.
+
+Tutorials
+- Tutorial file ordering now supports decimal prefixes such as 02.1 and 04.5.
+- Numeric tutorial prefixes are still hidden from the flyout labels.
+- Short local video filenames were added to the tutorial scripts:
+  01-start.mp4
+  02-cards.mp4
+  02.1-plus-wild.mp4
+  03-layouts.mp4
+  04-play.mp4
+  04.1-jump.mp4
+  04.2-maintenance.mp4
+  04.3-controls.mp4
+  04.4-progress.mp4
+  04.5-coins.mp4
+  05-library.mp4
+  06-custom-art.mp4
+  06.1-troubleshooting.mp4
+- Tutorial documentation now includes audience notes, ElevenLabs voice settings, screen-recording sequences, and expanded voiceover scripts.
+- Added local tutorial voiceover draft files for the first tutorial set.
+
+Cards And Gameplay
+- Jump coin values now follow the available coin_plus files and can be stored in action marker data.
+- Restore uses the saved Jump coin values instead of blindly reusing one coin file.
+- Flip Stock resets the Jump coin sequence for the next gameplay run.
+- The Card Manager now includes a Set button to update the selected Jump coin value manually.
+- Jump now warns and stops when the selected card already has a Jump marker.
+- Generated Coin VFX and gameplay FX layers are cleaned more reliably during Reset, Restore, and layout replacement.
+- Cards Superplay Jump now uses the new pseudo effect identity while keeping compatibility with legacy effect names.
+- Jump expressions can resolve both new and legacy control effect names.
+- Plus cards now use the correct source comp, layer name, and label when added or applied to selected cards.
+- Progress percentage text was scaled up for better readability.
+
+Layouts
+- Saved layouts now use canonical files: layout.json and thumbnail.jpg.
+- Legacy resolution-specific layout assets are removed when a layout is saved in the new format.
+- Existing layouts can still be read from older resolution-specific JSON and preview files.
+- Save now validates level names with the required 000-000_Name pattern.
+- Saving can update selected layout metadata even when there is no active composition or no card layers.
+- Layout metadata updates can run with a missing preview when needed.
+- Layout writes now use temporary files before replacing canonical layout files, reducing the chance of partial saves.
+- Apply Layout imports card assets earlier and reports import errors more clearly.
+
+Actions UI
+- The Actions panel now keeps Setup controls available through a dedicated Setup group.
+- Clear Level remains available from the Actions toolbar.
+- Trim Covered Cards now defaults to enabled when no saved preference exists.
+- Jump, Flip Stock, and Restore read the shared Trim Covered Cards preference consistently.
+
+Compatibility Notes
+- Required assets should include presets/cards_gameplay_jump.ffx.
+- Existing projects using older Jump effect names should continue to restore because the expressions and effect lookup include legacy names.
+- Existing layout folders can still be read, but newly saved layouts will use the canonical layout.json and thumbnail.jpg structure.

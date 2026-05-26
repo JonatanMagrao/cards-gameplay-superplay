@@ -147,16 +147,15 @@ export const openExtensionUpdate = (update: ExtensionUpdateInfo): void => {
   if (!update || !update.zxpPath) return;
 
   try {
-    const zxpPath = path.normalize(update.zxpPath);
     const releaseFolder = path.normalize(update.releaseFolder || path.dirname(update.zxpPath));
 
     if (process.platform === "win32") {
-      child_process.execFile("explorer", [`/select,${zxpPath}`]);
+      child_process.execFile("explorer", [releaseFolder]);
       return;
     }
 
     if (process.platform === "darwin") {
-      child_process.execFile("open", ["-R", zxpPath]);
+      child_process.execFile("open", [releaseFolder]);
       return;
     }
 

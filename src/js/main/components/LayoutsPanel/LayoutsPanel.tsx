@@ -432,6 +432,7 @@ type Props = {
   onAssetEntryPointChange: (assetEntryPoint: string) => void;
   onSettingsClose?: () => void;
   settingsOpen?: boolean;
+  showContent?: boolean;
 };
 
 export const LayoutsPanel: React.FC<Props> = ({
@@ -439,7 +440,8 @@ export const LayoutsPanel: React.FC<Props> = ({
   assetEntryPoint,
   onAssetEntryPointChange,
   onSettingsClose,
-  settingsOpen = false
+  settingsOpen = false,
+  showContent = true
 }) => {
   const [baseDir, setBaseDir] = useState(baseDirDefault);
   const [persistentSavePath, setPersistentSavePath] = useState<string | null>(null);
@@ -1511,6 +1513,8 @@ export const LayoutsPanel: React.FC<Props> = ({
     }
   }, []);
 
+  if (!settingsOpen && !showContent) return null;
+
   return (
     <section className="panel-section layouts-section">
       {settingsOpen && (
@@ -1666,6 +1670,7 @@ export const LayoutsPanel: React.FC<Props> = ({
         </div>
       )}
 
+      {showContent && (
       <div className="layouts-grid">
         <div className={`layouts-card ${isCacheRefreshing ? "is-cache-refreshing" : ""} ${levelMenuOpen ? "is-menu-open" : ""}`}>
           <div className="layouts-card-header">
@@ -1818,6 +1823,7 @@ export const LayoutsPanel: React.FC<Props> = ({
           </div>
         </div>
       </div>
+      )}
     </section>
   );
 };

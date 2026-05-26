@@ -1,5 +1,30 @@
+const getJumpControlExpression = `
+    const getJumpControl = function() {
+        const effectNames = [
+            "Pseudo/cards_superplay_jump",
+            "Pseudo/cards_gameplay_jump",
+            "Cards Superplay Jump",
+            "Cards Gameplay Jump",
+            "Pseudo/cards_gameplay_superplay",
+            "Cards Gameplay Superplay"
+        ];
+
+        for (let i = 0; i < effectNames.length; i++) {
+            try {
+                const control = effect(effectNames[i]);
+                control("Jump Duration").value;
+                return control;
+            } catch (err) {
+            }
+        }
+
+        return null;
+    };
+`
+
 export const expPos = `
 try {
+${getJumpControlExpression}
     const getMarkerTitle = function(marker) {
         return String(marker.comment || "").split(/\\r\\n|\\n|\\r/)[0];
     };
@@ -58,7 +83,11 @@ try {
     if (jumpMarkerTime === null) {
         value;
     } else {
-        const control = effect("Cards Gameplay Superplay");
+        const control = getJumpControl();
+
+        if (control === null) {
+            value;
+        } else {
         const jumpDurationFrames = control("Jump Duration").value;
 
         if (jumpDurationFrames <= 0) {
@@ -153,6 +182,7 @@ try {
                 [targetPos[0], targetPos[1] + bounce, targetPos[2] + zOffset + zDepthOffset];
             }
         }
+        }
     }
 } catch (err) {
     value;
@@ -161,6 +191,7 @@ try {
 
 export const expScale = `
 try {
+${getJumpControlExpression}
     const getMarkerTitle = function(marker) {
         return String(marker.comment || "").split(/\\r\\n|\\n|\\r/)[0];
     };
@@ -181,7 +212,11 @@ try {
     if (jumpMarkerTime === null) {
         value;
     } else {
-        const control = effect("Pseudo/cards_gameplay_superplay");
+        const control = getJumpControl();
+
+        if (control === null) {
+            value;
+        } else {
         const jumpDurationFrames = control("Jump Duration").value;
 
         if (jumpDurationFrames <= 0) {
@@ -211,6 +246,7 @@ try {
                 value;
             }
         }
+        }
     }
 } catch (err) {
     value;
@@ -219,6 +255,7 @@ try {
 
 export const expRot = `
 try {
+${getJumpControlExpression}
     const getMarkerTitle = function(marker) {
         return String(marker.comment || "").split(/\\r\\n|\\n|\\r/)[0];
     };
@@ -239,7 +276,11 @@ try {
     if (jumpMarkerTime === null) {
         value;
     } else {
-        const control = effect("Pseudo/cards_gameplay_superplay");
+        const control = getJumpControl();
+
+        if (control === null) {
+            value;
+        } else {
         const jumpDurationFrames = control("Jump Duration").value;
 
         if (jumpDurationFrames <= 0) {
@@ -270,6 +311,7 @@ try {
                     targetRot + giroFinal;
                 }
             }
+        }
         }
     }
 } catch (err) {
