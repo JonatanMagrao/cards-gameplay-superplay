@@ -1,0 +1,19 @@
+Cards Gameplay v2.1.1
+
+Overview
+This is a compatibility patch focused on Entry Point path resolution on macOS.
+
+Highlights
+- Fixed Entry Point resolution on macOS when the shared-drive folder is exposed with the macOS/Google Drive folder naming variant.
+- Asset, Levels, Tutorials, and Extension Releases paths now resolve from the selected Entry Point using the first matching shared-drive folder that exists.
+- Windows and existing standard shared-drive folder structures continue to use the same default path.
+
+Fixes
+- The extension now checks supported shared asset folder aliases before building derived paths from the Entry Point.
+- Derived paths are still normalized through the same path helpers, keeping mixed slash formats and trailing separators consistent.
+- If no alternate shared-drive folder is found, the extension falls back to the standard Creative_Marketing_Assets structure.
+
+Compatibility Notes
+- No user-facing workflow changes are required.
+- Existing Entry Point settings remain valid.
+- This release is recommended for macOS users who could not resolve assets, levels, tutorials, or extension releases from the selected Entry Point.
