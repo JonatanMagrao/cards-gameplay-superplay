@@ -7,7 +7,10 @@ import {
 } from "../lib/utils/cardsConfig";
 
 export { CONFIG_FILE_NAME } from "../lib/utils/cardsConfig";
-export const DEFAULT_ASSETS_RELATIVE_PATH = "Creative_Marketing_Assets/GENERAL-ASSETS/Plugins/Cards Gameplay/assets";
+const SHARED_ASSETS_FOLDER_NAME = "Creative_Marketing_Assets";
+const SHARED_ASSETS_FOLDER_ALIASES = [SHARED_ASSETS_FOLDER_NAME, `${SHARED_ASSETS_FOLDER_NAME} `];
+
+export const DEFAULT_ASSETS_RELATIVE_PATH = `${SHARED_ASSETS_FOLDER_NAME}/GENERAL-ASSETS/Plugins/Cards Gameplay/assets`;
 export const DEFAULT_LEVELS_RELATIVE_PATH = DEFAULT_ASSETS_RELATIVE_PATH.replace(/\/assets$/, "/levels");
 export const DEFAULT_TUTORIALS_RELATIVE_PATH = DEFAULT_ASSETS_RELATIVE_PATH.replace(/\/assets$/, "/video-tutorials");
 export const DEFAULT_EXTENSION_RELEASES_RELATIVE_PATH = DEFAULT_ASSETS_RELATIVE_PATH.replace(/\/assets$/, "/extension-releases");
@@ -135,6 +138,30 @@ export const joinAssetPath = (...parts: string[]): string => {
   return output;
 };
 
+const isExistingDirectory = (folderPath: string): boolean => {
+  try {
+    return fs.existsSync(folderPath) && fs.statSync(folderPath).isDirectory();
+  } catch (_) {
+    return false;
+  }
+};
+
+const getSharedAssetRelativePathCandidates = (relativePath: string): string[] => {
+  const normalizedRelativePath = normalizeAssetPath(relativePath);
+  const suffix = normalizedRelativePath === SHARED_ASSETS_FOLDER_NAME
+    ? ""
+    : normalizedRelativePath.replace(`${SHARED_ASSETS_FOLDER_NAME}/`, "");
+
+  return SHARED_ASSETS_FOLDER_ALIASES.map(folderName => joinAssetPath(folderName, suffix));
+};
+
+const resolveSharedAssetPath = (assetEntryPoint: string, relativePath: string): string => {
+  const candidates = getSharedAssetRelativePathCandidates(relativePath)
+    .map(candidate => joinAssetPath(assetEntryPoint, candidate));
+
+  return candidates.find(candidate => isExistingDirectory(candidate)) || candidates[0] || "";
+};
+
 export const loadCardsGameplayConfig = (): CardsGameplayConfig => {
   return loadCardsGameplayConfigFile();
 };
@@ -151,28 +178,28 @@ export const getSavedAssetEntryPoint = (): string => {
 export const getAssetRootPath = (assetEntryPoint: string): string => {
   const normalizedEntryPoint = normalizeAssetPath(assetEntryPoint);
   return normalizedEntryPoint
-    ? joinAssetPath(normalizedEntryPoint, DEFAULT_ASSETS_RELATIVE_PATH)
+    ? resolveSharedAssetPath(normalizedEntryPoint, DEFAULT_ASSETS_RELATIVE_PATH)
     : "";
 };
 
 export const getDefaultLevelsPath = (assetEntryPoint: string): string => {
   const normalizedEntryPoint = normalizeAssetPath(assetEntryPoint);
   return normalizedEntryPoint
-    ? joinAssetPath(normalizedEntryPoint, DEFAULT_LEVELS_RELATIVE_PATH)
+    ? resolveSharedAssetPath(normalizedEntryPoint, DEFAULT_LEVELS_RELATIVE_PATH)
     : "";
 };
 
 export const getDefaultTutorialsPath = (assetEntryPoint: string): string => {
   const normalizedEntryPoint = normalizeAssetPath(assetEntryPoint);
   return normalizedEntryPoint
-    ? joinAssetPath(normalizedEntryPoint, DEFAULT_TUTORIALS_RELATIVE_PATH)
+    ? resolveSharedAssetPath(normalizedEntryPoint, DEFAULT_TUTORIALS_RELATIVE_PATH)
     : "";
 };
 
 export const getDefaultExtensionReleasesPath = (assetEntryPoint: string): string => {
   const normalizedEntryPoint = normalizeAssetPath(assetEntryPoint);
   return normalizedEntryPoint
-    ? joinAssetPath(normalizedEntryPoint, DEFAULT_EXTENSION_RELEASES_RELATIVE_PATH)
+    ? resolveSharedAssetPath(normalizedEntryPoint, DEFAULT_EXTENSION_RELEASES_RELATIVE_PATH)
     : "";
 };
 
@@ -225,14 +252,6 @@ const hasFilesystemAccess = (): boolean => {
     typeof fs.readFileSync === "function" &&
     typeof fs.writeFileSync === "function"
   );
-};
-
-const isExistingDirectory = (folderPath: string): boolean => {
-  try {
-    return fs.existsSync(folderPath) && fs.statSync(folderPath).isDirectory();
-  } catch (_) {
-    return false;
-  }
 };
 
 const isExistingFile = (filePath: string): boolean => {
