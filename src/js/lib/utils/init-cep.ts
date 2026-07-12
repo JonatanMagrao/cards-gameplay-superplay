@@ -6,6 +6,8 @@ import { keyRegisterOverride, dropDisable } from "./cep";
 
 const VIDEO_TUTORIALS_RELATIVE_PATH = "Creative_Marketing_Assets/GENERAL-ASSETS/Plugins/Cards Gameplay/video-tutorials";
 const EXTENSION_RELEASES_RELATIVE_PATH = VIDEO_TUTORIALS_RELATIVE_PATH.replace(/\/video-tutorials$/, "/extension-releases");
+const SHARED_ASSETS_FOLDER_NAME = "Creative_Marketing_Assets";
+const SHARED_ASSETS_FOLDER_ALIASES = [SHARED_ASSETS_FOLDER_NAME, `${SHARED_ASSETS_FOLDER_NAME} `];
 const VIDEO_FILE_PATTERN = /\.(mp4|mov|m4v)$/i;
 const TUTORIAL_PREFIX_PATTERN = /^(\d+(?:\.\d+)?)[\s_-]+/;
 const ZXP_FILE_PATTERN = /\.zxp$/i;
@@ -80,19 +82,45 @@ const escapeXmlAttribute = (value: string): string => {
 
 const loadConfig = loadCardsGameplayConfig;
 
+const isExistingDirectory = (folderPath: string): boolean => {
+  try {
+    return fs.existsSync(folderPath) && fs.statSync(folderPath).isDirectory();
+  } catch (_) {
+    return false;
+  }
+};
+
+const getMacSharedAssetRelativePathCandidates = (relativePath: string): string[] => {
+  const normalizedRelativePath = normalizePath(relativePath);
+  const suffix = normalizedRelativePath === SHARED_ASSETS_FOLDER_NAME
+    ? ""
+    : normalizedRelativePath.replace(`${SHARED_ASSETS_FOLDER_NAME}/`, "");
+
+  return SHARED_ASSETS_FOLDER_ALIASES.map(folderName => joinPath(folderName, suffix));
+};
+
+const resolveMacSharedAssetPath = (assetEntryPoint: string, relativePath: string): string => {
+  if (process.platform !== "darwin") return joinPath(assetEntryPoint, relativePath);
+
+  const candidates = getMacSharedAssetRelativePathCandidates(relativePath)
+    .map(candidate => joinPath(assetEntryPoint, candidate));
+
+  return candidates.find(candidate => isExistingDirectory(candidate)) || candidates[0] || "";
+};
+
 const getVideoTutorialsPath = (): string => {
   const config = loadConfig();
   const tutorialsPath = normalizePath(config.tutorialsPath || "");
   if (tutorialsPath) return tutorialsPath;
 
   const assetEntryPoint = normalizePath(config.assetEntryPoint || "");
-  return assetEntryPoint ? joinPath(assetEntryPoint, VIDEO_TUTORIALS_RELATIVE_PATH) : "";
+  return assetEntryPoint ? resolveMacSharedAssetPath(assetEntryPoint, VIDEO_TUTORIALS_RELATIVE_PATH) : "";
 };
 
 const getExtensionReleasesPath = (): string => {
   const config = loadConfig();
   const assetEntryPoint = normalizePath(config.assetEntryPoint || "");
-  return assetEntryPoint ? joinPath(assetEntryPoint, EXTENSION_RELEASES_RELATIVE_PATH) : "";
+  return assetEntryPoint ? resolveMacSharedAssetPath(assetEntryPoint, EXTENSION_RELEASES_RELATIVE_PATH) : "";
 };
 
 const parseVersion = (value: string): ParsedVersion | null => {
